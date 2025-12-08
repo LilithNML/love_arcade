@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Laberinto Pro</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-deep: #020617;
+            --wall: #334155;
+            --path: #0f172a;
+            --player: #38bdf8;
+            --goal: #fbbf24;
+            --hint-path: rgba(251, 191, 36, 0.4);
+            --ui-glass: rgba(255, 255, 255, 0.1);
+        }
+
+        /* RESET & BASE */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg-deep);
+            color: white; font-family: system-ui, sans-serif;
+            overflow: hidden; touch-action: none;
+            display: flex; flex-direction: column; height: 100vh; width: 100vw;
+        }
+
+        /* UI SUPERIOR */
+        .top-hud {
+            position: absolute; top: 0; left: 0; right: 0;
+            padding: 15px; display: flex; justify-content: space-between;
+            pointer-events: none; z-index: 20;
+        }
+        .btn-glass {
+            background: var(--ui-glass); backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.1); color: white;
+            padding: 8px 16px; border-radius: 20px; text-decoration: none;
+            display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px;
+            pointer-events: auto; cursor: pointer; transition: 0.2s;
+        }
+        .btn-glass:active { transform: scale(0.95); background: rgba(255,255,255,0.2); }
+        .lvl-badge { background: var(--player); color: #000; font-weight: 800; border:none; }
+
+        /* AREA DE JUEGO */
+        #game-viewport {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1; 
+            background: var(--bg-deep);
+        }
+        canvas {
+            display: block; width: 100%; height: 100%;
+        }
+
+        /* TUTORIAL OVERLAY */
+        #tutorial {
+            position: absolute; inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 50; pointer-events: none;
+            animation: fadeOut 0.5s ease 4s forwards;
+        }
+        .tut-hand { animation: swipeAnim 2s infinite; opacity: 0.8; }
+        @keyframes swipeAnim { 
+            0% { transform: translateY(20px); opacity: 0; } 
+            50% { transform: translateY(-20px); opacity: 1; } 
+            100% { transform: translateY(-40px); opacity: 0; } 
+        }
+
+        /* JOYSTICK & INPUT ZONES */
+        .input-zone-left { position: absolute; top: 0; left: 0; bottom: 0; width: 50%; z-index: 10; }
+        .input-zone-right { position: absolute; top: 0; right: 0; bottom: 0; width: 50%; z-index: 10; }
+        
+        .nipple-base {
+            position: absolute; width: 100px; height: 100px;
+            border-radius: 50%; background: rgba(255,255,255,0.05);
+            border: 2px solid rgba(255,255,255,0.1);
+            display: none; pointer-events: none;
+            transform: translate(-50%, -50%); z-index: 15;
+        }
+        .nipple-stick {
+            position: absolute; width: 40px; height: 40px;
+            border-radius: 50%; background: var(--player);
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px var(--player);
+        }
+
+        /* BOTÓN PISTA (MODIFICADO PARA MOSTRAR PRECIO) */
+        .hint-fab {
+            position: absolute; bottom: 30px; right: 30px;
+            width: 64px; height: 64px; border-radius: 50%;
+            background: #f59e0b; color: #000;
+            display: flex; flex-direction: column; /* Stack vertical */
+            align-items: center; justify-content: center;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+            cursor: pointer; z-index: 30; pointer-events: auto;
+            border: 2px solid #fff; 
+            transition: 0.2s;
+            gap: 2px;
+        }
+        .hint-fab:active { transform: scale(0.9); }
+        
+        .hint-price {
+            font-size: 10px;
+            font-weight: 800;
+            background: rgba(0,0,0,0.2);
+            padding: 1px 5px;
+            border-radius: 4px;
+            color: #fff;
+        }
+
+        /* MODALES */
+        .modal-overlay {
+            position: fixed; inset: 0; z-index: 100;
+            background: rgba(2,6,23,0.95);
+            display: none; justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        .modal-box {
+            background: #1e293b; padding: 30px; border-radius: 24px;
+            text-align: center; max-width: 350px; width: 90%;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .modal-box h2 { color: var(--player); font-size: 2rem; margin: 0 0 10px 0; }
+        .btn-primary {
+            background: var(--player); color: #000; border: none;
+            padding: 15px 30px; border-radius: 50px; font-weight: bold; font-size: 1.1rem;
+            width: 100%; margin-top: 20px; cursor: pointer;
+        }
+
+        /* UTILIDADES */
+        .hidden { display: none !important; }
+        @keyframes fadeOut { to { opacity: 0; visibility: hidden; } }
+
+    </style>
+</head>
+<body>
+
+    <div class="top-hud">
+        <a href="../index.html" class="btn-glass">
+            <i data-lucide="arrow-left" size="16"></i> Salir
+        </a>
+        <div class="btn-glass lvl-badge" id="lvl-display">NV 1</div>
+    </div>
+
+    <div id="game-viewport">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div id="tutorial">
+        <i data-lucide="hand" size="64" color="white" class="tut-hand"></i>
+        <p style="margin-top:20px; font-weight:bold; text-shadow:0 2px 4px black;">Desliza para moverte</p>
+        <p style="font-size:0.8rem; opacity:0.7;">Toque corto = 1 paso<br>Deslizar = Correr</p>
+    </div>
+
+    <div class="input-zone-left" id="zone-joy"></div>
+    <div class="input-zone-right" id="zone-swipe"></div>
+
+    <div class="nipple-base" id="joy-ui">
+        <div class="nipple-stick" id="joy-stick"></div>
+    </div>
+
+    <div class="hint-fab" onclick="game.useHint()">
+        <i data-lucide="lightbulb" size="24"></i>
+        <div class="hint-price">-50</div>
+    </div>
+
+    <div id="win-modal" class="modal-overlay">
+        <div class="modal-box">
+            <i data-lucide="trophy" size="60" color="#fbbf24" style="margin-bottom:15px"></i>
+            <h2>¡Victoria!</h2>
+            <p id="win-msg" style="color:#94a3b8;">Nivel Completado</p>
+            <button class="btn-primary" onclick="game.nextLevel()">Siguiente</button>
+        </div>
+    </div>
+
+    <div id="loading-modal" class="modal-overlay" style="background:black;">
+        <div style="color:var(--player); font-family:monospace; display:flex; flex-direction:column; align-items:center;">
+            <i data-lucide="loader" class="animate-spin" style="margin-bottom:10px;"></i>
+            GENERANDO LABERINTO...
+        </div>
+    </div>
+
+    <script src="../js/app.js"></script>
+    <script>
+        const LEVEL_CONFIG = {
+            1:  { size: 9,  minSteps: 15 },
+            5:  { size: 15, minSteps: 60 },
+            10: { size: 21, minSteps: 120 },
+            12: { size: 31, minSteps: 150, type: 'cross' },
+            13: { size: 33, minSteps: 180, type: 'big' },
+            14: { size: 33, minSteps: 200, type: 'loops' },
+            15: { size: 35, minSteps: 230, type: 'nightmare' }
+        };
+        const MAX_LEVEL = 15;
+
+        // SISTEMA DE AUDIO (Lazy Init)
+        let audioCtx = null;
+        
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            
+            if(type === 'step') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'win') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.3);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now); osc.stop(now + 0.5);
+            }
+        }
+
+        class MazeGame {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.state = { lvl: 1, p: {x:0,y:0}, g: {x:0,y:0}, active: false };
+                
+                this.grid = []; 
+                this.cam = { x: 0, y: 0, zoom: 1 };
+                this.drawP = { x: 0, y: 0 }; 
+                this.cellSize = 40; 
+
+                const saved = localStorage.getItem('maze_pro_v2');
+                if(saved) this.state.lvl = parseInt(saved);
+
+                this.setupInputs();
+                window.addEventListener('resize', () => this.resize());
+                
+                this.initLevel();
+                
+                this.loop = this.loop.bind(this);
+                requestAnimationFrame(this.loop);
+            }
+
+            async initLevel() {
+                if(this.state.lvl > MAX_LEVEL) { alert("¡Juego Completado!"); this.state.lvl = 1; }
+                
+                document.getElementById('loading-modal').style.display = 'flex';
+                this.grid = []; 
+                
+                setTimeout(() => {
+                    const cfg = LEVEL_CONFIG[this.state.lvl] || { size: 9 + (this.state.lvl * 2), minSteps: 20 + (this.state.lvl * 8) };
+                    document.getElementById('lvl-display').innerText = `NV ${this.state.lvl}`;
+                    
+                    let valid = false;
+                    let newGrid = [];
+                    while(!valid) {
+                        newGrid = this.generateMaze(cfg);
+                        const sol = this.solveAStar(this.state.p, this.state.g, newGrid);
+                        if(sol && sol.length >= cfg.minSteps) valid = true;
+                    }
+                    
+                    this.grid = newGrid; 
+                    this.state.active = true;
+                    this.drawP = { ...this.state.p };
+                    this.hintPath = null;
+                    
+                    this.resize();
+                    
+                    document.getElementById('loading-modal').style.display = 'none';
+                    if(this.state.lvl > 1) document.getElementById('tutorial').style.display = 'none';
+                }, 50);
+            }
+
+            generateMaze(cfg) {
+                const size = cfg.size;
+                let grid = Array(size).fill().map((_,y) => Array(size).fill().map((_,x) => ({x,y, w:{t:1,r:1,b:1,l:1}, v:false})));
+                let stack = [grid[0][0]];
+                grid[0][0].v = true;
+
+                while(stack.length) {
+                    let currIdx = stack.length - 1;
+                    if(Math.random() > 0.7) currIdx = Math.floor(Math.random() * stack.length);
+                    
+                    let curr = stack[currIdx];
+                    let neighbors = [[0,-1,'t','b'],[1,0,'r','l'],[0,1,'b','t'],[-1,0,'l','r']]
+                        .map(d => ({x:curr.x+d[0], y:curr.y+d[1], w1:d[2], w2:d[3]}))
+                        .filter(p => p.x>=0 && p.x<size && p.y>=0 && p.y<size && !grid[p.y][p.x].v);
+
+                    if(neighbors.length) {
+                        let nInfo = neighbors[Math.floor(Math.random() * neighbors.length)];
+                        let next = grid[nInfo.y][nInfo.x];
+                        curr.w[nInfo.w1] = 0; next.w[nInfo.w2] = 0; next.v = true;
+                        stack.push(next);
+                    } else {
+                        stack.splice(currIdx, 1);
+                    }
+                }
+                
+                if(cfg.type === 'loops' || this.state.lvl > 8) {
+                    for(let i=0; i<size/2; i++) {
+                        let rx = Math.floor(Math.random()*(size-2))+1;
+                        let ry = Math.floor(Math.random()*(size-2))+1;
+                        let walls = ['t','r','b','l'];
+                        grid[ry][rx].w[walls[Math.floor(Math.random()*4)]] = 0;
+                    }
+                }
+
+                this.state.p = {x:0, y:0};
+                this.state.g = {x:size-1, y:size-1};
+                return grid;
+            }
+
+            solveAStar(start, end, gridRef) {
+                const grid = gridRef || this.grid;
+                if(!grid || grid.length === 0) return null;
+
+                let q = [{...start, path:[]}];
+                let visited = new Set();
+                let iterations = 0;
+                
+                while(q.length && iterations < 5000) {
+                    iterations++;
+                    let curr = q.shift();
+                    let key = `${curr.x},${curr.y}`;
+                    if(curr.x === end.x && curr.y === end.y) return curr.path;
+                    if(visited.has(key)) continue;
+                    visited.add(key);
+
+                    const cell = grid[curr.y][curr.x];
+                    const dirs = [[0,-1,'t'],[1,0,'r'],[0,1,'b'],[-1,0,'l']];
+                    for(let d of dirs) {
+                        if(!cell.w[d[2]]) {
+                            q.push({x:curr.x+d[0], y:curr.y+d[1], path:[...curr.path, {x:curr.x,y:curr.y}]});
+                        }
+                    }
+                }
+                return null;
+            }
+
+            setupInputs() {
+                // JOYSTICK
+                const joyZone = document.getElementById('zone-joy');
+                const uiBase = document.getElementById('joy-ui');
+                const uiStick = document.getElementById('joy-stick');
+                let startX, startY, active = false;
+
+                const handleJoyStart = (clientX, clientY) => {
+                    initAudio(); 
+                    active = true;
+                    startX = clientX; startY = clientY;
+                    uiBase.style.display = 'block';
+                    uiBase.style.left = startX + 'px'; uiBase.style.top = startY + 'px';
+                    uiStick.style.transform = `translate(-50%, -50%)`;
+                };
+
+                joyZone.addEventListener('touchstart', e => { e.preventDefault(); handleJoyStart(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+                joyZone.addEventListener('mousedown', e => { handleJoyStart(e.clientX, e.clientY); });
+
+                const handleJoyMove = (clientX, clientY) => {
+                    if(!active) return;
+                    const dx = clientX - startX;
+                    const dy = clientY - startY;
+                    const dist = Math.min(40, Math.hypot(dx, dy));
+                    const ang = Math.atan2(dy, dx);
+                    
+                    uiStick.style.transform = `translate(calc(-50% + ${Math.cos(ang)*dist}px), calc(-50% + ${Math.sin(ang)*dist}px))`;
+
+                    if(dist > 15) {
+                        if(Math.abs(dx) > Math.abs(dy)) this.move(dx>0?1:-1, 0, false);
+                        else this.move(0, dy>0?1:-1, false);
+                    }
+                };
+
+                joyZone.addEventListener('touchmove', e => { e.preventDefault(); handleJoyMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+                window.addEventListener('mousemove', e => handleJoyMove(e.clientX, e.clientY));
+
+                const endJoy = () => { active = false; uiBase.style.display = 'none'; };
+                joyZone.addEventListener('touchend', endJoy);
+                window.addEventListener('mouseup', endJoy);
+
+                // SWIPE
+                const swipeZone = document.getElementById('zone-swipe');
+                let sx, sy, st;
+                swipeZone.addEventListener('touchstart', e => { 
+                    initAudio(); 
+                    sx=e.touches[0].clientX; sy=e.touches[0].clientY; st=Date.now(); 
+                }, {passive:true});
+                
+                swipeZone.addEventListener('touchend', e => {
+                    const dx = e.changedTouches[0].clientX - sx;
+                    const dy = e.changedTouches[0].clientY - sy;
+                    const dt = Date.now() - st;
+                    if(Math.abs(dx)<20 && Math.abs(dy)<20) return;
+                    
+                    const mx = Math.abs(dx)>Math.abs(dy) ? (dx>0?1:-1) : 0;
+                    const my = Math.abs(dx)>Math.abs(dy) ? 0 : (dy>0?1:-1);
+                    this.move(mx, my, dt < 250); 
+                });
+            }
+
+            move(dx, dy, dash) {
+                if(!this.state.active || !this.grid.length) return;
+                const now = Date.now();
+                if(!dash && now - this.lastMove < 150) return;
+                this.lastMove = now;
+
+                const performStep = () => {
+                    const {x, y} = this.state.p;
+                    if (!this.grid[y] || !this.grid[y][x]) return false;
+                    
+                    const c = this.grid[y][x];
+                    if(dy===-1 && c.w.t) return false;
+                    if(dx===1 && c.w.r) return false;
+                    if(dy===1 && c.w.b) return false;
+                    if(dx===-1 && c.w.l) return false;
+                    
+                    this.state.p.x += dx; this.state.p.y += dy;
+                    playSound('step');
+                    if(this.state.p.x === this.state.g.x && this.state.p.y === this.state.g.y) this.win();
+                    return true;
+                };
+
+                if(dash) {
+                    let steps = 0;
+                    const iv = setInterval(() => {
+                        if(!performStep() || steps++ > 50 || !this.state.active) clearInterval(iv);
+                    }, 30);
+                } else {
+                    performStep();
+                }
+            }
+
+            useHint() {
+                if(!this.state.active) return;
+                initAudio();
+                if(window.GameCenter && !window.GameCenter.spendCoins(50)) { alert("Necesitas 50 monedas"); return; }
+                this.hintPath = this.solveAStar(this.state.p, this.state.g);
+                setTimeout(() => this.hintPath = null, 5000);
+            }
+
+            win() {
+                this.state.active = false;
+                playSound('win');
+                
+                // CALCULO DINÁMICO DE RECOMPENSA
+                // Base 50 + 10 por cada nivel extra
+                const reward = 50 + ((this.state.lvl - 1) * 10);
+
+                if(window.GameCenter) {
+                    const r = window.GameCenter.completeLevel('maze', this.state.lvl, reward);
+                    document.getElementById('win-msg').innerHTML = r.paid 
+                        ? `<strong style="color:#10b981">+${reward} Monedas</strong>` 
+                        : "Nivel Completado";
+                }
+                document.getElementById('win-modal').style.display = 'flex';
+            }
+
+            nextLevel() {
+                this.state.lvl++;
+                localStorage.setItem('maze_pro_v2', this.state.lvl);
+                document.getElementById('win-modal').style.display = 'none';
+                this.initLevel();
+            }
+
+            resize() {
+                const p = document.getElementById('game-viewport');
+                if(!p) return;
+                this.canvas.width = p.clientWidth;
+                this.canvas.height = p.clientHeight;
+                if(this.grid && this.grid.length > 0) {
+                    const visibleCells = window.innerWidth < 600 ? 10 : 16;
+                    this.cam.zoom = this.canvas.width / (visibleCells * this.cellSize);
+                }
+            }
+
+            loop() {
+                if (!this.grid || this.grid.length === 0) {
+                    requestAnimationFrame(this.loop);
+                    return;
+                }
+
+                // Interpolación
+                this.drawP.x += (this.state.p.x - this.drawP.x) * 0.3;
+                this.drawP.y += (this.state.p.y - this.drawP.y) * 0.3;
+
+                const ctx = this.ctx;
+                const cs = this.cellSize;
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+                const scale = this.cam.zoom || 1;
+
+                const cx = -this.drawP.x * cs * scale + w/2 - (cs*scale)/2;
+                const cy = -this.drawP.y * cs * scale + h/2 - (cs*scale)/2;
+
+                ctx.fillStyle = '#020617';
+                ctx.fillRect(0,0,w,h);
+
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.scale(scale, scale);
+
+                ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                
+                ctx.beginPath();
+                this.grid.forEach(row => row.forEach(c => {
+                    let x=c.x*cs, y=c.y*cs;
+                    if(c.w.t) { ctx.moveTo(x,y); ctx.lineTo(x+cs,y); }
+                    if(c.w.l) { ctx.moveTo(x,y); ctx.lineTo(x,y+cs); }
+                    if(c.x===this.grid.length-1 && c.w.r) { ctx.moveTo(x+cs,y); ctx.lineTo(x+cs,y+cs); }
+                    if(c.y===this.grid.length-1 && c.w.b) { ctx.moveTo(x,y+cs); ctx.lineTo(x+cs,y+cs); }
+                }));
+                ctx.stroke();
+
+                if(this.hintPath) {
+                    ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)';
+                    ctx.lineWidth = 8;
+                    ctx.beginPath();
+                    this.hintPath.forEach((p, i) => {
+                        let px=p.x*cs+cs/2, py=p.y*cs+cs/2;
+                        if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+                    });
+                    ctx.stroke();
+                }
+
+                const time = Date.now()/300;
+                const gx = this.state.g.x*cs+cs/2;
+                const gy = this.state.g.y*cs+cs/2;
+                ctx.fillStyle = '#fbbf24';
+                ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 20;
+                ctx.beginPath();
+                ctx.arc(gx, gy, cs/4 + Math.sin(time)*2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.arc(this.drawP.x*cs+cs/2, this.drawP.y*cs+cs/2, cs/3, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.restore();
+                requestAnimationFrame(this.loop);
+            }
+        }
+
+        window.onload = () => {
+            lucide.createIcons();
+            window.game = new MazeGame();
+        };
+    </script>
+</body>
+</html>
