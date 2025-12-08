@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tienda</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .stock-tag {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(0,0,0,0.1);
+            color: var(--md-sys-color-outline);
+            margin-top: 8px;
+            display: inline-block;
+        }
+        .stock-tag.sold-out {
+            color: #b91c1c;
+            background: #fee2e2;
+            font-weight: bold;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: #e5e7eb;
+            color: #9ca3af;
+        }
+    </style>
+</head>
+<body>
+    <header class="top-app-bar">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <a href="index.html" style="color:inherit;"><i data-lucide="arrow-left"></i></a>
+            <h1 class="headline">Tienda</h1>
+        </div>
+        <div class="chip-coin">
+            <i data-lucide="coins" size="16"></i>
+            <span class="coin-display">...</span>
+        </div>
+    </header>
+
+    <main>
+        <div id="shop-container" class="grid-layout">
+            </div>
+    </main>
+
+    <script src="js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('data/shop.json')
+                .then(res => res.json())
+                .then(items => renderShop(items))
+                .catch(err => console.log(err));
+        });
+
+        function renderShop(items) {
+            const container = document.getElementById('shop-container');
+            container.innerHTML = '';
+            
+            items.forEach(item => {
+                // Calcular stock restante en tiempo real
+                const bought = GameCenter.getBoughtCount(item.id);
+                const remaining = item.stock - bought;
+                const isSoldOut = remaining <= 0;
+
+                const card = document.createElement('article');
+                card.className = 'md-card';
+                card.innerHTML = `
+                    <img src="${item.image}" alt="${item.name}" class="card-media">
+                    <div class="card-content">
+                        <div style="display:flex; justify-content:space-between; align-items:start;">
+                            <h3 class="card-title">${item.name}</h3>
+                        </div>
+                        <p class="card-text">${item.desc}</p>
+                        
+                        <div class="stock-tag ${isSoldOut ? 'sold-out' : ''}">
+                            ${isSoldOut ? 'AGOTADO' : `Disponibles: ${remaining}`}
+                        </div>
+
+                        <button 
+                            class="btn btn-filled" 
+                            style="margin-top:16px;"
+                            ${isSoldOut ? 'disabled' : ''}
+                            onclick='initiatePurchase(${JSON.stringify(item)})'>
+                            ${isSoldOut ? 'Canjeado' : `${item.price} Monedas`}
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function initiatePurchase(item) {
+            const bought = GameCenter.getBoughtCount(item.id);
+            const remaining = item.stock - bought;
+            
+            if(remaining <= 0) return;
+
+            if(!confirm(`¿Canjear "${item.name}" por ${item.price} monedas?`)) return;
+
+            // Llamar a lógica central
+            const result = GameCenter.buyItem(item);
+
+            if(result.success) {
+                // Email
+                const subject = encodeURIComponent(`Canje: ${item.name}`);
+                const body = encodeURIComponent(
+                    `Hola! He canjeado: ${item.name}.\nCódigo: ${result.code}\nFecha: ${new Date().toLocaleString()}`
+                );
+                
+                // --- CONFIGURA TU EMAIL AQUÍ ---
+                window.location.href = `mailto:tupareja@email.com?subject=${subject}&body=${body}`;
+                
+                alert("¡Canje exitoso! Abriendo correo...");
+                location.reload(); // Recargar para actualizar stock visual
+            } else {
+                if(result.reason === 'coins') alert("No tienes suficientes monedas.");
+                if(result.reason === 'stock') alert("¡Ups! Este producto ya se agotó.");
+            }
+        }
+    </script>
+</body>
+</html>
