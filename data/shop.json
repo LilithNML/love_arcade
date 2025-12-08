@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "name": "Cena Romántica",
+    "desc": "Yo cocino tu plato favorito. (Único)",
+    "price": 200,
+    "stock": 1,
+    "image": "https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    "id": 2,
+    "name": "Masaje Relax",
+    "desc": "30 minutos de masaje. (Pack de 5)",
+    "price": 100,
+    "stock": 5,
+    "image": "https://images.unsplash.com/photo-1600334089648-b0d9d302427f?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    "id": 3,
+    "name": "Noche de Cine",
+    "desc": "Palomitas y peli a elección.",
+    "price": 150,
+    "stock": 3,
+    "image": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=400&q=80"
+  }
+]
