@@ -3,93 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Centro de Juegos</title>
+    <title>Love Arcade</title>
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
-    <header class="top-app-bar">
-        <h1 class="headline">Love Arcade</h1>
-        <div class="chip-coin">
-            <i data-lucide="coins" size="16"></i>
-            <span class="coin-display">0</span>
+
+    <nav class="navbar glass-panel">
+        <div class="nav-brand">
+            <i data-lucide="gamepad-2" color="#9b59ff" size="28"></i>
+            Love<span>Arcade</span>
         </div>
-    </header>
+        
+        <ul class="nav-links">
+            <li><a href="#" class="nav-link active">Inicio</a></li>
+            <li><a href="#games" class="nav-link">Juegos</a></li>
+            <li><a href="shop.html" class="nav-link">Tienda</a></li>
+            <li><a href="#faq" class="nav-link">Ayuda</a></li>
+        </ul>
 
-    <main>
-        <section class="grid-layout">
-            <article class="md-card">
-                <div class="card-media" style="background: #000; display:flex; align-items:center; justify-content:center;">
-                    <i data-lucide="map" size="48" color="#00f3ff"></i>
-                </div>
-                <div class="card-content">
-                    <h3 class="card-title">Laberinto Neón</h3>
-                    <p class="card-text">Navega por caminos brillantes.</p>
-                    <a href="games/maze.html" class="btn btn-filled">Jugar</a>
-                </div>
-            </article>
+        <div class="nav-user">
+            <div class="coin-badge">
+                <i data-lucide="star" size="16" fill="#facc15"></i>
+                <span class="coin-display">0</span>
+            </div>
+            <div class="avatar"></div> </div>
+    </nav>
 
-            <article class="md-card">
-                <div class="card-media" style="background: #1e293b; display:flex; align-items:center; justify-content:center;">
-                    <i data-lucide="type" size="48" color="#f43f5e"></i>
-                </div>
-                <div class="card-content">
-                    <h3 class="card-title">Sopa de Letras</h3>
-                    <p class="card-text">Busca palabras ocultas.</p>
-                    <a href="games/wordsearch.html" class="btn btn-filled">Jugar</a>
-                </div>
-            </article>
+    <main class="container">
+        
+        <header class="section-header">
+            <div>
+                <h1 class="section-title">Bienvenido de vuelta</h1>
+                <p class="section-subtitle">¿Qué vamos a jugar hoy?</p>
+            </div>
+        </header>
 
-            <article class="md-card">
-                <div class="card-media" style="background: #000; display:flex; align-items:center; justify-content:center;">
-                    <i data-lucide="map" size="48" color="#00f3ff"></i>
-                </div>
-                <div class="card-content">
-                    <h3 class="card-title">Tetris</h3>
-                    <p class="card-text">Construye para ganar.</p>
-                    <a href="games/tetris.html" class="btn btn-filled">Jugar</a>
-                </div>
-            </article>
+        <div class="filter-bar">
+            <div class="filter-pill active">Todos</div>
+            <div class="filter-pill">Populares</div>
+            <div class="filter-pill">Nuevos</div>
+            <div class="filter-pill">Romance</div>
+            <div class="filter-pill">Puzzle</div>
+        </div>
 
-            <article class="md-card">
-                <div class="card-media" style="background: #eaddff; display:flex; align-items:center; justify-content:center;">
-                    <i data-lucide="gift" size="48" color="#6750a4"></i>
-                </div>
-                <div class="card-content">
-                    <h3 class="card-title">Tienda</h3>
-                    <p class="card-text">Canjea tus premios.</p>
-                    <a href="shop.html" class="btn btn-tonal">Ir a la Tienda</a>
-                </div>
-            </article>
-        </section>
-
-        <section class="faq-section">
-            <h3 style="margin-left: 8px; opacity: 0.7;">Ayuda y Preguntas</h3>
+        <section id="games" class="games-grid">
             
-            <details>
-                <summary>¿Cómo gano monedas?</summary>
-                <div class="faq-answer">
-                    Juega al Laberinto o a la Sopa de Letras. La primera vez que completes un nivel, recibirás monedas. Si repites un nivel, no recibirás monedas extra.
+            <article class="game-card">
+                <div class="card-cover" style="background-image: url('https://images.unsplash.com/photo-1596443686812-2f45229eebf3?auto=format&fit=crop&w=600&q=80');">
+                    <div class="card-badge badge-new">NUEVO</div>
                 </div>
-            </details>
+                <div class="card-info">
+                    <h3 class="card-title">Tetris Pro</h3>
+                    <p class="card-desc">El clásico reimaginado. Completa líneas, gana logros y acumula hasta 15,000 monedas.</p>
+                    <a href="games/tetris.html" class="btn-primary w-full">
+                        <i data-lucide="play"></i> Jugar Ahora
+                    </a>
+                </div>
+            </article>
 
-            <details>
-                <summary>¿Qué pasa al comprar un regalo?</summary>
-                <div class="faq-answer">
-                    Se descontarán tus monedas y se abrirá tu aplicación de correo con un mensaje pre-escrito que incluye un código de seguridad único para enviar a tu Lunita.
+            <article class="game-card">
+                <div class="card-cover" style="background-image: url('https://images.unsplash.com/photo-1533228876829-65c94e7b5025?auto=format&fit=crop&w=600&q=80');">
+                    <div class="card-badge badge-hot">POPULAR</div>
                 </div>
-            </details>
+                <div class="card-info">
+                    <h3 class="card-title">Laberinto Neón</h3>
+                    <p class="card-desc">Encuentra el camino en la oscuridad. Niveles progresivos y controles táctiles.</p>
+                    <a href="games/maze.html" class="btn-primary w-full">
+                        <i data-lucide="play"></i> Jugar Ahora
+                    </a>
+                </div>
+            </article>
 
-            <details>
-                <summary>¿Se borra mi progreso?</summary>
-                <div class="faq-answer">
-                    Tu progreso se guarda en este dispositivo. Si borras el historial o cambias de navegador, empezarás de cero (0 monedas).
+            <article class="game-card">
+                <div class="card-cover" style="background-image: url('https://images.unsplash.com/photo-1629732168595-364239851722?auto=format&fit=crop&w=600&q=80');">
                 </div>
-            </details>
+                <div class="card-info">
+                    <h3 class="card-title">Sopa de Letras</h3>
+                    <p class="card-desc">Encuentra las palabras ocultas. Palabras secretas otorgan bonos extra.</p>
+                    <a href="games/wordsearch.html" class="btn-primary w-full">
+                        <i data-lucide="play"></i> Jugar Ahora
+                    </a>
+                </div>
+            </article>
+
         </section>
+
+        <section id="faq" style="margin-top: 80px;">
+            <div class="section-header">
+                <h2 class="section-title">Preguntas Frecuentes</h2>
+            </div>
+            
+            <div class="faq-grid">
+                <details class="glass-panel">
+                    <summary>¿Cómo gano monedas?</summary>
+                    <div class="faq-content">
+                        Ganas monedas completando niveles en el Laberinto, encontrando palabras en la Sopa de Letras, o completando logros en Tetris.
+                    </div>
+                </details>
+                <details class="glass-panel">
+                    <summary>¿Qué pasa si pierdo mis datos?</summary>
+                    <div class="faq-content">
+                        El progreso se guarda en tu navegador (LocalStorage). Si borras el caché o cambias de dispositivo, el progreso se reiniciará.
+                    </div>
+                </details>
+                <details class="glass-panel">
+                    <summary>¿Cómo funciona la tienda?</summary>
+                    <div class="faq-content">
+                        Puedes canjear tus monedas por vales virtuales. Al comprar, se generará un código único que se enviará por correo.
+                    </div>
+                </details>
+            </div>
+        </section>
+
     </main>
 
     <script src="js/app.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
 </body>
 </html>
