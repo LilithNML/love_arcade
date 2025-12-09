@@ -3,112 +3,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tetris Pro | Ultimate</title>
+    <title>Tetris Pro | Refined</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         :root {
-            /* Paleta Dark Neon */
-            --bg-deep: #050505;
-            --panel-bg: rgba(23, 23, 35, 0.85);
-            --accent: #facc15; /* Amarillo Neon */
-            --accent-glow: rgba(250, 204, 21, 0.4);
+            /* Paleta Dark Neon Refinada */
+            --bg-deep: #02040a;
+            --panel-bg: rgba(20, 25, 40, 0.9);
+            --accent: #facc15;
+            --accent-glow: rgba(250, 204, 21, 0.5);
             --text: #ffffff;
             --text-muted: #94a3b8;
             --border: rgba(255, 255, 255, 0.1);
             --success: #10b981;
         }
 
-        /* Reset Crítico para Móviles */
+        /* Reset Total */
         * { box-sizing: border-box; touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 
         body {
             margin: 0; padding: 0;
             background-color: var(--bg-deep);
-            background-image: 
-                radial-gradient(circle at 10% 20%, rgba(79, 70, 229, 0.1) 0%, transparent 40%),
-                radial-gradient(circle at 90% 80%, rgba(236, 72, 153, 0.1) 0%, transparent 40%);
+            background-image: radial-gradient(circle at 50% 120%, #1e1b4b 0%, #000 70%);
             color: var(--text);
             font-family: 'Outfit', sans-serif;
-            height: 100dvh;
+            height: 100vh; /* Fallback */
+            height: 100dvh; /* Dynamic Viewport Height */
+            width: 100vw;
             display: flex; flex-direction: column;
             overflow: hidden;
         }
 
         /* --- HEADER --- */
         header {
-            height: 60px; padding: 0 15px; flex-shrink: 0;
+            height: 50px; padding: 0 15px; flex-shrink: 0;
             display: flex; justify-content: space-between; align-items: center;
-            background: rgba(0,0,0,0.2); backdrop-filter: blur(12px);
+            background: rgba(0,0,0,0.4); backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--border);
-            position: relative; z-index: 100; 
+            z-index: 100;
         }
 
         .btn-ui {
             background: rgba(255,255,255,0.08); border: 1px solid var(--border);
-            color: white; padding: 8px; border-radius: 12px; cursor: pointer;
+            color: white; padding: 6px; border-radius: 10px; cursor: pointer;
             display: flex; align-items: center; justify-content: center;
-            transition: 0.2s; position: relative; pointer-events: auto;
+            transition: 0.2s; pointer-events: auto;
         }
         .btn-ui:active { background: var(--accent); color: black; transform: scale(0.95); }
         .btn-ui.muted { opacity: 0.5; }
 
-        .logo { font-weight: 900; font-size: 1.3rem; letter-spacing: 1px; text-shadow: 0 0 15px rgba(255,255,255,0.1); }
+        .logo { font-weight: 900; font-size: 1.1rem; letter-spacing: 1px; color: var(--text); }
 
-        /* --- LAYOUT DEL JUEGO --- */
+        /* --- LAYOUT RESPONSIVO (FIX DESBORDE) --- */
         .game-wrapper {
-            flex: 1; display: grid;
-            grid-template-columns: 80px 1fr 80px; 
-            gap: 10px; padding: 15px 10px 20px 10px;
-            max-width: 550px; margin: 0 auto; width: 100%;
-            height: 100%; position: relative;
+            flex: 1; 
+            display: grid;
+            /* Columnas flexibles: laterales mínimo 60px, máximo 80px */
+            grid-template-columns: minmax(60px, 80px) 1fr minmax(60px, 80px);
+            gap: 8px; 
+            padding: 10px;
+            max-width: 600px; 
+            margin: 0 auto; 
+            width: 100%;
+            height: 100%; /* Llenar espacio restante */
+            overflow: hidden; /* IMPORTANTE: Cortar desborde */
+            position: relative;
         }
 
         .col-side { 
             display: flex; flex-direction: column; gap: 8px; 
-            z-index: 50; pointer-events: none; 
+            z-index: 50; pointer-events: none;
+            justify-content: flex-start;
+            padding-top: 5px;
         }
         .col-side > * { pointer-events: auto; }
 
         .stat-box {
             background: var(--panel-bg); border: 1px solid var(--border);
-            border-radius: 14px; padding: 8px 4px; text-align: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            border-radius: 12px; padding: 8px 2px; text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
-        .label { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 2px; }
-        .val { font-size: 1rem; font-weight: 800; color: #fff; }
-        .val.gold { color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
+        
+        .label { font-size: 0.55rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; margin-bottom: 2px; }
+        .val { font-size: 0.9rem; font-weight: 800; color: #fff; line-height: 1; }
+        .val.gold { color: var(--accent); text-shadow: 0 0 8px var(--accent-glow); }
 
+        /* Preview Pieza */
         #next-grid {
-            width: 40px; height: 40px; margin: 0 auto;
+            width: 32px; height: 32px; margin: 0 auto;
             display: grid; grid-template-columns: repeat(4, 1fr);
             gap: 1px; align-content: center; justify-content: center;
         }
-        .p-cell { width: 9px; height: 9px; border-radius: 2px; }
+        .p-cell { width: 7px; height: 7px; border-radius: 1px; }
 
-        /* --- TABLERO --- */
+        /* --- TABLERO (ZONA CENTRAL) --- */
         .board-zone {
             grid-column: 2; position: relative;
             display: flex; justify-content: center; align-items: center;
             height: 100%; width: 100%;
             z-index: 5;
+            overflow: hidden; /* Asegurar que el canvas no salga */
         }
 
         .canvas-container {
             border: 2px solid rgba(255,255,255,0.1);
-            border-radius: 6px; overflow: hidden;
-            background: rgba(0,0,0,0.8);
-            box-shadow: 0 0 40px rgba(0,0,0,0.5);
-            transition: transform 0.05s;
+            border-radius: 4px; overflow: hidden;
+            background: rgba(0,0,0,0.5);
+            box-shadow: 0 0 30px rgba(0,0,0,0.4);
+            /* Tamaño controlado por JS */
         }
-        
-        /* Efectos Visuales */
-        .shake { animation: shake 0.15s cubic-bezier(.36,.07,.19,.97) both; }
-        @keyframes shake { 10%, 90% { transform: translate3d(-2px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } }
-        
-        .flash { animation: flash 0.1s ease-out; }
-        @keyframes flash { 0% { border-color: white; box-shadow: 0 0 30px white; } 100% { border-color: rgba(255,255,255,0.1); } }
-
         canvas { display: block; }
 
         /* --- CONTROLES --- */
@@ -119,11 +123,12 @@
 
         #btn-pause {
             margin-top: auto; cursor: pointer; 
-            background: rgba(255, 50, 50, 0.1); border-color: rgba(255, 50, 50, 0.3);
-            display: flex; justify-content: center; padding: 12px;
+            background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4);
+            display: flex; justify-content: center; padding: 10px;
         }
-        #btn-pause:active { background: rgba(255, 50, 50, 0.3); }
+        #btn-pause:active { background: rgba(239, 68, 68, 0.3); }
 
+        /* Toggle Control */
         #ctrl-toggle {
             position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
             background: rgba(20, 20, 30, 0.9); border-radius: 30px;
@@ -131,62 +136,65 @@
             z-index: 60;
         }
         .mode-icon {
-            width: 34px; height: 34px; border-radius: 50%;
+            width: 32px; height: 32px; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             color: #64748b; cursor: pointer; transition: 0.2s;
         }
         .mode-icon.active { background: var(--accent); color: black; box-shadow: 0 0 10px var(--accent-glow); }
 
-        /* D-PAD */
+        /* D-Pad Responsive */
         .dpad-overlay {
-            position: absolute; bottom: 70px; left: 0; width: 100%;
-            display: none; justify-content: space-between; padding: 0 20px;
+            position: absolute; bottom: 60px; left: 0; width: 100%;
+            display: none; justify-content: space-between; padding: 0 15px;
             z-index: 50; pointer-events: none;
         }
         .dpad-overlay.visible { display: flex; }
         
         .dpad-btn {
-            width: 65px; height: 65px; background: rgba(255,255,255,0.15);
-            backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 16px; color: white;
+            width: 55px; height: 55px; background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 14px; color: white;
             display: flex; align-items: center; justify-content: center;
             pointer-events: auto; transition: 0.1s; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
-        .dpad-btn:active { background: var(--accent); color: black; transform: scale(0.95); }
-        .btn-rotate-big { width: 80px; height: 80px; border-radius: 50%; background: rgba(139, 92, 246, 0.25); border-color: #8b5cf6; }
+        .dpad-btn:active { background: var(--accent); color: black; transform: scale(0.9); }
+        .btn-rotate-big { width: 70px; height: 70px; border-radius: 50%; background: rgba(139, 92, 246, 0.25); border-color: #8b5cf6; }
 
         /* --- MODALES --- */
         .modal {
             position: fixed; inset: 0; background: rgba(0,0,0,0.92);
             display: none; justify-content: center; align-items: center;
-            z-index: 200; backdrop-filter: blur(8px);
+            z-index: 200; backdrop-filter: blur(8px); padding: 20px;
         }
         .modal-content {
             background: #111827; border: 1px solid var(--border);
-            padding: 35px; border-radius: 24px; text-align: center;
-            width: 90%; max-width: 340px;
-            box-shadow: 0 0 60px rgba(250, 204, 21, 0.15);
+            padding: 30px; border-radius: 20px; text-align: center;
+            width: 100%; max-width: 320px;
+            box-shadow: 0 0 60px rgba(99, 102, 241, 0.2);
             animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
-        @keyframes popIn { from {transform: scale(0.8); opacity: 0;} to {transform: scale(1); opacity: 1;} }
+        @keyframes popIn { from {transform: scale(0.9); opacity: 0;} to {transform: scale(1); opacity: 1;} }
+
+        h2 { margin: 0 0 10px 0; font-size: 1.8rem; background: linear-gradient(45deg, #fff, var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; }
 
         .btn-primary {
             background: var(--accent); color: black; border: none;
-            width: 100%; padding: 16px; border-radius: 14px;
-            font-weight: 800; font-size: 1.1rem; cursor: pointer;
-            box-shadow: 0 0 20px var(--accent-glow); margin-top: 20px;
+            width: 100%; padding: 14px; border-radius: 12px;
+            font-weight: 800; font-size: 1rem; cursor: pointer;
+            box-shadow: 0 0 20px var(--accent-glow); margin-top: 15px;
             text-transform: uppercase; letter-spacing: 1px;
         }
-        .btn-primary:active { transform: scale(0.96); box-shadow: 0 0 5px var(--accent-glow); }
+        .btn-primary:active { transform: scale(0.96); }
         
         .btn-sec {
             background: transparent; border: 1px solid var(--border); color: var(--text-muted);
-            width: 100%; padding: 12px; border-radius: 12px; margin-top: 10px; cursor: pointer;
+            width: 100%; padding: 12px; border-radius: 12px; margin-top: 10px; cursor: pointer; font-size: 0.9rem;
         }
 
-        /* --- LOGROS DRAWER --- */
+        /* Drawer */
         .drawer {
-            position: fixed; top: 0; right: -100%; width: 100%; max-width: 320px;
+            position: fixed; top: 0; right: -100%; width: 85%; max-width: 300px;
             height: 100%; background: #0f172a; z-index: 300;
             transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             border-left: 1px solid var(--border); display: flex; flex-direction: column;
@@ -196,23 +204,27 @@
         
         .ach-list { overflow-y: auto; flex: 1; }
         .ach-item { 
-            display: flex; padding: 15px; gap: 12px; border-bottom: 1px solid var(--border); 
-            align-items: center; opacity: 0.5; transition: 0.3s;
+            display: flex; padding: 12px; gap: 10px; border-bottom: 1px solid var(--border); 
+            align-items: center; opacity: 0.6; transition: 0.3s;
         }
         .ach-item.unlocked { opacity: 1; background: rgba(16, 185, 129, 0.08); border-left: 3px solid var(--success); }
-        .coin-pill { font-size: 0.75rem; background: var(--accent); color: black; padding: 2px 8px; border-radius: 10px; font-weight: bold; }
+        .coin-pill { font-size: 0.7rem; background: var(--accent); color: black; padding: 2px 6px; border-radius: 8px; font-weight: bold; margin-left: auto; }
 
         /* Toast */
         .toast {
-            position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
-            background: var(--success); color: black; padding: 10px 20px;
-            border-radius: 30px; font-weight: bold; z-index: 500;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+            background: var(--success); color: black; padding: 8px 16px;
+            border-radius: 20px; font-weight: bold; z-index: 500; font-size: 0.9rem;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
             animation: slideDown 0.5s forwards, fadeOut 0.5s 2.5s forwards;
-            display: flex; align-items: center; gap: 8px;
+            display: flex; align-items: center; gap: 6px; white-space: nowrap;
         }
-        @keyframes slideDown { from {top: -50px;} to {top: 80px;} }
+        @keyframes slideDown { from {top: -50px;} to {top: 60px;} }
         @keyframes fadeOut { to {opacity: 0;} }
+
+        /* FX */
+        .flash { animation: flash 0.1s ease-out; }
+        @keyframes flash { 0% { border-color: white; box-shadow: 0 0 30px white; } 100% { border-color: rgba(255,255,255,0.1); } }
 
     </style>
 </head>
@@ -220,16 +232,16 @@
 
     <header>
         <a href="../index.html" class="btn-ui">
-            <i data-lucide="arrow-left" size="20"></i>
+            <i data-lucide="arrow-left" size="18"></i>
         </a>
         <div class="logo">TETRIS PRO</div>
         
         <div style="display:flex; gap:8px;">
             <button class="btn-ui" id="btn-sound" onclick="AudioSys.toggle()">
-                <i data-lucide="volume-2" size="20"></i>
+                <i data-lucide="volume-2" size="18"></i>
             </button>
             <button class="btn-ui" onclick="UI.toggleDrawer()">
-                <i data-lucide="trophy" size="20" color="#facc15"></i>
+                <i data-lucide="trophy" size="18" color="#facc15"></i>
             </button>
         </div>
     </header>
@@ -244,8 +256,8 @@
                 <div class="label">Nivel</div>
                 <div class="val" id="level">1</div>
             </div>
-            <button class="stat-box" id="btn-pause">
-                <i data-lucide="pause" size="24" color="#ef4444"></i>
+            <button class="stat-box" id="btn-pause" style="margin-top:auto; cursor:pointer;">
+                <i data-lucide="pause" size="20" color="#ef4444"></i>
             </button>
         </div>
 
@@ -266,7 +278,7 @@
             </div>
             <div class="stat-box">
                 <div class="label">Récord</div>
-                <div class="val" id="high-score" style="color:#fbbf24">0</div>
+                <div class="val" id="high-score" style="color:#fbbf24; font-size:0.8rem;">0</div>
             </div>
         </div>
     </div>
@@ -280,28 +292,29 @@
             <div class="dpad-btn" style="grid-column:span 2" id="btn-down"><i data-lucide="chevron-down"></i></div>
         </div>
         <div class="dpad-btn btn-rotate-big" id="btn-rotate">
-            <i data-lucide="rotate-cw" size="32"></i>
+            <i data-lucide="rotate-cw" size="28"></i>
         </div>
     </div>
 
     <div id="ctrl-toggle">
-        <div class="mode-icon active" id="ico-swipe" onclick="Input.setMode('swipe')"><i data-lucide="hand" size="18"></i></div>
-        <div class="mode-icon" id="ico-dpad" onclick="Input.setMode('dpad')"><i data-lucide="gamepad-2" size="18"></i></div>
+        <div class="mode-icon active" id="ico-swipe" onclick="Input.setMode('swipe')"><i data-lucide="hand" size="16"></i></div>
+        <div class="mode-icon" id="ico-dpad" onclick="Input.setMode('dpad')"><i data-lucide="gamepad-2" size="16"></i></div>
     </div>
 
     <div id="modal" class="modal" style="display:flex;">
         <div class="modal-content">
             <h2 id="modal-title" style="color:var(--accent)">TETRIS PRO</h2>
-            <p id="modal-msg" style="color:#9ca3af; margin-bottom:10px;">¡Consigue 5,000 monedas!</p>
+            <p id="modal-msg">¡Completa líneas!</p>
+            <div style="font-size:0.8rem; color:#64748b;">Mejor: <span id="modal-hs">0</span></div>
+            
             <button id="btn-main" class="btn-primary">JUGAR</button>
-            <button id="btn-exit" class="btn-sec" onclick="window.location.href='../index.html'" style="display:none">Salir</button>
-            <div style="margin-top:15px; font-size:0.8rem; color:#64748b;">Mejor: <span id="modal-hs">0</span></div>
+            <button id="btn-exit" class="btn-sec" onclick="window.location.href='../index.html'" style="display:none">Salir al Menú</button>
         </div>
     </div>
 
     <div id="drawer" class="drawer">
-        <div style="padding:20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0; color:white;">Logros (5,000)</h3>
+        <div style="padding:15px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0; color:white; font-size:1.1rem;">Logros (5,000)</h3>
             <i data-lucide="x" style="cursor:pointer;" onclick="UI.toggleDrawer()"></i>
         </div>
         <div id="ach-list" class="ach-list"></div>
@@ -319,7 +332,7 @@
             [[0,6,0],[6,6,6],[0,0,0]], [[7,7,0],[0,7,7],[0,0,0]]
         ];
 
-        // --- AUDIO ENGINE ---
+        // --- AUDIO ENGINE (SYNTHWAVE) ---
         const AudioSys = {
             ctx: null,
             muted: false,
@@ -333,37 +346,65 @@
                 if(this.muted || !this.ctx) return;
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
-                osc.connect(gain);
+                // Filtro para sonido más suave
+                const filter = this.ctx.createBiquadFilter();
+                
+                osc.connect(filter);
+                filter.connect(gain);
                 gain.connect(this.ctx.destination);
                 
                 const now = this.ctx.currentTime;
                 
                 if(type === 'move') {
-                    osc.type = 'triangle'; osc.frequency.setValueAtTime(200, now);
-                    gain.gain.setValueAtTime(0.02, now); osc.start(now); osc.stop(now+0.05);
+                    // Click suave
+                    osc.type = 'triangle';
+                    filter.type = 'lowpass'; filter.frequency.value = 800;
+                    osc.frequency.setValueAtTime(200, now);
+                    gain.gain.setValueAtTime(0.05, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                    osc.start(now); osc.stop(now + 0.05);
                 } else if(type === 'rotate') {
-                    osc.type = 'sine'; osc.frequency.setValueAtTime(400, now);
-                    gain.gain.setValueAtTime(0.02, now); osc.start(now); osc.stop(now+0.05);
+                    // Tech chirpy
+                    osc.type = 'square';
+                    filter.type = 'lowpass'; filter.frequency.value = 1000;
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(600, now + 0.05);
+                    gain.gain.setValueAtTime(0.03, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                    osc.start(now); osc.stop(now + 0.05);
                 } else if(type === 'drop') {
-                    osc.type = 'square'; osc.frequency.setValueAtTime(100, now);
-                    osc.frequency.exponentialRampToValueAtTime(0.01, now+0.1);
-                    gain.gain.setValueAtTime(0.05, now); osc.start(now); osc.stop(now+0.1);
+                    // Thud
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(100, now);
+                    osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                    osc.start(now); osc.stop(now + 0.1);
                 } else if(type === 'clear') {
-                    osc.type = 'triangle'; osc.frequency.setValueAtTime(400, now);
-                    osc.frequency.linearRampToValueAtTime(800, now+0.2);
-                    gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now+0.3);
-                    osc.start(now); osc.stop(now+0.3);
+                    // Arpeggio mágico (3 notas rápidas)
+                    [0, 0.05, 0.1].forEach((delay, i) => {
+                        const o = this.ctx.createOscillator();
+                        const g = this.ctx.createGain();
+                        o.type = 'triangle';
+                        o.frequency.value = 440 + (i*110);
+                        o.connect(g); g.connect(this.ctx.destination);
+                        g.gain.setValueAtTime(0.05, now + delay);
+                        g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.2);
+                        o.start(now + delay); o.stop(now + delay + 0.2);
+                    });
                 } else if(type === 'gameover') {
-                    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now);
-                    osc.frequency.linearRampToValueAtTime(50, now+1);
-                    gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now+1);
-                    osc.start(now); osc.stop(now+1);
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(100, now);
+                    osc.frequency.linearRampToValueAtTime(20, now + 1);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0, now + 1);
+                    osc.start(now); osc.stop(now + 1);
                 }
             },
             toggle() {
                 this.muted = !this.muted;
                 const btn = document.getElementById('btn-sound');
-                btn.innerHTML = this.muted ? '<i data-lucide="volume-x" size="20"></i>' : '<i data-lucide="volume-2" size="20"></i>';
+                btn.innerHTML = this.muted ? '<i data-lucide="volume-x" size="18"></i>' : '<i data-lucide="volume-2" size="18"></i>';
                 btn.classList.toggle('muted', this.muted);
                 lucide.createIcons();
                 this.init();
@@ -373,27 +414,29 @@
         // --- LOGROS ---
         const Achievements = {
             list: [
-                {id: 'start', title: 'Inicio (1)', coins: 200},
+                {id: 'start', title: 'Novato', coins: 200},
                 {id: 'line1', title: 'Primera Línea', coins: 200},
-                {id: 'score1k', title: '1,000 Puntos', coins: 300},
-                {id: 'tetris', title: '¡TETRIS!', coins: 400},
-                {id: 'lines10', title: '10 Líneas', coins: 400},
-                {id: 'lvl5', title: 'Nivel 5', coins: 500},
-                {id: 'games5', title: '5 Partidas', coins: 600},
-                {id: 'master', title: 'Nivel 10', coins: 600},
-                {id: 'score5k', title: '5,000 Puntos', coins: 800},
-                {id: 'score10k', title: '10,000 Puntos', coins: 1000}
+                {id: 'score1k', title: 'Aprendiz', coins: 300},
+                {id: 'tetris', title: '¡Tetris!', coins: 400},
+                {id: 'lines10', title: 'Constructor', coins: 400},
+                {id: 'lvl5', title: 'Velocista', coins: 500},
+                {id: 'games5', title: 'Persistente', coins: 600},
+                {id: 'master', title: 'Maestro', coins: 600},
+                {id: 'score5k', title: 'Pro', coins: 800},
+                {id: 'score10k', title: 'Leyenda', coins: 1000}
             ],
             data: { unlocked: [], stats: {games:0} },
+            
             init() {
                 const s = localStorage.getItem('tetris_ach_final');
                 if(s) this.data = JSON.parse(s);
                 this.render();
             },
+            
             check(type, val) {
                 this.list.forEach(a => {
                     if(this.data.unlocked.includes(a.id)) return;
-                    let unlock=false;
+                    let unlock = false;
                     if(type==='start' && a.id==='start') unlock=true;
                     if(type==='start' && a.id==='games5' && this.data.stats.games>=5) unlock=true;
                     if(type==='line' && a.id==='line1') unlock=true;
@@ -417,11 +460,15 @@
             addGame() { this.data.stats.games = (this.data.stats.games || 0) + 1; this.check('start'); this.save(); },
             save() { localStorage.setItem('tetris_ach_final', JSON.stringify(this.data)); },
             render() {
-                document.getElementById('ach-list').innerHTML = this.list.map(a => {
+                const c = document.getElementById('ach-list');
+                c.innerHTML = this.list.map(a => {
                     const done = this.data.unlocked.includes(a.id);
                     return `<div class="ach-item ${done?'unlocked':''}">
-                        <i data-lucide="${done?'check-circle':'lock'}" size="16" color="${done?'#10b981':'#64748b'}"></i>
-                        <div style="flex:1"><div style="font-weight:700; color:${done?'white':'#94a3b8'}">${a.title}</div><span class="coin-pill">+${a.coins}</span></div>
+                        <i data-lucide="${done?'check-circle':'lock'}" size="14" color="${done?'#10b981':'#64748b'}"></i>
+                        <div style="flex:1">
+                            <div style="font-weight:700; color:${done?'white':'#94a3b8'}; font-size:0.9rem;">${a.title}</div>
+                        </div>
+                        <span class="coin-pill">+${a.coins}</span>
                     </div>`;
                 }).join('');
                 lucide.createIcons();
@@ -447,7 +494,7 @@
                 document.getElementById('high-score').innerText = hs;
                 document.getElementById('modal-hs').innerText = hs;
 
-                // Listeners Seguros
+                // Event Listeners (Safe)
                 document.getElementById('btn-pause').onclick = (e) => { e.stopPropagation(); togglePause(); };
                 document.getElementById('btn-main').onclick = (e) => { e.stopPropagation(); start(); };
 
@@ -512,7 +559,8 @@
                     gameOver = true;
                     AudioSys.play('gameover');
                     UI.showModal('gameover', player.score);
-                    updateHighScore();
+                    const hs = parseInt(localStorage.getItem('tetris_hs_ult') || 0);
+                    if(player.score > hs) localStorage.setItem('tetris_hs_ult', player.score);
                 }
             }
 
@@ -627,24 +675,6 @@
                 if(back) m.reverse(); else m.forEach(r => r.reverse());
             }
 
-            function updateHighScore() {
-                let hs = parseInt(localStorage.getItem('tetris_hs_ult') || 0);
-                if (player.score > hs) {
-                    hs = player.score;
-                    localStorage.setItem('tetris_hs_ult', hs);
-                }
-                document.getElementById('high-score').innerText = hs;
-                document.getElementById('modal-hs').innerText = hs;
-            }
-
-            function updateStats() {
-                document.getElementById('score').innerText = player.score;
-                document.getElementById('level').innerText = player.level;
-                document.getElementById('lines').innerText = player.lines;
-                updateHighScore(); // Check High Score Real-time
-            }
-
-            // Loop Principal
             function loop(time = 0) {
                 const dt = time - lastTime;
                 lastTime = time;
@@ -750,6 +780,20 @@
                 }
             }
 
+            function updateStats() {
+                document.getElementById('score').innerText = player.score;
+                document.getElementById('level').innerText = player.level;
+                document.getElementById('lines').innerText = player.lines;
+                
+                // Real-time High Score Update
+                const currentHS = parseInt(localStorage.getItem('tetris_hs_ult') || 0);
+                if(player.score > currentHS) {
+                    localStorage.setItem('tetris_hs_ult', player.score);
+                    document.getElementById('high-score').innerText = player.score;
+                    document.getElementById('modal-hs').innerText = player.score;
+                }
+            }
+
             return { init, start, togglePause, move, rotate, drop };
         })();
 
@@ -804,7 +848,7 @@
                 document.addEventListener('keydown', e => {
                     if(e.code==='ArrowLeft') Game.move(-1);
                     else if(e.code==='ArrowRight') Game.move(1);
-                    else if(e.code==='ArrowDown') Game.drop(); // Flecha Abajo = Soft Drop
+                    else if(e.code==='ArrowDown') Game.drop();
                     else if(e.code==='ArrowUp') Game.rotate();
                     else if(e.code==='Escape') Game.togglePause();
                 });
@@ -829,7 +873,6 @@
                     if(Math.abs(dx - lastX) > 25) { 
                         Game.move(dx > lastX ? 1 : -1); lastX = dx;
                     }
-                    // Swipe Down = Soft Drop
                     if(dy > 60) { 
                         Game.drop(); startY = e.touches[0].clientY; 
                     }
