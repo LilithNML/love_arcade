@@ -3,47 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tienda</title>
+    <title>Tienda | Love Arcade</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        .stock-tag {
-            font-size: 0.8rem;
-            padding: 4px 8px;
-            border-radius: 4px;
-            background: rgba(0,0,0,0.1);
-            color: var(--md-sys-color-outline);
-            margin-top: 8px;
-            display: inline-block;
-        }
-        .stock-tag.sold-out {
-            color: #b91c1c;
-            background: #fee2e2;
-            font-weight: bold;
-        }
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            background-color: #e5e7eb;
-            color: #9ca3af;
-        }
-    </style>
 </head>
 <body>
-    <header class="top-app-bar">
-        <div style="display:flex; align-items:center; gap:12px;">
-            <a href="index.html" style="color:inherit;"><i data-lucide="arrow-left"></i></a>
-            <h1 class="headline">Tienda</h1>
-        </div>
-        <div class="chip-coin">
-            <i data-lucide="coins" size="16"></i>
-            <span class="coin-display">...</span>
-        </div>
-    </header>
 
-    <main>
-        <div id="shop-container" class="grid-layout">
+    <nav class="navbar glass-panel">
+        <div class="nav-brand">
+            <i data-lucide="shopping-bag" color="#9b59ff" size="24"></i>
+            Tienda
+        </div>
+        <div class="nav-user">
+            <a href="index.html" class="btn-ghost">Volver</a>
+            <div class="coin-badge">
+                <i data-lucide="star" size="16" fill="#facc15"></i>
+                <span class="coin-display">...</span>
             </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        
+        <section class="shop-hero glass-panel">
+            <div>
+                <span class="section-subtitle">Balance Disponible</span>
+                <div class="shop-balance">
+                    <h2><i data-lucide="star" size="32" fill="#facc15"></i> <span class="coin-display">0</span></h2>
+                </div>
+            </div>
+            <div>
+                <p style="color:var(--text-med); max-width: 300px; text-align:right;">
+                    Canjea tus monedas ganadas en los juegos por recompensas reales.
+                </p>
+            </div>
+        </section>
+
+        <section>
+            <div class="section-header">
+                <h2 class="section-title">Catálogo de Premios</h2>
+                <div class="filter-bar" style="margin-bottom:0; flex:0;">
+                    <div class="filter-pill active">Todos</div>
+                    <div class="filter-pill">Citas</div>
+                    <div class="filter-pill">Relax</div>
+                </div>
+            </div>
+
+            <div id="shop-container" class="shop-grid">
+                <p style="color:var(--text-med)">Cargando inventario...</p>
+            </div>
+        </section>
+
     </main>
 
     <script src="js/app.js"></script>
@@ -60,31 +70,35 @@
             container.innerHTML = '';
             
             items.forEach(item => {
-                // Calcular stock restante en tiempo real
+                // Cálculo de stock
                 const bought = GameCenter.getBoughtCount(item.id);
                 const remaining = item.stock - bought;
                 const isSoldOut = remaining <= 0;
 
                 const card = document.createElement('article');
-                card.className = 'md-card';
+                card.className = 'glass-panel shop-card'; // Nuevas clases
                 card.innerHTML = `
-                    <img src="${item.image}" alt="${item.name}" class="card-media">
-                    <div class="card-content">
-                        <div style="display:flex; justify-content:space-between; align-items:start;">
-                            <h3 class="card-title">${item.name}</h3>
-                        </div>
-                        <p class="card-text">${item.desc}</p>
+                    <img src="${item.image}" alt="${item.name}" class="shop-img">
+                    <div style="width:100%">
+                        <h3 style="font-size:1.1rem; margin-bottom:5px;">${item.name}</h3>
+                        <p style="font-size:0.85rem; color:var(--text-med); height:40px; overflow:hidden;">${item.desc}</p>
                         
-                        <div class="stock-tag ${isSoldOut ? 'sold-out' : ''}">
-                            ${isSoldOut ? 'AGOTADO' : `Disponibles: ${remaining}`}
+                        <div class="shop-price">
+                            <i data-lucide="star" size="16" fill="#facc15"></i> ${item.price}
+                        </div>
+
+                        <div style="margin: 10px 0;">
+                            ${isSoldOut 
+                                ? '<span style="color:#ef4444; font-weight:bold; font-size:0.8rem;">AGOTADO</span>' 
+                                : `<span style="color:var(--text-low); font-size:0.8rem;">Disponibles: ${remaining}</span>`
+                            }
                         </div>
 
                         <button 
-                            class="btn btn-filled" 
-                            style="margin-top:16px;"
-                            ${isSoldOut ? 'disabled' : ''}
+                            class="btn-primary" 
+                            style="width:100%; justify-content:center; ${isSoldOut ? 'opacity:0.5; pointer-events:none;' : ''}"
                             onclick='initiatePurchase(${JSON.stringify(item)})'>
-                            ${isSoldOut ? 'Canjeado' : `${item.price} Monedas`}
+                            ${isSoldOut ? 'Sin Stock' : 'Canjear'}
                         </button>
                     </div>
                 `;
@@ -94,31 +108,26 @@
         }
 
         function initiatePurchase(item) {
+            // Mismo lógica de compra que ya tenías
             const bought = GameCenter.getBoughtCount(item.id);
-            const remaining = item.stock - bought;
-            
-            if(remaining <= 0) return;
+            if((item.stock - bought) <= 0) return;
 
             if(!confirm(`¿Canjear "${item.name}" por ${item.price} monedas?`)) return;
 
-            // Llamar a lógica central
             const result = GameCenter.buyItem(item);
 
             if(result.success) {
-                // Email
                 const subject = encodeURIComponent(`Canje: ${item.name}`);
                 const body = encodeURIComponent(
                     `Hola! He canjeado: ${item.name}.\nCódigo: ${result.code}\nFecha: ${new Date().toLocaleString()}`
                 );
-                
-                // --- CONFIGURA TU EMAIL AQUÍ ---
-                window.location.href = `mailto:tupareja@email.com?subject=${subject}&body=${body}`;
-                
-                alert("¡Canje exitoso! Abriendo correo...");
-                location.reload(); // Recargar para actualizar stock visual
+                // RECUERDA PONER TU EMAIL AQUÍ
+                window.location.href = `mailto:tucorreo@ejemplo.com?subject=${subject}&body=${body}`;
+                alert("¡Canje exitoso!");
+                location.reload();
             } else {
                 if(result.reason === 'coins') alert("No tienes suficientes monedas.");
-                if(result.reason === 'stock') alert("¡Ups! Este producto ya se agotó.");
+                if(result.reason === 'stock') alert("¡Producto agotado!");
             }
         }
     </script>
