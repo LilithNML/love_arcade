@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Love Arcade</title>
+    <title>Love Arcade | Game Hub</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -27,7 +27,30 @@
                 <i data-lucide="star" size="16" fill="#facc15"></i>
                 <span class="coin-display">0</span>
             </div>
-            <div class="avatar"></div> </div>
+            
+            <label for="avatar-upload" class="avatar-container">
+                <div class="avatar" id="user-avatar-display" style="background-image: url('assets/default_avatar.png');">
+                    <i data-lucide="user" size="20"></i>
+                </div>
+                <div class="avatar-edit-icon"><i data-lucide="plus"></i></div>
+            </label>
+            <input type="file" id="avatar-upload" hidden accept="image/*">
+        </div>
+    </nav>
+
+    <nav class="bottom-nav">
+        <a href="#" class="b-nav-item active">
+            <i data-lucide="home" size="20"></i> Inicio
+        </a>
+        <a href="#games" class="b-nav-item">
+            <i data-lucide="gamepad-2" size="20"></i> Juegos
+        </a>
+        <a href="shop.html" class="b-nav-item">
+            <i data-lucide="shopping-bag" size="20"></i> Tienda
+        </a>
+        <a href="#faq" class="b-nav-item">
+            <i data-lucide="help-circle" size="20"></i> Ayuda
+        </a>
     </nav>
 
     <main class="container">
@@ -35,17 +58,9 @@
         <header class="section-header">
             <div>
                 <h1 class="section-title">Bienvenido de vuelta</h1>
-                <p class="section-subtitle">¿Qué vamos a jugar hoy?</p>
+                <p class="section-subtitle">Tu progreso se guarda automáticamente.</p>
             </div>
         </header>
-
-        <div class="filter-bar">
-            <div class="filter-pill active">Todos</div>
-            <div class="filter-pill">Populares</div>
-            <div class="filter-pill">Nuevos</div>
-            <div class="filter-pill">Romance</div>
-            <div class="filter-pill">Puzzle</div>
-        </div>
 
         <section id="games" class="games-grid">
             
