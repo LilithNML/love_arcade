@@ -152,3 +152,91 @@ window.GameCenter = {
     getBalance: () => store.coins
 };
     
+
+/* --- Lógica de Avatar de Usuario --- */
+document.addEventListener('DOMContentLoaded', () => {
+    const avatarInput = document.getElementById('avatar-upload');
+    const avatarDisplay = document.getElementById('user-avatar-display');
+    const storedAvatar = localStorage.getItem('user_avatar_image');
+
+    // 1. Cargar avatar guardado al iniciar
+    if (storedAvatar && avatarDisplay) {
+        avatarDisplay.style.backgroundImage = `url('${storedAvatar}')`;
+        avatarDisplay.innerHTML = ''; // Quitar icono por defecto
+    }
+
+    // 2. Manejar subida de nueva imagen
+    if (avatarInput) {
+        avatarInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                
+                reader.onload = function(event) {
+                    const imgData = event.target.result;
+                    
+                    // Guardar en LocalStorage
+                    try {
+                        localStorage.setItem('user_avatar_image', imgData);
+                        
+                        // Actualizar UI
+                        if (avatarDisplay) {
+                            avatarDisplay.style.backgroundImage = `url('${imgData}')`;
+                            avatarDisplay.innerHTML = '';
+                        }
+                    } catch (err) {
+                        alert("La imagen es demasiado grande para guardarse.");
+                    }
+                };
+                
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+});
+
+
+/* --- SISTEMA DE NAVEGACIÓN ACTIVA --- */
+function updateActiveNav() {
+    // 1. Detectar ubicación actual
+    const path = window.location.pathname;
+    const hash = window.location.hash;
+    
+    // 2. Limpiar todos los estados activos previos
+    const allLinks = document.querySelectorAll('.nav-link, .b-nav-item');
+    allLinks.forEach(link => link.classList.remove('active'));
+
+    // 3. Determinar qué sección activar
+    let target = 'home'; // Por defecto
+
+    if (path.includes('shop.html')) {
+        target = 'shop';
+    } else if (hash === '#games') {
+        target = 'games';
+    } else if (hash === '#faq') {
+        target = 'faq';
+    }
+
+    // 4. Aplicar clase 'active' a los botones correspondientes
+    allLinks.forEach(link => {
+        const href = link.getAttribute('href');
+        
+        // Lógica de coincidencia
+        if (target === 'shop' && href && href.includes('shop.html')) {
+            link.classList.add('active');
+        } else if (target === 'games' && href && href.includes('#games')) {
+            link.classList.add('active');
+        } else if (target === 'faq' && href && href.includes('#faq')) {
+            link.classList.add('active');
+        } else if (target === 'home') {
+            // Activar Home si el href es "#", "index.html" o vacío
+            if (href === '#' || href === 'index.html' || href === './' || href === '') {
+                link.classList.add('active');
+            }
+        }
+    });
+}
+
+// Ejecutar al cargar y al cambiar el hash (navegar en la misma página)
+window.addEventListener('DOMContentLoaded', updateActiveNav);
+window.addEventListener('hashchange', updateActiveNav);
