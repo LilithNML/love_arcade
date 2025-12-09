@@ -509,8 +509,17 @@ html {
 
             function resize() {
                 const wrap = document.getElementById('board-zone');
-                const h = wrap.clientHeight;
-                const w = (h / ROWS) * COLS; 
+                const maxH = wrap.clientHeight;
+                const maxW = wrap.clientWidth;
+
+                let h = maxH;
+                let w = (h / ROWS) * COLS;
+
+                // Si el ancho calculado es mayor al espacio disponible → recalcular usando ancho
+                if (w > maxW) {
+                w = maxW;
+                h = (w / COLS) * ROWS;
+                            }
                 
                 const frame = document.getElementById('canvas-container');
                 frame.style.width = `${w}px`; frame.style.height = `${h}px`;
