@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Tetris estilo neo, para mi pareja.">
     
-    <title>Tetris Neo V4</title>
+    <title>Tetris Neo V5</title>
     <style>
         /* =========================================
            VARIABLES Y RESET
@@ -883,52 +883,45 @@
                 const nextId = lvl.id + 1;
                 let coinsWon = 0;
                 
-                // Lógica original de recompensas locales
+                // 1. Lógica interna: verificar si ya se cobró el nivel
                 if(!progress.rewardsClaimed.includes(lvl.id)) {
                     progress.rewardsClaimed.push(lvl.id);
-                    progress.coins += lvl.coins;
+                    progress.coins += lvl.coins; // Monedas locales (visuales dentro del juego)
                     coinsWon = lvl.coins;
+
+                    // ------------------------------------------------------------
+                    // CORRECCIÓN: INTEGRACIÓN LOVE ARCADE (SISTEMA UNIVERSAL)
+                    // ------------------------------------------------------------
+                    // Se verifica la existencia del objeto y el método correcto según documentación.
+                    if (window.GameCenter && typeof window.GameCenter.completeLevel === 'function') {
+                        
+                        // Parámetros según contrato: (gameId, levelId, coins)
+                        // gameId: 'tetris'
+                        // levelId: 'lvl_1', 'lvl_2', etc. (Para evitar duplicados globales)
+                        // coins: La cantidad ganada
+                        
+                        window.GameCenter.completeLevel('tetris', `lvl_${lvl.id}`, coinsWon);
+                        
+                        console.log(`[Tetris] Enviadas ${coinsWon} monedas al sistema global.`);
+                    } else {
+                        console.warn("[Tetris] Error: No se encontró el sistema GameCenter (app.js).");
+                    }
+                    // ------------------------------------------------------------
                 }
                 
+                // 2. Desbloqueo de siguiente nivel y guardado local
                 if(!progress.unlocked.includes(nextId)) progress.unlocked.push(nextId);
                 if(!progress.scores[lvl.id] || player.score > progress.scores[lvl.id]) progress.scores[lvl.id] = player.score;
                 saveProgress();
 
-                // ============================================================
-                // INTEGRACIÓN LOVE ARCADE (SISTEMA UNIVERSAL)
-                // Implementación según Documentación Técnica v1.0.0
-                // ============================================================
-                
-                // 1. Validación Lógica: Solo enviamos si hay monedas reales ganadas (> 0) [cite: 56]
-                if (coinsWon > 0) {
-                    
-                    // 2. Validación de Existencia: Comprobamos si window.GameCenter existe [cite: 54, 63]
-                    // Esto permite que el juego funcione en modo standalone sin errores 
-                    if (window.GameCenter && typeof window.GameCenter.completeLevel === 'function') {
-                        
-                        // 3. Preparación del Payload (Contrato de Integración 5.2) [cite: 50, 51]
-                        const gameId = "tetris";         // String, minúsculas, sin espacios
-                        const levelId = "lvl_" + lvl.id; // Identificador único del hito (ej: "lvl_1")
-                        const amount = coinsWon;         // Entero positivo (calculado en configuración del nivel)
-
-                        // 4. Emisión del Evento [cite: 46, 47]
-                        // Se invoca inmediatamente tras cumplir la condición de victoria
-                        window.GameCenter.completeLevel(gameId, levelId, amount);
-                        
-                        // Log opcional para depuración, permitido por el estándar
-                        console.log(`[Love Arcade] Transacción enviada: ${amount} monedas para ${levelId}`);
-                    }
-                }
-                // ============================================================
-
-                // UI Original (Intacta)
+                // 3. UI del juego
                 document.getElementById('win-score').innerText = player.score;
                 document.getElementById('win-coins').innerText = coinsWon;
                 document.getElementById('screen-win').classList.add('active');
                 playSound('win');
             }
         }
-
+                
         function gameOver(reason) {
             endGameplay();
             document.getElementById('go-reason').innerText = reason;
