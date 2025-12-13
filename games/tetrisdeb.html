@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tetris Neo Final</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* ESTILOS DEL JUEGO */
+        :root {
+            --bg-deep: #050505; --glass: rgba(30, 35, 50, 0.9);
+            --accent: #facc15; --text: #ffffff; --border: rgba(255,255,255,0.15);
+        }
+        * { box-sizing: border-box; touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; padding: 0; background: var(--bg-deep); color: var(--text); font-family: system-ui; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* HEADER */
+        header { height: 60px; padding: 0 15px; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--border); z-index: 50; }
+        .logo { font-weight: 900; font-size: 1.2rem; letter-spacing: 1px; }
+        .btn-icon { background: rgba(255,255,255,0.1); border: 1px solid var(--border); color: white; padding: 8px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        
+        /* AREA JUEGO */
+        #game-area { flex: 1; position: relative; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        #canvas-wrapper { border: 2px solid rgba(255,255,255,0.1); border-radius: 4px; background: rgba(0,0,0,0.8); box-shadow: 0 0 40px rgba(0,0,0,0.5); }
+        canvas { display: block; width: 100%; height: 100%; }
+        
+        /* UI OVERLAYS */
+        .hud { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+        .stat { background: var(--glass); padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); }
+        .stat-l { font-size: 0.6rem; color: #94a3b8; font-weight: bold; }
+        .stat-v { font-size: 1rem; font-weight: 800; }
+        .gold { color: var(--accent); }
+        .next-box { position: absolute; top: 10px; right: 10px; background: var(--glass); border: 1px solid var(--border); padding: 5px; border-radius: 8px; pointer-events: none; }
+
+        /* CONTROLES */
+        #controls { height: auto; padding: 20px 20px 40px 20px; display: flex; justify-content: space-between; align-items: flex-end; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); z-index: 60; pointer-events: none; }
+        .c-group { pointer-events: auto; display: flex; gap: 15px; }
+        .c-btn { width: 55px; height: 55px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(5px); color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.1s; }
+        .c-btn:active { background: var(--accent); color: black; transform: scale(0.9); }
+        .c-btn.big { width: 75px; height: 75px; background: rgba(250, 204, 21, 0.2); border-color: var(--accent); }
+        
+        /* MODALES */
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: none; justify-content: center; align-items: center; z-index: 2000; }
+        .modal.show { display: flex; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from {opacity:0} to {opacity:1} }
+        .card { background: #15151a; border: 1px solid var(--border); padding: 30px; border-radius: 20px; text-align: center; width: 90%; max-width: 320px; }
+        .btn-main { background: var(--accent); color: black; border: none; width: 100%; padding: 14px; border-radius: 10px; font-weight: 800; margin-top: 20px; cursor: pointer; pointer-events: auto; }
+        .btn-link { background: none; color: #94a3b8; border: none; margin-top: 15px; text-decoration: underline; cursor: pointer; pointer-events: auto; }
+
+        #touch-layer { position: absolute; inset: 0; z-index: 10; display: none; }
+        #toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: #10b981; color: white; padding: 8px 16px; border-radius: 20px; font-weight: bold; z-index: 3000; opacity: 0; transition: 0.3s; pointer-events: none; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(10px); }
+    </style>
+</head>
+<body>
+
+    <header>
+        <button class="btn-icon" onclick="window.location.href='../index.html'"><i data-lucide="arrow-left" size="20"></i></button>
+        <div class="logo">TETRIS CRYSTAL</div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn-icon" id="btn-sound"><i data-lucide="volume-2" size="20"></i></button>
+            <button class="btn-icon" id="btn-pause"><i data-lucide="pause" size="20"></i></button>
+        </div>
+    </header>
+
+    <div id="game-area">
+        <div id="canvas-wrapper">
+            <canvas id="game-canvas"></canvas>
+        </div>
+        
+        <div class="hud">
+            <div class="stat"><div class="stat-l">PUNTOS</div><div class="stat-v gold" id="ui-score">0</div></div>
+            <div class="stat"><div class="stat-l">NIVEL</div><div class="stat-v" id="ui-level">1</div></div>
+        </div>
+        
+        <div class="next-box">
+            <div class="stat-l" style="text-align:center; margin-bottom:4px">SIGUIENTE</div>
+            <canvas id="next-canvas" width="50" height="50"></canvas>
+        </div>
+        
+        <div id="touch-layer"></div>
+    </div>
+
+    <div id="controls">
+        <div class="c-group">
+            <button class="c-btn" id="btn-left"><i data-lucide="chevron-left"></i></button>
+            <button class="c-btn" id="btn-down"><i data-lucide="chevron-down"></i></button>
+            <button class="c-btn" id="btn-right"><i data-lucide="chevron-right"></i></button>
+        </div>
+        <div class="c-group">
+            <button class="c-btn big" id="btn-rotate"><i data-lucide="rotate-cw" size="28"></i></button>
+        </div>
+    </div>
+
+    <div id="modal-start" class="modal show">
+        <div class="card">
+            <h2 style="color:var(--accent); margin:0 0 10px 0;">TETRIS</h2>
+            <p style="color:#94a3b8;">Completa líneas para ganar.</p>
+            <p style="font-size:0.8rem; margin-top:5px;">Récord: <span id="ui-hs" class="gold">0</span></p>
+            <button class="btn-main" id="action-start">JUGAR</button>
+        </div>
+    </div>
+
+    <div id="modal-over" class="modal">
+        <div class="card">
+            <h2 style="color:#ef4444; margin:0 0 10px 0;">GAME OVER</h2>
+            <p>Puntuación Final</p>
+            <div class="stat-v gold" id="final-score" style="font-size:2rem; margin:10px 0;">0</div>
+            <button class="btn-main" id="action-retry">REINTENTAR</button>
+            <button class="btn-link" onclick="window.location.href='../index.html'">Salir</button>
+        </div>
+    </div>
+
+    <div id="toast">¡Monedas Guardadas!</div>
+
+    <script src="../js/app.js"></script>
+
+    <script>
+    (function() {
+        // --- PROTECCIÓN DE ERRORES GLOBAL ---
+        window.onerror = function(msg, url, line) {
+            console.error("Game Error:", msg);
+        };
+
+        // --- CONSTANTES (RENOMBRADAS PARA EVITAR CONFLICTO) ---
+        const GAME_CONFIG = {
+            COLS: 10, ROWS: 20, ASPECT: 0.5,
+            COLORS: [null, '#06b6d4', '#3b82f6', '#f97316', '#eab308', '#22c55e', '#a855f7', '#ef4444'],
+            SHAPES: [[], [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], [[2,0,0],[2,2,2],[0,0,0]], [[0,0,3],[3,3,3],[0,0,0]], [[4,4],[4,4]], [[0,5,5],[5,5,0],[0,0,0]], [[0,6,0],[6,6,6],[0,0,0]], [[7,7,0],[0,7,7],[0,0,0]]],
+            STORAGE_KEY: "tetris_v6_stable"
+        };
+
+        // --- ESTADO ---
+        let grid=[], player={pos:{x:0,y:0}, matrix:null, score:0, level:1, lines:0}, next=0;
+        let state = 'menu'; // menu, playing, paused, over
+        let dropT=0, dropInt=1000, lastT=0, rewardTracker=0;
+        let hs = 0;
+
+        // --- STORAGE ---
+        function loadData() {
+            try {
+                hs = parseInt(localStorage.getItem(GAME_CONFIG.STORAGE_KEY)) || 0;
+                document.getElementById('ui-hs').innerText = hs;
+            } catch(e) { console.warn("Reset data"); }
+        }
+        function saveData() {
+            if(player.score > hs) {
+                hs = player.score;
+                localStorage.setItem(GAME_CONFIG.STORAGE_KEY, hs);
+            }
+        }
+
+        // --- RENDER ---
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const nextCv = document.getElementById('next-canvas');
+        const nextCtx = nextCv.getContext('2d');
+        let bs = 0;
+
+        function resize() {
+            const wrap = document.getElementById('canvas-wrapper');
+            const maxH = wrap.parentElement.clientHeight - 20;
+            const maxW = wrap.parentElement.clientWidth - 20;
+            
+            let h = maxH;
+            let w = h * GAME_CONFIG.ASPECT;
+            if(w > maxW) { w = maxW; h = w / GAME_CONFIG.ASPECT; }
+            
+            canvas.width = w; canvas.height = h;
+            canvas.style.width = w+'px'; canvas.style.height = h+'px';
+            wrap.style.width = w+'px'; wrap.style.height = h+'px';
+            bs = w / GAME_CONFIG.COLS;
+            
+            if(state !== 'menu') draw();
+        }
+
+        function draw() {
+            // Fondo
+            ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            
+            // Grid
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+            ctx.beginPath();
+            for(let i=0; i<=GAME_CONFIG.COLS; i++) { ctx.moveTo(i*bs,0); ctx.lineTo(i*bs,canvas.height); }
+            ctx.stroke();
+
+            // Bloques Estáticos
+            grid.forEach((r,y) => r.forEach((v,x) => { if(v) block(ctx,x,y,v); }));
+
+            // Jugador
+            if(player.matrix) {
+                // Ghost
+                let gy = player.pos.y;
+                while(!collide(0, gy - player.pos.y + 1)) gy++;
+                ctx.globalAlpha=0.2; drawPiece(player.matrix, player.pos.x, gy); ctx.globalAlpha=1;
+                
+                // Active
+                drawPiece(player.matrix, player.pos.x, player.pos.y);
+            }
+        }
+
+        function block(c, x, y, col) {
+            c.fillStyle = GAME_CONFIG.COLORS[col];
+            c.fillRect(x*bs, y*bs, bs-1, bs-1);
+            c.fillStyle = 'rgba(255,255,255,0.3)';
+            c.fillRect(x*bs, y*bs, bs-1, bs*0.2);
+        }
+
+        function drawPiece(m, ox, oy) {
+            m.forEach((r,y)=>r.forEach((v,x)=>{ if(v) block(ctx, x+ox, y+oy, v); }));
+        }
+
+        function drawNext() {
+            nextCtx.fillStyle='#15151a'; nextCtx.fillRect(0,0,50,50);
+            const m = GAME_CONFIG.SHAPES[next];
+            const size = 10;
+            const ox = (50 - m[0].length*size)/2;
+            const oy = (50 - m.length*size)/2;
+            m.forEach((r,y)=>r.forEach((v,x)=>{
+                if(v) {
+                    nextCtx.fillStyle = GAME_CONFIG.COLORS[v];
+                    nextCtx.fillRect(ox+x*size, oy+y*size, size-1, size-1);
+                }
+            }));
+        }
+
+        // --- LÓGICA ---
+        function createGrid() { return Array(GAME_CONFIG.ROWS).fill().map(()=>Array(GAME_CONFIG.COLS).fill(0)); }
+
+        function start() {
+            document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
+            document.getElementById('touch-layer').style.display = 'block';
+            
+            grid = createGrid();
+            player = { pos:{x:0,y:0}, matrix:null, score:0, level:1, lines:0 };
+            next = (Math.random()*7|0)+1;
+            rewardTracker = 0;
+            dropInt = 1000;
+            state = 'playing';
+            
+            spawn();
+            updateUI();
+            
+            lastTime = performance.now();
+            requestAnimationFrame(loop);
+        }
+
+        function spawn() {
+            const t = next; next = (Math.random()*7|0)+1;
+            drawNext();
+            player.matrix = GAME_CONFIG.SHAPES[t];
+            player.pos = { x: (GAME_CONFIG.COLS/2|0)-(player.matrix[0].length/2|0), y: 0 };
+            if(collide(0,0)) gameOver();
+        }
+
+        function collide(ox, oy) {
+            const m = player.matrix;
+            for(let y=0; y<m.length; ++y) for(let x=0; x<m[y].length; ++x) {
+                if(m[y][x]!==0 && (grid[y+player.pos.y+oy] && grid[y+player.pos.y+oy][x+player.pos.x+ox])!==0) return true;
+            }
+            return false;
+        }
+
+        function merge() {
+            player.matrix.forEach((r,y)=>r.forEach((v,x)=>{
+                if(v) grid[y+player.pos.y][x+player.pos.x] = v;
+            }));
+        }
+
+        function sweep() {
+            let c = 0;
+            for(let y=GAME_CONFIG.ROWS-1; y>=0; --y) {
+                if(grid[y].every(v=>v!==0)) {
+                    grid.splice(y,1); grid.unshift(Array(GAME_CONFIG.COLS).fill(0));
+                    c++; ++y;
+                }
+            }
+            if(c>0) {
+                const pts = [0,100,300,500,800];
+                player.score += pts[c] * player.level;
+                player.lines += c;
+                player.level = Math.floor(player.lines/10)+1;
+                dropInt = Math.max(100, 1000 - (player.level*50));
+                
+                // --- MONEDAS (1k pts = 1k coins) ---
+                const milestones = Math.floor(player.score / 1000);
+                const delta = milestones - rewardTracker;
+                
+                if (delta > 0) {
+                    const coins = delta * 1000;
+                    rewardTracker = milestones;
+                    
+                    if (window.GameCenter) {
+                        // ID Único para evitar bloqueo de pago por nivel
+                        const payID = `score_milestone_${Date.now()}_${rewardTracker}`;
+                        window.GameCenter.completeLevel('tetris', payID, coins);
+                        
+                        const t = document.getElementById('toast');
+                        t.innerText = `+${coins} Monedas!`;
+                        t.classList.add('show');
+                        setTimeout(()=>t.classList.remove('show'), 2000);
+                    }
+                }
+                updateUI();
+            }
+        }
+
+        function update(t) {
+            if(state !== 'playing') return;
+            const dt = t - lastTime; lastTime = t;
+            dropT += dt;
+            if(dropT > dropInt) { drop(); dropT = 0; }
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        function drop() {
+            if(!collide(0, 1)) player.pos.y++;
+            else { merge(); sweep(); spawn(); }
+        }
+
+        function move(d) { if(!collide(d,0)) player.pos.x+=d; }
+        
+        function rotate() {
+            const p = player.pos.x; let off=1;
+            _rot(player.matrix);
+            while(collide(0,0)) {
+                player.pos.x += off; off = -(off+(off>0?1:-1));
+                if(off > player.matrix[0].length) { _rot(player.matrix,-1); player.pos.x=p; return; }
+            }
+        }
+        function _rot(m,d=1){ for(let y=0;y<m.length;++y)for(let x=0;x<y;++x)[m[x][y],m[y][x]]=[m[y][x],m[x][y]]; if(d>0)m.forEach(r=>r.reverse());else m.reverse(); }
+
+        function gameOver() {
+            state = 'over';
+            document.getElementById('touch-layer').style.display = 'none';
+            saveData();
+            document.getElementById('final-score').innerText = player.score;
+            document.getElementById('modal-over').classList.add('show');
+        }
+
+        function updateUI() {
+            document.getElementById('ui-score').innerText = player.score;
+            document.getElementById('ui-level').innerText = player.level;
+        }
+
+        function loop(t) { requestAnimationFrame(loop); update(t); }
+
+        // --- INPUT ---
+        function initInput() {
+            // Teclado
+            document.addEventListener('keydown', e => {
+                if(state!=='playing') return;
+                if(e.code==='ArrowLeft') move(-1);
+                if(e.code==='ArrowRight') move(1);
+                if(e.code==='ArrowDown') drop();
+                if(e.code==='ArrowUp') rotate();
+            });
+
+            // Touch Swipe
+            const z = document.getElementById('touch-layer');
+            let sx, sy;
+            z.addEventListener('touchstart', e => { e.preventDefault(); sx=e.touches[0].clientX; sy=e.touches[0].clientY; }, {passive:false});
+            z.addEventListener('touchmove', e => {
+                if(state!=='playing') return;
+                e.preventDefault();
+                const dx=e.touches[0].clientX-sx, dy=e.touches[0].clientY-sy;
+                if(Math.abs(dx)>30) { move(dx>0?1:-1); sx=e.touches[0].clientX; }
+                if(dy>50) { drop(); sy=e.touches[0].clientY; }
+            }, {passive:false});
+            z.addEventListener('touchend', e => {
+                const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
+                if(Math.abs(dx)<10 && Math.abs(dy)<10) rotate();
+            });
+
+            // Botones
+            const bind = (id, fn) => {
+                const el = document.getElementById(id);
+                el.addEventListener('touchstart', (e)=>{e.preventDefault(); fn();});
+                el.addEventListener('mousedown', (e)=>{e.preventDefault(); fn();});
+            };
+            bind('btn-left', ()=>move(-1));
+            bind('btn-right', ()=>move(1));
+            bind('btn-down', ()=>drop());
+            bind('btn-rotate', ()=>rotate());
+            
+            document.getElementById('action-start').onclick = start;
+            document.getElementById('action-retry').onclick = start;
+            document.getElementById('btn-pause').onclick = () => {
+                if(state==='playing') { state='paused'; document.getElementById('modal-start').querySelector('h2').innerText="PAUSA"; document.getElementById('modal-start').classList.add('show'); }
+                else if(state==='paused') { state='playing'; document.getElementById('modal-start').classList.remove('show'); }
+            };
+        }
+
+        // --- INIT ---
+        window.onload = () => {
+            if(window.lucide) lucide.createIcons();
+            loadData();
+            resize();
+            window.addEventListener('resize', resize);
+            initInput();
+        };
+
+    })();
+    </script>
+</body>
+</html>
