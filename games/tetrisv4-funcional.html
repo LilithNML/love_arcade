@@ -370,8 +370,7 @@
         </div>
     </div>
 
-    <script src="../js/app.js" defer></script>
-    
+     <script src="../js/app.js"></script>
     <script>
         // ===========================================
         // CONFIGURACIÓN OPTIMIZADA
@@ -440,8 +439,6 @@
         let audioCtx = null;
         let gainMaster = null;
         let soundBuffers = {};
-        
-        // 1.1 Nueva variable de música (Lazy Load)
         let musicPlayer = null;
 
         let hudCache = { moves: -1, obj: "" };
@@ -499,12 +496,8 @@
             setupTouch(canvas);
         }
 
-        // ===========================================
-        // 1.1 FUNCIÓN PARA CARGA ASÍNCRONA DE MÚSICA
-        // ===========================================
         async function initMusic() {
             if (!musicPlayer) {
-                // Se crea el objeto solo cuando se necesita
                 musicPlayer = new Audio("../assets/music/retro-arcade-music-8f2d3a.ogg");
                 musicPlayer.loop = true;
                 musicPlayer.preload = "none"; 
@@ -693,7 +686,6 @@
             hudCache = { moves: -1, obj: "" }; 
             updateHUD();
 
-            // 1.1 Iniciar música al comenzar el juego (intención del usuario)
             initMusic().then(() => {
                 enableAudioGlobal();
                 updateMusicState();
@@ -883,45 +875,34 @@
                 const nextId = lvl.id + 1;
                 let coinsWon = 0;
                 
-                // 1. Lógica interna: verificar si ya se cobró el nivel
+                // === INTEGRACIÓN DE MONEDAS UNIVERSAL ===
+                // Verificar si este nivel ya se ha pagado antes
                 if(!progress.rewardsClaimed.includes(lvl.id)) {
                     progress.rewardsClaimed.push(lvl.id);
-                    progress.coins += lvl.coins; // Monedas locales (visuales dentro del juego)
+                    progress.coins += lvl.coins; // Monedas visuales del juego
                     coinsWon = lvl.coins;
 
-                    // ------------------------------------------------------------
-                    // CORRECCIÓN: INTEGRACIÓN LOVE ARCADE (SISTEMA UNIVERSAL)
-                    // ------------------------------------------------------------
-                    // Se verifica la existencia del objeto y el método correcto según documentación.
+                    // Conexión con app.js (Sistema Global)
                     if (window.GameCenter && typeof window.GameCenter.completeLevel === 'function') {
-                        
-                        // Parámetros según contrato: (gameId, levelId, coins)
-                        // gameId: 'tetris'
-                        // levelId: 'lvl_1', 'lvl_2', etc. (Para evitar duplicados globales)
-                        // coins: La cantidad ganada
-                        
-                        window.GameCenter.completeLevel('tetris', `lvl_${lvl.id}`, coinsWon);
-                        
-                        console.log(`[Tetris] Enviadas ${coinsWon} monedas al sistema global.`);
+                        // Enviamos: ID Juego ('tetris'), ID Nivel ('lvl_1'), Cantidad (coinsWon)
+                        window.GameCenter.completeLevel('tetris', 'lvl_' + lvl.id, coinsWon);
+                        console.log(`[Tetris] Enviando ${coinsWon} monedas al sistema global.`);
                     } else {
-                        console.warn("[Tetris] Error: No se encontró el sistema GameCenter (app.js).");
+                        console.warn("[Tetris] Sistema GameCenter no encontrado. Las monedas no se guardaron globalmente.");
                     }
-                    // ------------------------------------------------------------
                 }
-                
-                // 2. Desbloqueo de siguiente nivel y guardado local
+                // ========================================
+
                 if(!progress.unlocked.includes(nextId)) progress.unlocked.push(nextId);
                 if(!progress.scores[lvl.id] || player.score > progress.scores[lvl.id]) progress.scores[lvl.id] = player.score;
                 saveProgress();
-
-                // 3. UI del juego
                 document.getElementById('win-score').innerText = player.score;
                 document.getElementById('win-coins').innerText = coinsWon;
                 document.getElementById('screen-win').classList.add('active');
                 playSound('win');
             }
         }
-                
+
         function gameOver(reason) {
             endGameplay();
             document.getElementById('go-reason').innerText = reason;
@@ -1069,7 +1050,6 @@
             }
         }
 
-        // 1.1 Actualización de estado de música con el nuevo player
         function updateMusicState() {
             if (musicPlayer && settings.music && gameActive && !isPaused) {
                 musicPlayer.play().catch(()=>{});
@@ -1096,7 +1076,6 @@
 
         function showMainMenu() {
             endGameplay();
-            // Detener música al salir al menú
             if(musicPlayer) {
                 musicPlayer.pause();
                 musicPlayer.currentTime = 0;
@@ -1174,6 +1153,5 @@
             requestAnimationFrame(loop);
         }
     </script>
-    
 </body>
 </html>
