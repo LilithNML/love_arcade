@@ -1,147 +1,96 @@
 /**
- * Game Center Core v4 - Fixed
+ * Game Center Core v5 - Architecture Fixed
  */
 
+// --- 1. CONFIGURACIÓN Y ESTADO (Inmediato) ---
 const CONFIG = {
     stateKey: 'gamecenter_v4_master',
     initialCoins: 0
 };
 
-// Estado por defecto
 const defaultState = {
     coins: CONFIG.initialCoins,
-    progress: { 
-        maze: [], 
-        wordsearch: [],
-        secretWordsFound: [] 
-    },
+    progress: { maze: [], wordsearch: [], secretWordsFound: [] },
     inventory: {},
     history: []
 };
 
 let store = { ...defaultState };
 
-// Cargar estado inmediatamente para que esté disponible lo antes posible
-loadState();
-
-document.addEventListener('DOMContentLoaded', () => {
-    updateUI();
-    updateActiveNav(); // Iniciar navegación activa
-    if (window.lucide) lucide.createIcons();
-});
-
-function loadState() {
-    try {
-        const data = localStorage.getItem(CONFIG.stateKey);
-        if (data) {
-            const parsed = JSON.parse(data);
-            store = { 
-                ...defaultState, 
-                ...parsed, 
-                progress: { ...defaultState.progress, ...parsed.progress },
-                inventory: { ...defaultState.inventory, ...parsed.inventory }
-            };
-        } else {
-            saveState();
-        }
-    } catch (e) {
-        console.error("Error cargando estado:", e);
-        store = { ...defaultState };
+// Cargar datos inmediatamente (sin esperar al DOM)
+try {
+    const data = localStorage.getItem(CONFIG.stateKey);
+    if (data) {
+        const parsed = JSON.parse(data);
+        store = { ...defaultState, ...parsed, progress: { ...defaultState.progress, ...parsed.progress } };
     }
+} catch (e) {
+    console.error("Error cargando estado:", e);
 }
 
-function saveState() {
-    localStorage.setItem(CONFIG.stateKey, JSON.stringify(store));
-    updateUI();
-}
-
-function updateUI() {
-    // Actualiza todos los contadores de monedas en la pantalla
-    const displays = document.querySelectorAll('.coin-display');
-    if (displays.length > 0) {
-        displays.forEach(el => el.textContent = store.coins);
-    }
-}
-
-// --- API PÚBLICA (Se define inmediatamente) ---
-
+// --- 2. API PÚBLICA (Disponible Inmediatamente para los juegos) ---
 window.GameCenter = {
     completeLevel: (gameId, levelId, rewardAmount) => {
         if (!store.progress[gameId]) store.progress[gameId] = [];
-
-        // Verificar si ya se pagó este ID específico
+        
+        // Evitar duplicados
         if (store.progress[gameId].includes(levelId)) {
-            console.log(`[GameCenter] ${levelId} ya fue pagado anteriormente.`);
+            console.log(`[GameCenter] ${levelId} ya pagado.`);
             return { paid: false, coins: store.coins };
         }
 
         store.progress[gameId].push(levelId);
         store.coins += rewardAmount;
         saveState();
-        console.log(`[GameCenter] Pago exitoso: +${rewardAmount} monedas.`);
         return { paid: true, coins: store.coins };
     },
 
     buyItem: (itemData) => {
-        const boughtCount = store.inventory[itemData.id] || 0;
-        if (boughtCount >= itemData.stock) return { success: false, reason: 'stock' };
+        const bought = store.inventory[itemData.id] || 0;
+        if (bought >= itemData.stock) return { success: false, reason: 'stock' };
         if (store.coins < itemData.price) return { success: false, reason: 'coins' };
 
         store.coins -= itemData.price;
-        store.inventory[itemData.id] = boughtCount + 1;
-        
-        const securityCode = `${itemData.name.substring(0,3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
-        
-        store.history.push({
-            itemId: itemData.id,
-            name: itemData.name,
-            code: securityCode,
-            date: new Date().toISOString()
-        });
-
+        store.inventory[itemData.id] = bought + 1;
         saveState();
-        return { success: true, code: securityCode, remaining: itemData.stock - (boughtCount + 1) };
+        return { success: true };
     },
 
-    getBoughtCount: (itemId) => store.inventory[itemId] || 0,
-    addCoins: (amount) => { store.coins += amount; saveState(); }, // Método helper extra
+    getBoughtCount: (id) => store.inventory[id] || 0,
     getBalance: () => store.coins
 };
 
-// --- LOGICA DE AVATAR ---
+// Función auxiliar interna
+function saveState() {
+    localStorage.setItem(CONFIG.stateKey, JSON.stringify(store));
+    updateUI(); // Intenta actualizar si el UI ya existe
+}
+
+function updateUI() {
+    // Solo funciona si el DOM ya cargó
+    const displays = document.querySelectorAll('.coin-display');
+    if (displays.length) displays.forEach(el => el.textContent = store.coins);
+}
+
+// --- 3. LÓGICA VISUAL (Espera a que el HTML esté listo) ---
 document.addEventListener('DOMContentLoaded', () => {
-    const avatarInput = document.getElementById('avatar-upload');
-    const avatarDisplay = document.getElementById('user-avatar-display');
-    const storedAvatar = localStorage.getItem('user_avatar_image');
+    
+    // A. Inicializar UI de Monedas
+    updateUI();
+    
+    // B. Inicializar Iconos
+    if (window.lucide) lucide.createIcons();
 
-    if (storedAvatar && avatarDisplay) {
-        avatarDisplay.style.backgroundImage = `url('${storedAvatar}')`;
-        avatarDisplay.innerHTML = '';
-    }
+    // C. Lógica de Navegación (Active State)
+    updateActiveNav();
+    window.addEventListener('hashchange', updateActiveNav);
 
-    if (avatarInput) {
-        avatarInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    try {
-                        localStorage.setItem('user_avatar_image', event.target.result);
-                        if (avatarDisplay) {
-                            avatarDisplay.style.backgroundImage = `url('${event.target.result}')`;
-                            avatarDisplay.innerHTML = '';
-                        }
-                    } catch (err) {
-                        alert("Imagen demasiado grande.");
-                    }
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-    }
+    // D. Lógica de Avatar
+    initAvatarSystem();
 });
 
-// --- SISTEMA DE NAVEGACIÓN ---
+// --- FUNCIONES DE UI (Protegidas) ---
+
 function updateActiveNav() {
     const path = window.location.pathname;
     const hash = window.location.hash;
@@ -165,4 +114,33 @@ function updateActiveNav() {
         else if (target === 'home' && (href === '#' || href === 'index.html')) link.classList.add('active');
     });
 }
-window.addEventListener('hashchange', updateActiveNav);
+
+function initAvatarSystem() {
+    const avatarInput = document.getElementById('avatar-upload');
+    const avatarDisplay = document.getElementById('user-avatar-display');
+    
+    if (!avatarInput || !avatarDisplay) return; // Seguridad si no estamos en una pág con avatar
+
+    const storedAvatar = localStorage.getItem('user_avatar_image');
+    if (storedAvatar) {
+        avatarDisplay.style.backgroundImage = `url('${storedAvatar}')`;
+        avatarDisplay.innerHTML = '';
+    }
+
+    avatarInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    localStorage.setItem('user_avatar_image', event.target.result);
+                    avatarDisplay.style.backgroundImage = `url('${event.target.result}')`;
+                    avatarDisplay.innerHTML = '';
+                } catch (err) {
+                    alert("Imagen muy grande. Intenta con una más pequeña.");
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+}
