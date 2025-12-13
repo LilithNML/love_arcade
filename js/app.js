@@ -1,5 +1,5 @@
 /**
- * Game Center Core v4 - Stock, Progreso y Economía
+ * Game Center Core v4 - Fixed
  */
 
 const CONFIG = {
@@ -10,22 +10,23 @@ const CONFIG = {
 // Estado por defecto
 const defaultState = {
     coins: CONFIG.initialCoins,
-    // Registro de progreso: { gameId: [levelIdsCompletados...] }
     progress: { 
         maze: [], 
         wordsearch: [],
-        secretWordsFound: [] // Nuevo: Registro de palabras secretas para no pagar doble
+        secretWordsFound: [] 
     },
-    // Inventario: { itemId: cantidadComprada }
     inventory: {},
     history: []
 };
 
 let store = { ...defaultState };
 
+// Cargar estado inmediatamente para que esté disponible lo antes posible
+loadState();
+
 document.addEventListener('DOMContentLoaded', () => {
-    loadState();
     updateUI();
+    updateActiveNav(); // Iniciar navegación activa
     if (window.lucide) lucide.createIcons();
 });
 
@@ -34,7 +35,6 @@ function loadState() {
         const data = localStorage.getItem(CONFIG.stateKey);
         if (data) {
             const parsed = JSON.parse(data);
-            // Fusión profunda para asegurar compatibilidad futura
             store = { 
                 ...defaultState, 
                 ...parsed, 
@@ -45,7 +45,7 @@ function loadState() {
             saveState();
         }
     } catch (e) {
-        console.error("Error cargando estado. Reiniciando seguridad.", e);
+        console.error("Error cargando estado:", e);
         store = { ...defaultState };
     }
 }
@@ -56,68 +56,41 @@ function saveState() {
 }
 
 function updateUI() {
-    document.querySelectorAll('.coin-display').forEach(el => {
-        el.textContent = store.coins;
-    });
+    // Actualiza todos los contadores de monedas en la pantalla
+    const displays = document.querySelectorAll('.coin-display');
+    if (displays.length > 0) {
+        displays.forEach(el => el.textContent = store.coins);
+    }
 }
 
-// --- API PÚBLICA ---
+// --- API PÚBLICA (Se define inmediatamente) ---
 
 window.GameCenter = {
-    /**
-     * Completa un nivel y otorga recompensa si es la primera vez.
-     */
     completeLevel: (gameId, levelId, rewardAmount) => {
         if (!store.progress[gameId]) store.progress[gameId] = [];
 
+        // Verificar si ya se pagó este ID específico
         if (store.progress[gameId].includes(levelId)) {
+            console.log(`[GameCenter] ${levelId} ya fue pagado anteriormente.`);
             return { paid: false, coins: store.coins };
         }
 
         store.progress[gameId].push(levelId);
         store.coins += rewardAmount;
         saveState();
+        console.log(`[GameCenter] Pago exitoso: +${rewardAmount} monedas.`);
         return { paid: true, coins: store.coins };
     },
 
-    /**
-     * Reclama recompensa por palabra secreta (Solo una vez por palabra/nivel)
-     */
-    claimSecretWord: (uniqueWordId, rewardAmount) => {
-        if (!store.progress.secretWordsFound) store.progress.secretWordsFound = [];
-        
-        if (store.progress.secretWordsFound.includes(uniqueWordId)) {
-            return false;
-        }
-
-        store.progress.secretWordsFound.push(uniqueWordId);
-        store.coins += rewardAmount;
-        saveState();
-        return true;
-    },
-
-    /**
-     * Sistema de Compra con Stock
-     */
     buyItem: (itemData) => {
         const boughtCount = store.inventory[itemData.id] || 0;
-        
-        // 1. Validar Stock
-        if (boughtCount >= itemData.stock) {
-            return { success: false, reason: 'stock' };
-        }
+        if (boughtCount >= itemData.stock) return { success: false, reason: 'stock' };
+        if (store.coins < itemData.price) return { success: false, reason: 'coins' };
 
-        // 2. Validar Monedas
-        if (store.coins < itemData.price) {
-            return { success: false, reason: 'coins' };
-        }
-
-        // 3. Ejecutar Compra
         store.coins -= itemData.price;
         store.inventory[itemData.id] = boughtCount + 1;
         
-        // Generar código de seguridad
-        const securityCode = `${itemData.name.substring(0,3).toUpperCase()}-${Date.now().toString().slice(-4)}-${Math.floor(Math.random()*1000)}`;
+        const securityCode = `${itemData.name.substring(0,3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
         
         store.history.push({
             itemId: itemData.id,
@@ -130,113 +103,66 @@ window.GameCenter = {
         return { success: true, code: securityCode, remaining: itemData.stock - (boughtCount + 1) };
     },
 
-    /**
-     * Obtiene cuántos items ha comprado de un tipo
-     */
-    getBoughtCount: (itemId) => {
-        return store.inventory[itemId] || 0;
-    },
-
-    /**
-     * Gasta monedas para utilidades (Pistas)
-     */
-    spendCoins: (amount) => {
-        if (store.coins >= amount) {
-            store.coins -= amount;
-            saveState();
-            return true;
-        }
-        return false;
-    },
-
+    getBoughtCount: (itemId) => store.inventory[itemId] || 0,
+    addCoins: (amount) => { store.coins += amount; saveState(); }, // Método helper extra
     getBalance: () => store.coins
 };
-    
 
-/* --- Lógica de Avatar de Usuario --- */
+// --- LOGICA DE AVATAR ---
 document.addEventListener('DOMContentLoaded', () => {
     const avatarInput = document.getElementById('avatar-upload');
     const avatarDisplay = document.getElementById('user-avatar-display');
     const storedAvatar = localStorage.getItem('user_avatar_image');
 
-    // 1. Cargar avatar guardado al iniciar
     if (storedAvatar && avatarDisplay) {
         avatarDisplay.style.backgroundImage = `url('${storedAvatar}')`;
-        avatarDisplay.innerHTML = ''; // Quitar icono por defecto
+        avatarDisplay.innerHTML = '';
     }
 
-    // 2. Manejar subida de nueva imagen
     if (avatarInput) {
         avatarInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
                 const reader = new FileReader();
-                
                 reader.onload = function(event) {
-                    const imgData = event.target.result;
-                    
-                    // Guardar en LocalStorage
                     try {
-                        localStorage.setItem('user_avatar_image', imgData);
-                        
-                        // Actualizar UI
+                        localStorage.setItem('user_avatar_image', event.target.result);
                         if (avatarDisplay) {
-                            avatarDisplay.style.backgroundImage = `url('${imgData}')`;
+                            avatarDisplay.style.backgroundImage = `url('${event.target.result}')`;
                             avatarDisplay.innerHTML = '';
                         }
                     } catch (err) {
-                        alert("La imagen es demasiado grande para guardarse.");
+                        alert("Imagen demasiado grande.");
                     }
                 };
-                
                 reader.readAsDataURL(file);
             }
         });
     }
 });
 
-
-/* --- SISTEMA DE NAVEGACIÓN ACTIVA --- */
+// --- SISTEMA DE NAVEGACIÓN ---
 function updateActiveNav() {
-    // 1. Detectar ubicación actual
     const path = window.location.pathname;
     const hash = window.location.hash;
-    
-    // 2. Limpiar todos los estados activos previos
     const allLinks = document.querySelectorAll('.nav-link, .b-nav-item');
+    
+    if(!allLinks.length) return;
+
     allLinks.forEach(link => link.classList.remove('active'));
+    let target = 'home';
 
-    // 3. Determinar qué sección activar
-    let target = 'home'; // Por defecto
+    if (path.includes('shop.html')) target = 'shop';
+    else if (hash === '#games') target = 'games';
+    else if (hash === '#faq') target = 'faq';
 
-    if (path.includes('shop.html')) {
-        target = 'shop';
-    } else if (hash === '#games') {
-        target = 'games';
-    } else if (hash === '#faq') {
-        target = 'faq';
-    }
-
-    // 4. Aplicar clase 'active' a los botones correspondientes
     allLinks.forEach(link => {
         const href = link.getAttribute('href');
-        
-        // Lógica de coincidencia
-        if (target === 'shop' && href && href.includes('shop.html')) {
-            link.classList.add('active');
-        } else if (target === 'games' && href && href.includes('#games')) {
-            link.classList.add('active');
-        } else if (target === 'faq' && href && href.includes('#faq')) {
-            link.classList.add('active');
-        } else if (target === 'home') {
-            // Activar Home si el href es "#", "index.html" o vacío
-            if (href === '#' || href === 'index.html' || href === './' || href === '') {
-                link.classList.add('active');
-            }
-        }
+        if (!href) return;
+        if (target === 'shop' && href.includes('shop.html')) link.classList.add('active');
+        else if (target === 'games' && href.includes('#games')) link.classList.add('active');
+        else if (target === 'faq' && href.includes('#faq')) link.classList.add('active');
+        else if (target === 'home' && (href === '#' || href === 'index.html')) link.classList.add('active');
     });
 }
-
-// Ejecutar al cargar y al cambiar el hash (navegar en la misma página)
-window.addEventListener('DOMContentLoaded', updateActiveNav);
 window.addEventListener('hashchange', updateActiveNav);
