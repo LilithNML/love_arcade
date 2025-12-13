@@ -128,7 +128,13 @@
         </div>
     </div>
 
-    <script src="../js/app.js" defer></script>
+    <script src="../js/app.js?v=2"></script>
+<script>
+    console.log("Estado de GameCenter:", window.GameCenter);
+    if (!window.GameCenter) {
+        alert("¡ALERTA! app.js se cargó pero GameCenter no existe. Revisa si hay errores de sintaxis en app.js");
+    }
+</script>
 
     <script>
         const CONFIG = { GRID_W: 10, GRID_H: 20, STORAGE_KEY: "tetris_final_fix", SETTINGS_KEY: "tetris_set_fix", DROP_INTERVAL: 1000, BG_FPS: 12 };
