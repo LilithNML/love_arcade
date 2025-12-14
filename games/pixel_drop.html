@@ -931,7 +931,7 @@
                     coinsWon = lvl.coins;
 
                     if (window.GameCenter && typeof window.GameCenter.completeLevel === 'function') {
-                        window.GameCenter.completeLevel('tetris', 'lvl_' + lvl.id, coinsWon);
+                        window.GameCenter.completeLevel('pixel-drop', 'lvl_' + lvl.id, coinsWon);
                     } else {
                         progress.coins += coinsWon;
                     }
