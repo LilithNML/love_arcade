@@ -252,7 +252,7 @@
             animation: none !important;
             transition: none !important;
         }
-        body.gameplay-mode #tetris-canvas {
+        body.gameplay-mode #pixel-drop-canvas {
             box-shadow: none !important;
         }
         body.gameplay-mode .screen.active {
@@ -346,7 +346,7 @@
                 </div>
                 <div id="btn-pause">||</div>
             </div>
-            <canvas id="tetris-canvas"></canvas>
+            <canvas id="pixel-drop-canvas"></canvas>
         </div>
 
         <div id="screen-pause" class="screen overlay">
@@ -463,7 +463,7 @@
         });
 
         function initDOM() {
-            canvas = document.getElementById('tetris-canvas');
+            canvas = document.getElementById('pixel-drop-canvas');
             ctx = canvas.getContext('2d', { alpha: true });
             nextCanvas = document.getElementById('next-canvas');
             nextCtx = nextCanvas.getContext('2d', { alpha: true });
