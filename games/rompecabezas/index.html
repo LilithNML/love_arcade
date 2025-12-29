@@ -5,109 +5,103 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Rompecabezas - Love Arcade</title>
     <meta name="description" content="Juego de puzzle clásico para Love Arcade">
-    
     <link rel="stylesheet" href="./src/style.css">
-    
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 </head>
 <body>
 
     <main id="app">
-
         <header class="top-bar">
-            <div class="brand">Love Arcade <span class="game-tag">| Puzzle</span></div>
-            <div class="coins-display">
-                </div>
+            <div class="brand">
+                <span>🧩</span> 
+                <div>Love Arcade <span class="game-tag">PUZZLE</span></div>
+            </div>
+            <div class="coins-display" id="global-coins-display"></div>
         </header>
 
         <section id="screen-menu" class="screen active">
             <div class="menu-content">
-                <h1 class="game-title">Mente Maestra</h1>
-                
+                <h1 class="game-title">Neural<br>Puzzle</h1>
                 <nav class="main-nav">
-                    <button id="btn-play" class="btn btn-primary btn-lg">Jugar</button>
+                    <button id="btn-play" class="btn btn-primary">▶ Jugar</button>
                     <button id="btn-levels" class="btn btn-secondary">Niveles</button>
                     <button id="btn-settings" class="btn btn-secondary">Ajustes</button>
                     <a href="../../index.html" class="btn btn-danger">Salir al Arcade</a>
                 </nav>
             </div>
-            <div class="version">v1.0.0</div>
+            <div style="position:absolute; bottom:10px; opacity:0.3; font-size:0.8rem;">v1.1 Stable</div>
         </section>
 
-        <section id="screen-levels" class="screen hidden">
+        <section id="screen-levels" class="screen">
             <div class="screen-header">
-                <button class="btn-icon btn-back" data-target="screen-menu">←</button>
-                <h2>Selecciona Nivel</h2>
+                <button class="btn-icon btn-back" data-target="screen-menu">❮</button>
+                <h2>Misiones</h2>
             </div>
-            <div class="levels-grid" id="levels-container">
-                </div>
+            <div class="levels-grid" id="levels-container"></div>
         </section>
 
-        <section id="screen-game" class="screen hidden">
+        <section id="screen-game" class="screen">
             <div class="hud">
-                <button class="btn-icon btn-pause" id="btn-pause">⏸</button>
+                <button class="btn-icon" id="btn-pause">II</button>
                 <div class="hud-stats">
-                    <span id="hud-level">Nivel 1</span>
-                    <span id="hud-time">00:00</span>
+                    <span id="hud-level">LVL 1</span>
+                    <span style="color:var(--primary)" id="hud-time">00:00</span>
                 </div>
             </div>
 
             <div class="canvas-wrapper" id="game-container">
                 <canvas id="puzzle-canvas"></canvas>
-                
                 <div id="tutorial-overlay" class="overlay hidden">
-                    <div class="tutorial-hand">👆</div>
-                    <p>Arrastra las piezas para unirlas</p>
+                    <span>👆 Arrastra para conectar</span>
                 </div>
             </div>
         </section>
 
-        <section id="screen-settings" class="screen hidden">
+        <section id="screen-settings" class="screen">
             <div class="screen-header">
-                <button class="btn-icon btn-back" data-target="screen-menu">←</button>
-                <h2>Ajustes</h2>
+                <button class="btn-icon btn-back" data-target="screen-menu">❮</button>
+                <h2>Sistema</h2>
             </div>
             <div class="settings-list">
                 <div class="setting-item">
-                    <label>Sonido</label>
+                    <label>Sonido FX</label>
                     <input type="checkbox" id="setting-sound" checked>
                 </div>
                 <div class="setting-item">
-                    <label>Volumen SFX</label>
-                    <input type="range" id="setting-volume" min="0" max="1" step="0.1" value="0.8">
+                    <label>Volumen</label>
+                    <input type="range" id="setting-volume" min="0" max="1" step="0.1">
                 </div>
-                <hr>
-                <button id="btn-reset-progress" class="btn btn-outline-danger">Borrar Progreso Local</button>
+                <button id="btn-reset-progress" class="btn btn-danger" style="width:100%">⚠ Resetear Progreso</button>
             </div>
         </section>
 
         <div id="modal-pause" class="modal-backdrop hidden">
             <div class="modal-content">
-                <h3>Pausa</h3>
-                <button id="btn-resume" class="btn btn-primary">Continuar</button>
-                <button id="btn-quit-level" class="btn btn-danger">Salir al Menú</button>
+                <h3>SISTEMA PAUSADO</h3>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
+                    <button id="btn-resume" class="btn btn-primary">REANUDAR</button>
+                    <button id="btn-quit-level" class="btn btn-secondary">SALIR</button>
+                </div>
             </div>
         </div>
 
         <div id="modal-victory" class="modal-backdrop hidden">
-            <div class="modal-content victory-content">
-                <h3>¡Nivel Completado!</h3>
+            <div class="modal-content">
+                <h3 style="color:var(--success)">¡MISION CUMPLIDA!</h3>
                 <div class="star-animation">⭐⭐⭐</div>
-                <p>Tiempo: <span id="victory-time">00:00</span></p>
-                <div class="reward-box">
-                    <p>Recompensa:</p>
-                    <div class="coin-animation">
-                        💰 <span id="victory-coins">0</span>
-                    </div>
+                <p>Tiempo: <span id="victory-time">--:--</span></p>
+                <div class="coin-animation">
+                    +<span id="victory-coins">0</span> 💰
                 </div>
-                <button id="btn-next-level" class="btn btn-primary">Siguiente Nivel</button>
-                <button id="btn-victory-menu" class="btn btn-secondary">Menú</button>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button id="btn-next-level" class="btn btn-primary">SIGUIENTE</button>
+                    <button id="btn-victory-menu" class="btn btn-secondary">MENÚ</button>
+                </div>
             </div>
         </div>
     </main>
 
     <script src="../../js/app.js"></script>
-
     <script type="module" src="./src/main.js"></script>
 </body>
 </html>
