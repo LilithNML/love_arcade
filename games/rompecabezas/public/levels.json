@@ -1,0 +1,23 @@
+[
+  {
+    "id": "lvl_1",
+    "image": "https://placehold.co/600x600/ff4757/ffffff.png?text=Love+Arcade",
+    "pieces": 4,
+    "rewardCoins": 50,
+    "description": "Tutorial: 2x2"
+  },
+  {
+    "id": "lvl_2",
+    "image": "https://placehold.co/600x600/2ed573/ffffff.png?text=Nivel+2",
+    "pieces": 9,
+    "rewardCoins": 100,
+    "description": "Fácil: 3x3"
+  },
+  {
+    "id": "lvl_3",
+    "image": "https://placehold.co/600x600/ffa502/ffffff.png?text=Reto+Final",
+    "pieces": 16,
+    "rewardCoins": 200,
+    "description": "Medio: 4x4"
+  }
+]
