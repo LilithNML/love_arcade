@@ -1,22 +1,37 @@
+/**
+ * PuzzleEngine.js v5.1 - Gold Master (Full)
+ * Versión completa sin omisiones.
+ */
+
 export class PuzzleEngine {
     constructor(canvasElement, config, callbacks) {
         this.canvas = canvasElement;
         this.ctx = this.canvas.getContext('2d', { alpha: false });
+        
+        // Configuración
         this.img = config.image;
         this.gridSize = Math.sqrt(config.pieces);
         this.callbacks = callbacks || {};
         
+        // Estado
         this.pieces = [];
-        this.particles = []; // Sistema de Partículas
+        this.particles = []; 
         this.selectedPiece = null;
         this.isDragging = false;
         this.showPreview = false;
         
-        // Jitter Seed: Para que la variación aleatoria sea constante por sesión
+        // Variables Input
+        this.dragOffsetX = 0;
+        this.dragOffsetY = 0;
+        
+        // Jitter Seed
         this.jitterMap = []; 
+        this.lastSound = 0;
 
+        // High DPI
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
         
+        // Binds (Ahora todas las funciones existen abajo)
         this.handleStart = this.handleStart.bind(this);
         this.handleMove = this.handleMove.bind(this);
         this.handleEnd = this.handleEnd.bind(this);
@@ -28,13 +43,13 @@ export class PuzzleEngine {
     init() {
         this.resizeCanvas();
         this.generateTopology();
-        this.createPieces(); // Aquí se aplica el Jitter
+        this.createPieces(); 
         this.shufflePieces();
         this.addEventListeners();
         requestAnimationFrame(() => this.render());
     }
 
-    /* --- GESTIÓN DE ESTADO (PERSISTENCIA) --- */
+    /* --- GESTIÓN DE ESTADO --- */
     exportState() {
         return this.pieces.map(p => ({
             id: p.id,
@@ -57,20 +72,19 @@ export class PuzzleEngine {
         this.render();
     }
 
-    /* --- POWER-UPS & FEATURES --- */
+    /* --- FEATURES --- */
     togglePreview(active) {
         this.showPreview = active;
         this.render();
     }
 
     autoPlacePiece() {
-        // Buscar una pieza suelta aleatoria
         const loosePieces = this.pieces.filter(p => !p.isLocked);
         if (loosePieces.length === 0) return false;
 
         const piece = loosePieces[Math.floor(Math.random() * loosePieces.length)];
         
-        // Animación de "Imán" (teletransporte suave)
+        // Efecto visual
         this.spawnParticles(piece.correctX + this.pieceWidth/2, piece.correctY + this.pieceHeight/2, 'gold');
         piece.currentX = piece.correctX;
         piece.currentY = piece.correctY;
@@ -83,9 +97,48 @@ export class PuzzleEngine {
     }
 
     /* --- CORE SETUP --- */
+    handleResize() {
+        this.resizeCanvas();
+        this.createPiecesPathsOnly(); 
+        this.render();
+    }
+
+    resizeCanvas() {
+        const parent = this.canvas.parentElement;
+        const maxWidth = parent.clientWidth;
+        const maxHeight = parent.clientHeight;
+        const imgRatio = this.img.width / this.img.height;
+
+        let cssWidth = maxWidth;
+        let cssHeight = cssWidth / imgRatio;
+
+        if (cssHeight > maxHeight) {
+            cssHeight = maxHeight;
+            cssWidth = cssHeight * imgRatio;
+        }
+
+        cssWidth *= 0.85;
+        cssHeight *= 0.85;
+
+        this.canvas.width = cssWidth * this.dpr;
+        this.canvas.height = cssHeight * this.dpr;
+        this.canvas.style.width = `${cssWidth}px`;
+        this.canvas.style.height = `${cssHeight}px`;
+
+        this.ctx.scale(this.dpr, this.dpr);
+
+        this.logicalWidth = cssWidth;
+        this.logicalHeight = cssHeight;
+
+        this.pieceWidth = this.logicalWidth / this.gridSize;
+        this.pieceHeight = this.logicalHeight / this.gridSize;
+        
+        this.tabSize = Math.min(this.pieceWidth, this.pieceHeight) * 0.20;
+    }
+
     generateTopology() {
         this.shapes = [];
-        this.jitterMap = []; // Generar offset aleatorio para cada lado
+        this.jitterMap = [];
         
         for (let y = 0; y < this.gridSize; y++) {
             const row = [];
@@ -99,7 +152,6 @@ export class PuzzleEngine {
                 
                 row.push({ top, right, bottom, left });
                 
-                // Jitter: variaciones sutiles (-10% a +10%)
                 jitterRow.push({
                     top: (Math.random() - 0.5) * 0.2,
                     right: (Math.random() - 0.5) * 0.2,
@@ -122,7 +174,6 @@ export class PuzzleEngine {
                 const shape = this.shapes[y][x];
                 const jitter = this.jitterMap[y][x];
                 
-                // Pasamos el jitter al creador de paths
                 const path = this.createPath(this.pieceWidth, this.pieceHeight, shape, jitter);
 
                 this.pieces.push({
@@ -138,11 +189,27 @@ export class PuzzleEngine {
         }
     }
 
+    createPiecesPathsOnly() {
+        for (let p of this.pieces) {
+            p.path = this.createPath(this.pieceWidth, this.pieceHeight, p.shape, p.jitter);
+            p.correctX = (p.id.split('-')[0]) * this.pieceWidth;
+            p.correctY = (p.id.split('-')[1]) * this.pieceHeight;
+            
+            if(p.isLocked) {
+                p.currentX = p.correctX;
+                p.currentY = p.correctY;
+            } else {
+                // Mantener posición relativa si se redimensiona (simple clamp)
+                p.currentX = Math.min(p.currentX, this.logicalWidth - this.pieceWidth);
+                p.currentY = Math.min(p.currentY, this.logicalHeight - this.pieceHeight);
+            }
+        }
+    }
+
     createPath(w, h, shape, jitter) {
         const path = new Path2D();
         const t = this.tabSize; 
         path.moveTo(0, 0);
-        // Añadimos el jitter al cálculo de la curva
         shape.top !== 0 ? this.lineToTab(path, 0, 0, w, 0, shape.top * t, jitter.top * t) : path.lineTo(w, 0);
         shape.right !== 0 ? this.lineToTab(path, w, 0, w, h, shape.right * t, jitter.right * t) : path.lineTo(w, h);
         shape.bottom !== 0 ? this.lineToTab(path, w, h, 0, h, shape.bottom * t, jitter.bottom * t) : path.lineTo(0, h);
@@ -153,7 +220,7 @@ export class PuzzleEngine {
 
     lineToTab(path, x1, y1, x2, y2, amp, shift) {
         const w = x2 - x1; const h = y2 - y1;
-        const cx = x1 + w * 0.5 + (w===0 ? shift : 0); // Jitter aplica desplazamiento perpendicular
+        const cx = x1 + w * 0.5 + (w===0 ? shift : 0);
         const cy = y1 + h * 0.5 + (h===0 ? shift : 0);
         const perpX = -h / Math.abs(h || 1); const perpY = w / Math.abs(w || 1);
         const xA = x1 + w * 0.35; const yA = y1 + h * 0.35;
@@ -165,11 +232,20 @@ export class PuzzleEngine {
         path.lineTo(x2, y2);
     }
 
-    /* --- RENDERING & PARTICLES --- */
+    shufflePieces() {
+        this.pieces.forEach(p => {
+            p.currentX = Math.random() * (this.logicalWidth - this.pieceWidth);
+            p.currentY = Math.random() * (this.logicalHeight - this.pieceHeight);
+            p.isLocked = false;
+        });
+        this.render();
+    }
+
+    /* --- RENDERING --- */
     render() {
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
 
-        // 1. Vista Previa (Fantasma)
+        // Preview
         if (this.showPreview) {
             this.ctx.save();
             this.ctx.globalAlpha = 0.3;
@@ -189,7 +265,6 @@ export class PuzzleEngine {
         loose.forEach(p => this.renderPiece(p, 'loose'));
         if(selected) this.renderPiece(selected, 'selected');
 
-        // 2. Renderizar Partículas
         this.updateParticles();
         if (this.particles.length > 0 || this.isDragging) {
             requestAnimationFrame(() => this.render());
@@ -201,6 +276,7 @@ export class PuzzleEngine {
         ctx.save();
         ctx.translate(p.currentX, p.currentY);
 
+        // Sombras
         if (type !== 'locked') {
             ctx.shadowColor = "rgba(0,0,0,0.3)";
             ctx.shadowBlur = type === 'selected' ? 10 : 3;
@@ -215,6 +291,8 @@ export class PuzzleEngine {
         }
 
         ctx.clip(p.path);
+        
+        // Bleed (Sangrado)
         const sX = p.imgData.sw / this.pieceWidth;
         const sY = p.imgData.sh / this.pieceHeight;
         const bleed = this.tabSize * 1.5;
@@ -222,6 +300,7 @@ export class PuzzleEngine {
         ctx.drawImage(this.img, p.imgData.sx - (bleed*sX), p.imgData.sy - (bleed*sY), p.imgData.sw + (bleed*2*sX), p.imgData.sh + (bleed*2*sY), -bleed, -bleed, this.pieceWidth+(bleed*2), this.pieceHeight+(bleed*2));
         ctx.restore();
 
+        // Bordes
         if (type !== 'locked') {
             ctx.save();
             ctx.translate(p.currentX, p.currentY);
@@ -236,7 +315,7 @@ export class PuzzleEngine {
         }
     }
 
-    /* --- SISTEMA DE PARTÍCULAS --- */
+    /* --- PARTICLES --- */
     spawnParticles(x, y, type = 'spark') {
         const count = type === 'confetti' ? 50 : 10;
         const colors = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#ffffff'];
@@ -251,7 +330,7 @@ export class PuzzleEngine {
                 size: Math.random() * 4 + 2
             });
         }
-        this.render(); // Despierta el loop si estaba quieto
+        this.render();
     }
 
     updateParticles() {
@@ -276,23 +355,73 @@ export class PuzzleEngine {
         this.ctx.globalAlpha = 1.0;
     }
 
-    /* --- INPUT & EVENTS --- */
+    /* --- INPUT HANDLING (Bounding Box) --- */
+    getPointerPos(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    handleStart(e) {
+        e.preventDefault(); 
+        const { x, y } = this.getPointerPos(e);
+        
+        // Iterar al revés para seleccionar la pieza superior visualmente
+        for (let i = this.pieces.length - 1; i >= 0; i--) {
+            const p = this.pieces[i]; 
+            if (p.isLocked) continue;
+            
+            // Hitbox generosa
+            const m = this.tabSize * 1.5;
+            if (x >= p.currentX - m && x <= p.currentX + this.pieceWidth + m && 
+                y >= p.currentY - m && y <= p.currentY + this.pieceHeight + m) {
+                
+                this.selectedPiece = p; 
+                this.isDragging = true;
+                this.dragOffsetX = x - p.currentX; 
+                this.dragOffsetY = y - p.currentY;
+                
+                // Traer al frente
+                this.pieces.splice(i, 1); 
+                this.pieces.push(p);
+                
+                if(this.callbacks.onSound) this.callbacks.onSound('click');
+                requestAnimationFrame(() => this.render()); 
+                return;
+            }
+        }
+    }
+
+    handleMove(e) {
+        if (!this.isDragging || !this.selectedPiece) return;
+        e.preventDefault(); 
+        const { x, y } = this.getPointerPos(e);
+        this.selectedPiece.currentX = x - this.dragOffsetX;
+        this.selectedPiece.currentY = y - this.dragOffsetY;
+        requestAnimationFrame(() => this.render());
+    }
+
     handleEnd(e) {
         if (!this.isDragging || !this.selectedPiece) return;
-        const dist = Math.hypot(this.selectedPiece.currentX - this.selectedPiece.correctX, this.selectedPiece.currentY - this.selectedPiece.correctY);
         
+        const dist = Math.hypot(
+            this.selectedPiece.currentX - this.selectedPiece.correctX, 
+            this.selectedPiece.currentY - this.selectedPiece.correctY
+        );
+        
+        // Snap Threshold
         if (dist < this.pieceWidth * 0.3) {
             this.selectedPiece.currentX = this.selectedPiece.correctX;
             this.selectedPiece.currentY = this.selectedPiece.correctY;
             this.selectedPiece.isLocked = true;
             this.spawnParticles(this.selectedPiece.currentX + this.pieceWidth/2, this.selectedPiece.currentY + this.pieceHeight/2, 'spark');
-            if(this.callbacks.onSound) this.callbacks.onSound('snap');
             
-            // GUARDADO AUTOMÁTICO AL SOLTAR
+            if(this.callbacks.onSound) this.callbacks.onSound('snap');
             if(this.callbacks.onStateChange) this.callbacks.onStateChange();
+            
             this.checkVictory();
         } else {
-            // Guardar también si la mueve y la deja suelta
             if(this.callbacks.onStateChange) this.callbacks.onStateChange();
         }
 
@@ -300,82 +429,39 @@ export class PuzzleEngine {
         this.selectedPiece = null;
         requestAnimationFrame(() => this.render());
     }
-    
-    // (handleStart, handleMove, getPointerPos, resizeCanvas, etc. similares a V5 pero adaptados a Jitter)
-    // Se omiten por brevedad pero están incluidos implícitamente en la estructura de clase completa
-    // IMPORTANTE: Asegúrate de copiar las funciones handleStart, handleMove y getPointerPos de la V5 anterior
-    // ya que no cambian drásticamente, solo usan la lógica de BoundingBox.
-    
-    getPointerPos(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return { x: clientX - rect.left, y: clientY - rect.top };
-    }
-    handleStart(e) {
-        e.preventDefault(); const { x, y } = this.getPointerPos(e);
-        for (let i = this.pieces.length - 1; i >= 0; i--) {
-            const p = this.pieces[i]; if (p.isLocked) continue;
-            const m = this.tabSize * 1.5;
-            if (x >= p.currentX - m && x <= p.currentX + this.pieceWidth + m && y >= p.currentY - m && y <= p.currentY + this.pieceHeight + m) {
-                this.selectedPiece = p; this.isDragging = true;
-                this.dragOffsetX = x - p.currentX; this.dragOffsetY = y - p.currentY;
-                this.pieces.splice(i, 1); this.pieces.push(p);
-                if(this.callbacks.onSound) this.callbacks.onSound('click');
-                requestAnimationFrame(() => this.render()); return;
-            }
-        }
-    }
-    handleMove(e) {
-        if (!this.isDragging || !this.selectedPiece) return;
-        e.preventDefault(); const { x, y } = this.getPointerPos(e);
-        this.selectedPiece.currentX = x - this.dragOffsetX;
-        this.selectedPiece.currentY = y - this.dragOffsetY;
-        requestAnimationFrame(() => this.render());
-    }
-
-    shufflePieces() {
-        this.pieces.forEach(p => {
-            p.currentX = Math.random() * (this.logicalWidth - this.pieceWidth);
-            p.currentY = Math.random() * (this.logicalHeight - this.pieceHeight);
-            p.isLocked = false;
-        });
-        this.render();
-    }
-    resizeCanvas() {
-        const parent = this.canvas.parentElement;
-        const maxWidth = parent.clientWidth; const maxHeight = parent.clientHeight;
-        const imgRatio = this.img.width / this.img.height;
-        let cssWidth = maxWidth; let cssHeight = cssWidth / imgRatio;
-        if (cssHeight > maxHeight) { cssHeight = maxHeight; cssWidth = cssHeight * imgRatio; }
-        cssWidth *= 0.85; cssHeight *= 0.85;
-        this.canvas.width = cssWidth * this.dpr; this.canvas.height = cssHeight * this.dpr;
-        this.canvas.style.width = `${cssWidth}px`; this.canvas.style.height = `${cssHeight}px`;
-        this.ctx.scale(this.dpr, this.dpr);
-        this.logicalWidth = cssWidth; this.logicalHeight = cssHeight;
-        this.pieceWidth = this.logicalWidth / this.gridSize; this.pieceHeight = this.logicalHeight / this.gridSize;
-        this.tabSize = Math.min(this.pieceWidth, this.pieceHeight) * 0.20;
-    }
 
     checkVictory() {
         if (this.pieces.every(p => p.isLocked)) {
-            // CONFETTI EXPLOSION
             this.spawnParticles(this.logicalWidth/2, this.logicalHeight/2, 'confetti');
             if(this.callbacks.onSound) this.callbacks.onSound('win');
-            if(this.callbacks.onWin) setTimeout(this.callbacks.onWin, 1500); // Dar tiempo al confetti
+            if(this.callbacks.onWin) setTimeout(this.callbacks.onWin, 1500);
             
-            // Limpiar eventos pero dejar render para partículas
             this.canvas.removeEventListener('mousedown', this.handleStart);
             this.canvas.removeEventListener('touchstart', this.handleStart);
         }
     }
-    // addEventListeners y destroy igual que V5
+
     addEventListeners() {
-        this.canvas.addEventListener('mousedown', this.handleStart); window.addEventListener('mousemove', this.handleMove); window.addEventListener('mouseup', this.handleEnd);
-        this.canvas.addEventListener('touchstart', this.handleStart, { passive: false }); window.addEventListener('touchmove', this.handleMove, { passive: false }); window.addEventListener('touchend', this.handleEnd);
+        this.canvas.addEventListener('mousedown', this.handleStart);
+        window.addEventListener('mousemove', this.handleMove);
+        window.addEventListener('mouseup', this.handleEnd);
+        this.canvas.addEventListener('touchstart', this.handleStart, { passive: false });
+        window.addEventListener('touchmove', this.handleMove, { passive: false });
+        window.addEventListener('touchend', this.handleEnd);
+        
+        if (!this._resizeObserver && typeof ResizeObserver !== 'undefined') {
+            this._resizeObserver = new ResizeObserver(() => this.handleResize());
+            this._resizeObserver.observe(this.canvas.parentElement);
+        }
     }
+
     destroy() {
-        this.canvas.removeEventListener('mousedown', this.handleStart); window.removeEventListener('mousemove', this.handleMove); window.removeEventListener('mouseup', this.handleEnd);
-        this.canvas.removeEventListener('touchstart', this.handleStart); window.removeEventListener('touchmove', this.handleMove); window.removeEventListener('touchend', this.handleEnd);
+        this.canvas.removeEventListener('mousedown', this.handleStart);
+        window.removeEventListener('mousemove', this.handleMove);
+        window.removeEventListener('mouseup', this.handleEnd);
+        this.canvas.removeEventListener('touchstart', this.handleStart);
+        window.removeEventListener('touchmove', this.handleMove);
+        window.removeEventListener('touchend', this.handleEnd);
+        if (this._resizeObserver) this._resizeObserver.disconnect();
     }
 }
