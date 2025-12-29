@@ -4,20 +4,23 @@
     "image": "./assets/Nivel1.webp",
     "pieces": 4,
     "rewardCoins": 50,
-    "description": "Tutorial: 2x2"
+    "description": "Tutorial (Sin tiempo)",
+    "timeLimit": 0 
   },
   {
     "id": "lvl_2",
-    "image": "https://placehold.co/600x600/2ed573/ffffff.png?text=Nivel+2",
+    "image": "./assets/Nivel2.webp",
     "pieces": 9,
     "rewardCoins": 100,
-    "description": "Fácil: 3x3"
+    "description": "Contrarreloj: 60 seg",
+    "timeLimit": 60 
   },
   {
     "id": "lvl_3",
-    "image": "https://placehold.co/600x600/ffa502/ffffff.png?text=Reto+Final",
+    "image": "./assets/Nivel3.webp",
     "pieces": 16,
     "rewardCoins": 200,
-    "description": "Medio: 4x4"
+    "description": "Desafío Hardcore",
+    "timeLimit": 120
   }
 ]
