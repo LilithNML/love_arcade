@@ -1,7 +1,7 @@
 [
   {
     "id": "lvl_1",
-    "image": "https://placehold.co/600x600/ff4757/ffffff.png?text=Love+Arcade",
+    "image": "./assets/Nivel1.webp",
     "pieces": 4,
     "rewardCoins": 50,
     "description": "Tutorial: 2x2"
