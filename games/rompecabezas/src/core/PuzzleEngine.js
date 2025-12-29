@@ -44,33 +44,50 @@ export class PuzzleEngine {
         this.render(); // Primer render estático
     }
 
-    resizeCanvas() {
-        // Ajustar canvas al contenedor padre manteniendo aspect ratio de la imagen
-        const parent = this.canvas.parentElement;
-        const maxWidth = parent.clientWidth;
-        const maxHeight = parent.clientHeight;
-        
-        const imgRatio = this.img.width / this.img.height;
-        
-        let finalWidth = maxWidth;
-        let finalHeight = maxWidth / imgRatio;
 
+    resizeCanvas() {
+        // 1. Obtener dimensiones del contenedor padre (canvas-wrapper)
+        // El CSS asegura que el wrapper toma el espacio restante de la pantalla.
+        const parent = this.canvas.parentElement;
+        const maxWidth = parent.clientWidth; 
+        const maxHeight = parent.clientHeight;
+
+        // 2. Calcular Aspect Ratio de la Imagen Original
+        const imgRatio = this.img.width / this.img.height;
+
+        // 3. Calcular dimensiones óptimas (Contain logic)
+        // Intenta encajar por ancho
+        let finalWidth = maxWidth;
+        let finalHeight = finalWidth / imgRatio;
+
+        // Si la altura calculada se sale del contenedor, ajusta por altura
         if (finalHeight > maxHeight) {
             finalHeight = maxHeight;
             finalWidth = finalHeight * imgRatio;
         }
 
+        // 4. Margen de seguridad (padding visual del 5%)
+        finalWidth *= 0.95;
+        finalHeight *= 0.95;
+
+        // 5. Aplicar al Canvas
         this.canvas.width = finalWidth;
         this.canvas.height = finalHeight;
-        
-        // Calcular tamaño de pieza en pantalla
+
+        // 6. Recalcular métricas de piezas
         this.pieceWidth = finalWidth / this.gridSize;
         this.pieceHeight = finalHeight / this.gridSize;
-        
-        // Factor de escala (Imagen Real vs Canvas)
+
+        // 7. Recalcular escala interna para el dibujo
         this.scaleX = this.img.width / finalWidth;
         this.scaleY = this.img.height / finalHeight;
+        
+        // 8. IMPORTANTE: Si estamos a mitad de juego, hay que re-posicionar 
+        // las piezas proporcionalmente al nuevo tamaño.
+        // (Para esta versión simple, solo renderizamos de nuevo).
+        this.render();
     }
+    
 
     createPieces() {
         this.pieces = [];
