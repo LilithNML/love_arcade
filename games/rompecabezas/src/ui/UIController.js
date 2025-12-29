@@ -7,48 +7,45 @@ export const UI = {
     },
 
     /**
-     * Cambia la pantalla activa ocultando las demás
-     * @param {string} screenName - 'menu', 'levels', 'game', 'settings'
+     * Cambia la pantalla activa.
+     * Arregla el bug de pantalla blanca eliminando dependencias de tiempo complejas.
      */
     showScreen: (screenName) => {
+        // 1. Quitar clase 'active' de todas
         Object.values(UI.screens).forEach(el => {
-            el.classList.add('hidden');
             el.classList.remove('active');
+            // NO usam 'hidden' manual, el CSS maneja opacidad/pointer-events
+            // solo con la clase .active
         });
         
+        // 2. Activar la objetivo
         const target = UI.screens[screenName];
         if (target) {
-            target.classList.remove('hidden');
-            // Pequeño delay para permitir transición CSS si se desea
-            setTimeout(() => target.classList.add('active'), 10);
+            target.classList.add('active');
         }
     },
 
-    /**
-     * Renderiza la cuadrícula de niveles basada en el progreso
-     */
     renderLevelsGrid: (levelsWithStatus, onLevelSelect) => {
         const container = document.getElementById('levels-container');
-        container.innerHTML = ''; // Limpiar
+        container.innerHTML = '';
 
         levelsWithStatus.forEach(lvl => {
             const card = document.createElement('div');
+            // Añade candado visual si está bloqueado
+            const lockIcon = lvl.status === 'locked' ? '🔒' : (lvl.status === 'completed' ? '✓' : (lvl.index + 1));
+            
             card.className = `level-card ${lvl.status}`;
-            card.textContent = lvl.index + 1; // Mostrar número 1, 2, 3...
+            card.innerHTML = `<span>${lockIcon}</span>`;
             
             if (lvl.status !== 'locked') {
                 card.onclick = () => onLevelSelect(lvl.id);
-            } else {
-                // Opcional: Tooltip de bloqueado
-                card.title = "Completa el nivel anterior para desbloquear";
             }
-
             container.appendChild(card);
         });
     },
 
     updateHUD: (levelIndex, timeStr) => {
-        document.getElementById('hud-level').textContent = `Nivel ${levelIndex + 1}`;
+        document.getElementById('hud-level').textContent = `NIVEL ${levelIndex + 1}`;
         document.getElementById('hud-time').textContent = timeStr;
     },
 
@@ -59,11 +56,10 @@ export const UI = {
         
         modal.classList.remove('hidden');
 
-        // Bindear botones (limpiando previos para evitar duplicados)
+        // Clonar para limpiar eventos previos
         const btnNext = document.getElementById('btn-next-level');
         const btnMenu = document.getElementById('btn-victory-menu');
         
-        // Clonar nodos para eliminar listeners viejos (truco rápido)
         const newBtnNext = btnNext.cloneNode(true);
         const newBtnMenu = btnMenu.cloneNode(true);
         
