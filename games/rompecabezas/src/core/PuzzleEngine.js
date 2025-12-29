@@ -1,13 +1,14 @@
 /**
- * PuzzleEngine.js v4.0 - Hybrid Edition
- * VISUALES: Jigsaw Pro (V3)
- * INPUT: Grid System (V1 - Ultra Fast & Reliable)
+ * PuzzleEngine.js v5.0
+ * - Visuales: High DPI (Retina), Seamless locking (sin líneas).
+ * - Performance: Gestión eficiente de sombras y renderizado bajo demanda.
+ * - Input: Hitbox rápida (Bounding Box).
  */
 
 export class PuzzleEngine {
     constructor(canvasElement, config, callbacks) {
         this.canvas = canvasElement;
-        this.ctx = this.canvas.getContext('2d');
+        this.ctx = this.canvas.getContext('2d', { alpha: false }); // Optimización: alpha false si el fondo es opaco
         
         // Configuración
         this.img = config.image;
@@ -19,12 +20,15 @@ export class PuzzleEngine {
         this.selectedPiece = null;
         this.isDragging = false;
         
-        // Variables para el movimiento (Lógica V1)
+        // Variables Input V1 (Caja)
         this.dragOffsetX = 0;
         this.dragOffsetY = 0;
         
         // Throttle de sonido
         this.lastSound = 0;
+        
+        // Manejo de DPI para nitidez
+        this.dpr = Math.min(window.devicePixelRatio || 1, 2); // Capado a 2x para rendimiento
         
         // Binds
         this.handleStart = this.handleStart.bind(this);
@@ -41,11 +45,15 @@ export class PuzzleEngine {
         this.createPieces();
         this.shufflePieces();
         this.addEventListeners();
+        
+        // Primer render forzado
         requestAnimationFrame(() => this.render());
     }
 
     handleResize() {
         this.resizeCanvas();
+        // Al redimensionar, necesitamos regenerar los paths para la nueva escala
+        this.createPiecesPathsOnly(); 
         this.render();
     }
 
@@ -55,29 +63,43 @@ export class PuzzleEngine {
         const maxHeight = parent.clientHeight;
         const imgRatio = this.img.width / this.img.height;
 
-        let finalWidth = maxWidth;
-        let finalHeight = finalWidth / imgRatio;
+        let cssWidth = maxWidth;
+        let cssHeight = cssWidth / imgRatio;
 
-        if (finalHeight > maxHeight) {
-            finalHeight = maxHeight;
-            finalWidth = finalHeight * imgRatio;
+        if (cssHeight > maxHeight) {
+            cssHeight = maxHeight;
+            cssWidth = cssHeight * imgRatio;
         }
 
-        // Espacio de trabajo (85% para dejar margen a piezas sueltas)
-        finalWidth *= 0.85;
-        finalHeight *= 0.85;
+        // Margen del 15% para espacio de trabajo
+        cssWidth *= 0.85;
+        cssHeight *= 0.85;
 
-        this.canvas.width = finalWidth;
-        this.canvas.height = finalHeight;
-
-        this.pieceWidth = finalWidth / this.gridSize;
-        this.pieceHeight = finalHeight / this.gridSize;
+        // --- SISTEMA HIGH DPI (PREMIUM LOOK) ---
+        // Ajustamos la resolución interna del canvas multiplicando por el DPR
+        this.canvas.width = cssWidth * this.dpr;
+        this.canvas.height = cssHeight * this.dpr;
         
-        // Tamaño de pestaña (20%)
+        // Forzamos el tamaño visual con CSS
+        this.canvas.style.width = `${cssWidth}px`;
+        this.canvas.style.height = `${cssHeight}px`;
+
+        // Normalizamos el contexto para que las coordenadas lógicas sigan siendo CSS pixels
+        this.ctx.scale(this.dpr, this.dpr);
+
+        // Guardamos dimensiones lógicas
+        this.logicalWidth = cssWidth;
+        this.logicalHeight = cssHeight;
+
+        this.pieceWidth = this.logicalWidth / this.gridSize;
+        this.pieceHeight = this.logicalHeight / this.gridSize;
+        
+        // Tamaño de pestaña (20% del lado menor)
         this.tabSize = Math.min(this.pieceWidth, this.pieceHeight) * 0.20;
     }
 
     generateTopology() {
+        // Matriz de formas (1: Tab, -1: Slot, 0: Flat)
         this.shapes = [];
         for (let y = 0; y < this.gridSize; y++) {
             const row = [];
@@ -101,7 +123,7 @@ export class PuzzleEngine {
         for (let y = 0; y < this.gridSize; y++) {
             for (let x = 0; x < this.gridSize; x++) {
                 const shape = this.shapes[y][x];
-                // Generamos el Path visual
+                // Path visual
                 const path = this.createPath(this.pieceWidth, this.pieceHeight, shape);
 
                 this.pieces.push({
@@ -113,22 +135,39 @@ export class PuzzleEngine {
                     isLocked: false,
                     shape: shape,
                     path: path,
+                    // Fuente de imagen
                     imgData: { sx: x * srcW, sy: y * srcH, sw: srcW, sh: srcH }
                 });
+            }
+        }
+    }
+    
+    // Optimización: Regenerar solo paths al redimensionar (ahorra memoria)
+    createPiecesPathsOnly() {
+        for (let p of this.pieces) {
+            p.path = this.createPath(this.pieceWidth, this.pieceHeight, p.shape);
+            // Recalcular posición correcta en nueva escala
+            p.correctX = (p.id.split('-')[0]) * this.pieceWidth;
+            p.correctY = (p.id.split('-')[1]) * this.pieceHeight;
+            
+            // Si estaba locked, forzar posición; si no, mantener relativa (simplificado: reset visual)
+            if(p.isLocked) {
+                p.currentX = p.correctX;
+                p.currentY = p.correctY;
             }
         }
     }
 
     shufflePieces() {
         this.pieces.forEach(p => {
-            p.currentX = Math.random() * (this.canvas.width - this.pieceWidth);
-            p.currentY = Math.random() * (this.canvas.height - this.pieceHeight);
+            p.currentX = Math.random() * (this.logicalWidth - this.pieceWidth);
+            p.currentY = Math.random() * (this.logicalHeight - this.pieceHeight);
             p.isLocked = false;
         });
         this.render();
     }
 
-    /* --- LÓGICA DE DIBUJO (VISUALES V3) --- */
+    /* --- GENERADOR DE CURVAS BÉZIER (JIGSAW) --- */
 
     createPath(w, h, shape) {
         const path = new Path2D();
@@ -158,44 +197,75 @@ export class PuzzleEngine {
         path.lineTo(x2, y2);
     }
 
-    render() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Render Order: Locked -> Loose -> Selected
-        const renderList = [
-            ...this.pieces.filter(p => p.isLocked),
-            ...this.pieces.filter(p => !p.isLocked && p !== this.selectedPiece)
-        ];
-        if (this.selectedPiece) renderList.push(this.selectedPiece);
+    /* --- RENDER LOOP --- */
 
-        renderList.forEach(p => this.renderPiece(p));
+    render() {
+        // Limpieza teniendo en cuenta la escala del DPR
+        this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
+        
+        // Orden de dibujado:
+        // 1. Locked (Fondo, sin sombras, se fusionan)
+        // 2. Loose (Medio, sombra ligera)
+        // 3. Selected (Tope, sombra fuerte)
+        
+        const locked = [];
+        const loose = [];
+        let selected = null;
+
+        for(let p of this.pieces) {
+            if(p === this.selectedPiece) selected = p;
+            else if(p.isLocked) locked.push(p);
+            else loose.push(p);
+        }
+
+        // Dibujamos Locked primero
+        for(let p of locked) this.renderPiece(p, 'locked');
+        // Dibujamos Loose
+        for(let p of loose) this.renderPiece(p, 'loose');
+        // Dibujamos Selected al final
+        if(selected) this.renderPiece(selected, 'selected');
     }
 
-    renderPiece(p) {
+    renderPiece(p, type) {
         const ctx = this.ctx;
-        const isSelected = p === this.selectedPiece;
         
         ctx.save();
         ctx.translate(p.currentX, p.currentY);
 
-        // Sombra
-        if (!p.isLocked) {
+        // --- 1. SOMBRAS (Optimización Mobile) ---
+        // SOLO aplicamos sombras a las piezas sueltas o seleccionadas.
+        // Las piezas 'locked' NO tienen sombra para unirse visualmente.
+        if (type !== 'locked') {
             ctx.shadowColor = "rgba(0,0,0,0.3)";
-            ctx.shadowBlur = isSelected ? 15 : 4;
-            ctx.shadowOffsetY = isSelected ? 5 : 2;
-            if(isSelected) {
+            
+            if (type === 'selected') {
+                ctx.shadowBlur = 10; // Blur moderado para performance
+                ctx.shadowOffsetY = 5;
+                // Escala visual al levantar (Feedback)
                 ctx.translate(this.pieceWidth/2, this.pieceHeight/2);
                 ctx.scale(1.05, 1.05);
                 ctx.translate(-this.pieceWidth/2, -this.pieceHeight/2);
+            } else {
+                ctx.shadowBlur = 3; // Blur muy bajo para piezas sueltas (ahorro GPU)
+                ctx.shadowOffsetY = 2;
             }
+        } else {
+            // Locked: Sin sombra
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
         }
 
-        // Clip & Draw
-        ctx.stroke(p.path); 
+        // --- 2. CLIP & DRAW ---
+        // Truco para bordes suaves en algunos navegadores
+        // Solo stroke invisible si es necesario para el clip anti-aliasing
+        // ctx.stroke(p.path); 
         ctx.clip(p.path);
 
         const scaleX = p.imgData.sw / this.pieceWidth;
         const scaleY = p.imgData.sh / this.pieceHeight;
+        
+        // BLEED (Sangrado): Clave para que las piezas encajen sin huecos blancos
+        // Tomamos un margen extra de la imagen y la dibujamos desplazada
         const bleed = this.tabSize * 1.5; 
 
         ctx.drawImage(
@@ -206,30 +276,46 @@ export class PuzzleEngine {
             this.pieceWidth + (bleed * 2), this.pieceHeight + (bleed * 2)
         );
 
-        ctx.restore(); // Exit clip
+        ctx.restore(); // Salir del clip
 
-        // Borders
-        if (!p.isLocked) {
+        // --- 3. BORDES / STROKE ---
+        // AQUÍ ESTÁ LA SOLUCIÓN AL "GRID SUCIO":
+        // Si la pieza está LOCKED, NO dibujamos ningún borde.
+        // Al tener 'bleed' y superponerse, se verá como una imagen continua.
+        
+        if (type !== 'locked') {
             ctx.save();
             ctx.translate(p.currentX, p.currentY);
-            if(isSelected) {
+            
+            if (type === 'selected') {
                 ctx.translate(this.pieceWidth/2, this.pieceHeight/2);
                 ctx.scale(1.05, 1.05);
                 ctx.translate(-this.pieceWidth/2, -this.pieceHeight/2);
             }
-            ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 1.5; ctx.stroke(p.path);
-            ctx.strokeStyle = "rgba(0,0,0,0.2)"; ctx.lineWidth = 1; ctx.stroke(p.path);
+
+            // Bevel (Biselado 3D)
+            ctx.strokeStyle = "rgba(255,255,255,0.4)"; 
+            ctx.lineWidth = 1.5; 
+            ctx.stroke(p.path);
+            
+            // Contorno fino oscuro
+            ctx.strokeStyle = "rgba(0,0,0,0.15)"; 
+            ctx.lineWidth = 1; 
+            ctx.stroke(p.path);
+            
             ctx.restore();
         }
     }
 
-    /* --- INPUT HANDLING: REGRESO A LÓGICA V1 (RÁPIDA) --- */
+    /* --- INPUT HANDLING (Bounding Box V1 - Fast) --- */
     
     getPointerPos(e) {
         const rect = this.canvas.getBoundingClientRect();
-        // Soporte unificado Mouse/Touch
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        // Ajustamos la coordenada del puntero al escalado del DPR si fuera necesario,
+        // pero como usamos ctx.scale(), logicalWidth coincide con CSS width, así que directo.
         return {
             x: clientX - rect.left,
             y: clientY - rect.top
@@ -237,18 +323,15 @@ export class PuzzleEngine {
     }
 
     handleStart(e) {
-        // Prevenimos scroll y otros gestos
         e.preventDefault(); 
         const { x, y } = this.getPointerPos(e);
 
-        // ITERAMOS AL REVÉS (De arriba a abajo)
+        // Iterar al revés (z-index visual)
         for (let i = this.pieces.length - 1; i >= 0; i--) {
             const p = this.pieces[i];
             if (p.isLocked) continue;
 
-            // --- LÓGICA V1: CAJA SIMPLE (BOUNDING BOX) ---
-            // Mucho más rápido que isPointInPath.
-            // Añadimos un margen generoso (tabSize) para agarrar las pestañas fácilmente.
+            // Hitbox generosa para dedos (Bounding Box)
             const margin = this.tabSize * 1.5;
 
             if (x >= p.currentX - margin && 
@@ -256,21 +339,19 @@ export class PuzzleEngine {
                 y >= p.currentY - margin && 
                 y <= p.currentY + this.pieceHeight + margin) {
                 
-                // ¡PIEZA ENCONTRADA!
                 this.selectedPiece = p;
                 this.isDragging = true;
                 
-                // Calculamos el offset para que la pieza no "salte" al centro del dedo
                 this.dragOffsetX = x - p.currentX;
                 this.dragOffsetY = y - p.currentY;
                 
-                // Traer al frente en el array
+                // Traer al frente
                 this.pieces.splice(i, 1);
                 this.pieces.push(p);
                 
                 this.playSound('click');
                 requestAnimationFrame(() => this.render());
-                return; // Salimos del loop inmediatamente
+                return;
             }
         }
     }
@@ -280,8 +361,6 @@ export class PuzzleEngine {
         e.preventDefault();
         
         const { x, y } = this.getPointerPos(e);
-        
-        // Movimiento directo 1:1 (Lógica V1)
         this.selectedPiece.currentX = x - this.dragOffsetX;
         this.selectedPiece.currentY = y - this.dragOffsetY;
         
@@ -291,22 +370,22 @@ export class PuzzleEngine {
     handleEnd(e) {
         if (!this.isDragging || !this.selectedPiece) return;
         
-        // SNAP Logic
         const dist = Math.hypot(
             this.selectedPiece.currentX - this.selectedPiece.correctX,
             this.selectedPiece.currentY - this.selectedPiece.correctY
         );
 
-        // Umbral de 30% del tamaño
+        // Umbral de Snap (30%)
         if (dist < this.pieceWidth * 0.3) {
             this.selectedPiece.currentX = this.selectedPiece.correctX;
             this.selectedPiece.currentY = this.selectedPiece.correctY;
             this.selectedPiece.isLocked = true;
             this.playSound('snap');
+            
+            // Al bloquearse, se redibujará sin borde y sin sombra (Flat)
             this.checkVictory();
         }
 
-        // Reset de estado garantizado
         this.isDragging = false;
         this.selectedPiece = null;
         requestAnimationFrame(() => this.render());
@@ -330,15 +409,18 @@ export class PuzzleEngine {
     }
 
     addEventListeners() {
-        // Mouse
         this.canvas.addEventListener('mousedown', this.handleStart);
         window.addEventListener('mousemove', this.handleMove);
         window.addEventListener('mouseup', this.handleEnd);
-        
-        // Touch (Passive: false es CRÍTICO para evitar scroll)
         this.canvas.addEventListener('touchstart', this.handleStart, { passive: false });
         window.addEventListener('touchmove', this.handleMove, { passive: false });
         window.addEventListener('touchend', this.handleEnd);
+        
+        // Observer para redimensionado responsivo automático
+        if (!this._resizeObserver && typeof ResizeObserver !== 'undefined') {
+            this._resizeObserver = new ResizeObserver(() => this.handleResize());
+            this._resizeObserver.observe(this.canvas.parentElement);
+        }
     }
 
     destroy() {
@@ -348,5 +430,6 @@ export class PuzzleEngine {
         this.canvas.removeEventListener('touchstart', this.handleStart);
         window.removeEventListener('touchmove', this.handleMove);
         window.removeEventListener('touchend', this.handleEnd);
+        if (this._resizeObserver) this._resizeObserver.disconnect();
     }
 }
