@@ -2,18 +2,20 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Rompecabezas - Love Arcade</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Rubik:wght@400;600&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
+
     <div id="dynamic-bg" class="dynamic-bg"></div>
     <div class="scanlines"></div>
+
     <main id="app">
         <header class="top-bar">
             <div class="brand">
@@ -24,7 +26,7 @@
         </header>
 
         <section id="screen-menu" class="screen active">
-           <div class="menu-content">
+            <div class="menu-content">
                 <h1 class="game-title">Neural<br>Puzzle</h1>
                 <nav class="main-nav">
                     <button id="btn-play" class="btn btn-primary">
@@ -45,7 +47,7 @@
                     </a>
                 </nav>
             </div>
-            <div style="position:absolute; bottom:10px; opacity:0.3; font-size:0.8rem;">v2.0 Gold</div>
+            <div style="position:absolute; bottom:10px; opacity:0.3; font-size:0.8rem;">v2.1 Gold</div>
         </section>
 
         <section id="screen-levels" class="screen">
@@ -68,16 +70,15 @@
                     <span id="hud-timer" class="timer-display">00:00</span>
                 </div>
             </div>
+
             <div class="canvas-wrapper" id="game-container">
                 <div id="game-loader" class="loading-overlay hidden">
                     <div class="spinner"></div>
                     <p>Cargando Assets...</p>
                 </div>
+
                 <canvas id="puzzle-canvas"></canvas>
-                <div id="tutorial-overlay" class="overlay hidden" style="display:flex; align-items:center; gap:8px;">
-                    <svg class="icon" viewBox="0 0 24 24" style="animation: bounce 1s infinite;"><path d="M12 2a5 5 0 0 0-5 5v7H6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5z"></path></svg>
-                    <span>Arrastra para conectar</span>
-                </div>
+                
                 <div class="game-controls">
                     <button id="btn-preview" class="btn-circle" title="Vista Previa (Mantener)">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -168,5 +169,5 @@
     <script src="../../js/app.js"></script>
     <script type="module" src="./src/main.js"></script>
 </body>
-    </html>
+                    </html>
                     
