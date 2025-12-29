@@ -1,65 +1,48 @@
 /**
- * PuzzleEngine.js
- * Motor gráfico basado en Canvas 2D.
- * Gestiona el ciclo de renderizado, input de usuario y lógica de puzzle.
- *
- * Cambios principales:
- * - Las piezas ya no se dibujan como rectángulos simples: ahora usan Path2D con
- *   "tabs" (entrantes/salientes) para dar la forma clásica de rompecabezas.
- * - Hit-test usa isPointInPath para respetar la forma visual.
- * - Clip + drawImage por pieza usando la forma Path2D (masking).
- * - Se añaden sombras/outline al seleccionar para mejorar percepción de "elevación".
+ * PuzzleEngine.js vFinal - Classic Jigsaw Fix
+ * Soluciona el problema de recorte de imagen (Bleeding) y formas estándar.
  */
 
 export class PuzzleEngine {
     constructor(canvasElement, config, callbacks) {
         this.canvas = canvasElement;
         this.ctx = this.canvas.getContext('2d');
-
+        
         // Configuración
-        this.img = config.image; // Objeto Image() ya cargado
-        this.gridSize = Math.sqrt(config.pieces); // Ej: 9 piezas -> 3x3
-        this.callbacks = callbacks || {}; // { onWin, onSound }
-
+        this.img = config.image;
+        this.gridSize = Math.sqrt(config.pieces); 
+        this.callbacks = callbacks || {};
+        
         // Estado
         this.pieces = [];
         this.selectedPiece = null;
         this.isDragging = false;
-
-        // Dimensiones lógicas vs Físicas
-        this.pieceWidth = 0;
-        this.pieceHeight = 0;
-        this.scale = 1;
-
-        // Input tracking
-        this.lastMouseX = 0;
-        this.lastMouseY = 0;
-
-        // Binds para no perder contexto 'this'
+        
+        // Throttle para sonido
+        this.lastSound = 0;
+        
+        // Binds
         this.handleStart = this.handleStart.bind(this);
         this.handleMove = this.handleMove.bind(this);
         this.handleEnd = this.handleEnd.bind(this);
         this.handleResize = this.handleResize.bind(this);
-
-        // Parámetros configurables (tweakables)
-        this.tabSizeRatio = 0.18; // tamaño de las pestañas respecto al tamaño de la pieza
-        this.snapThresholdRatio = 0.30; // umbral de imantación (proporción)
-
+        
         this.init();
     }
 
     init() {
         this.resizeCanvas();
+        this.generateTopology(); 
         this.createPieces();
         this.shufflePieces();
         this.addEventListeners();
-        this.render(); // Primer render estático
+        requestAnimationFrame(() => this.render());
     }
 
     handleResize() {
         this.resizeCanvas();
-        // Recompute piece paths on resize via createPieces (but keep progress)
-        this.recomputePieceMetrics();
+        // Recalcular métricas sin perder progreso
+        // (En una versión prod, aquí actualizaríamos currentX/Y proporcionalmente)
         this.render();
     }
 
@@ -67,7 +50,6 @@ export class PuzzleEngine {
         const parent = this.canvas.parentElement;
         const maxWidth = parent.clientWidth;
         const maxHeight = parent.clientHeight;
-
         const imgRatio = this.img.width / this.img.height;
 
         let finalWidth = maxWidth;
@@ -78,102 +60,80 @@ export class PuzzleEngine {
             finalWidth = finalHeight * imgRatio;
         }
 
-        finalWidth *= 0.95;
-        finalHeight *= 0.95;
+        // Dejar espacio para las piezas sueltas (85%)
+        finalWidth *= 0.85;
+        finalHeight *= 0.85;
 
-        this.canvas.width = Math.round(finalWidth);
-        this.canvas.height = Math.round(finalHeight);
+        this.canvas.width = finalWidth;
+        this.canvas.height = finalHeight;
 
-        this.pieceWidth = this.canvas.width / this.gridSize;
-        this.pieceHeight = this.canvas.height / this.gridSize;
-
-        this.scaleX = this.img.width / this.canvas.width;
-        this.scaleY = this.img.height / this.canvas.height;
+        this.pieceWidth = finalWidth / this.gridSize;
+        this.pieceHeight = finalHeight / this.gridSize;
+        
+        // El tamaño de la pestaña es el 20% del lado más corto
+        this.tabSize = Math.min(this.pieceWidth, this.pieceHeight) * 0.20;
     }
 
-    recomputePieceMetrics() {
-        // Recalc sx/sy based on original img and grid
-        const srcPieceW = this.img.width / this.gridSize;
-        const srcPieceH = this.img.height / this.gridSize;
-        this.pieces.forEach(p => {
-            p.sx = p.correctCol * srcPieceW;
-            p.sy = p.correctRow * srcPieceH;
-        });
+    /**
+     * Define qué pieza tiene pestaña y cual hueco.
+     * 1 = Tab (Saliente), -1 = Slot (Entrante), 0 = Borde
+     */
+    generateTopology() {
+        this.shapes = [];
+        for (let y = 0; y < this.gridSize; y++) {
+            const row = [];
+            for (let x = 0; x < this.gridSize; x++) {
+                let top = 0, right = 0, bottom = 0, left = 0;
+
+                // Coherencia con vecinos
+                if (y > 0) top = -this.shapes[y - 1][x].bottom;
+                if (y < this.gridSize - 1) bottom = Math.random() > 0.5 ? 1 : -1;
+                if (x > 0) left = -row[x - 1].right;
+                if (x < this.gridSize - 1) right = Math.random() > 0.5 ? 1 : -1;
+
+                row.push({ top, right, bottom, left });
+            }
+            this.shapes.push(row);
+        }
     }
 
     createPieces() {
-        // Generate pieces with classic jigsaw edges (top/right/bottom/left)
         this.pieces = [];
-        // We'll assign edges consistent between neighbors.
-        // Edges: -1 = tab in, 0 = flat, 1 = tab out
-        const randEdge = () => (Math.random() > 0.5 ? 1 : -1);
+        
+        // Calcular dimensiones de la celda en la IMAGEN ORIGINAL
+        const srcW = this.img.width / this.gridSize;
+        const srcH = this.img.height / this.gridSize;
 
-        // Temporary 2D array to hold edges for neighbor consistency
-        const edgesGrid = Array.from({ length: this.gridSize }, () =>
-            Array.from({ length: this.gridSize }, () => ({ top: 0, right: 0, bottom: 0, left: 0 }))
-        );
+        for (let y = 0; y < this.gridSize; y++) {
+            for (let x = 0; x < this.gridSize; x++) {
+                const shape = this.shapes[y][x];
+                
+                // Generar el Path vectorizado de la forma
+                const path = this.createPath(this.pieceWidth, this.pieceHeight, shape);
 
-        for (let row = 0; row < this.gridSize; row++) {
-            for (let col = 0; col < this.gridSize; col++) {
-                // Top edge
-                if (row === 0) {
-                    edgesGrid[row][col].top = 0;
-                } else {
-                    // Opposite of the bottom of the piece above
-                    edgesGrid[row][col].top = -edgesGrid[row - 1][col].bottom;
-                }
-
-                // Left edge
-                if (col === 0) {
-                    edgesGrid[row][col].left = 0;
-                } else {
-                    edgesGrid[row][col].left = -edgesGrid[row][col - 1].right;
-                }
-
-                // Right edge (if border -> 0 else random)
-                if (col === this.gridSize - 1) {
-                    edgesGrid[row][col].right = 0;
-                } else {
-                    // random for now; will be mirrored by neighbor's left when neighbor processed
-                    edgesGrid[row][col].right = randEdge();
-                }
-
-                // Bottom edge (if border -> 0 else random)
-                if (row === this.gridSize - 1) {
-                    edgesGrid[row][col].bottom = 0;
-                } else {
-                    edgesGrid[row][col].bottom = randEdge();
-                }
-            }
-        }
-
-        // Now create piece objects
-        const srcPieceW = this.img.width / this.gridSize;
-        const srcPieceH = this.img.height / this.gridSize;
-
-        for (let row = 0; row < this.gridSize; row++) {
-            for (let col = 0; col < this.gridSize; col++) {
-                const e = edgesGrid[row][col];
-                const piece = {
-                    correctCol: col,
-                    correctRow: row,
+                this.pieces.push({
+                    id: `${x}-${y}`,
+                    correctX: x * this.pieceWidth,
+                    correctY: y * this.pieceHeight,
                     currentX: 0,
                     currentY: 0,
                     isLocked: false,
-                    sx: col * srcPieceW,
-                    sy: row * srcPieceH,
-                    edges: { top: e.top, right: e.right, bottom: e.bottom, left: e.left }
-                    // note: path is generated on-demand (createPiecePath)
-                };
-                this.pieces.push(piece);
+                    shape: shape,
+                    path: path,
+                    // Datos de recorte de la imagen original
+                    imgData: {
+                        sx: x * srcW,
+                        sy: y * srcH,
+                        sw: srcW,
+                        sh: srcH
+                    }
+                });
             }
         }
     }
 
     shufflePieces() {
-        // Dispersar piezas aleatoriamente dentro del canvas
         this.pieces.forEach(p => {
-            // Avoid putting piece exactly on target:
             p.currentX = Math.random() * (this.canvas.width - this.pieceWidth);
             p.currentY = Math.random() * (this.canvas.height - this.pieceHeight);
             p.isLocked = false;
@@ -181,145 +141,175 @@ export class PuzzleEngine {
         this.render();
     }
 
-    /* --- UTILS: forma de pieza (Path2D) y dibujo --- */
+    /* --- DIBUJO DE FORMAS (Bézier Clásico) --- */
 
-    // Crea un Path2D absoluto (coordenadas en espacio canvas) para la pieza p
-    createPiecePath(p, withOffset = { x: 0, y: 0 }) {
-        const pw = this.pieceWidth;
-        const ph = this.pieceHeight;
-        const x = p.currentX + (withOffset.x || 0);
-        const y = p.currentY + (withOffset.y || 0);
-
-        const tabW = Math.min(pw, ph) * this.tabSizeRatio;
-        const tabH = Math.min(pw, ph) * this.tabSizeRatio;
-
+    createPath(w, h, shape) {
         const path = new Path2D();
+        const t = this.tabSize; 
 
-        // Start at top-left corner
-        path.moveTo(x, y);
+        path.moveTo(0, 0);
 
-        // TOP edge: left -> right
-        this._addEdgeToPath(path, x, y, 'top', p.edges.top, pw, ph, tabW, tabH);
+        // TOP
+        if (shape.top !== 0) this.lineToTab(path, 0, 0, w, 0, shape.top * t);
+        else path.lineTo(w, 0);
 
-        // RIGHT edge
-        this._addEdgeToPath(path, x + pw, y, 'right', p.edges.right, pw, ph, tabW, tabH);
+        // RIGHT
+        if (shape.right !== 0) this.lineToTab(path, w, 0, w, h, shape.right * t);
+        else path.lineTo(w, h);
 
-        // BOTTOM edge
-        this._addEdgeToPath(path, x + pw, y + ph, 'bottom', p.edges.bottom, pw, ph, tabW, tabH);
+        // BOTTOM
+        if (shape.bottom !== 0) this.lineToTab(path, w, h, 0, h, shape.bottom * t);
+        else path.lineTo(0, h);
 
-        // LEFT edge
-        this._addEdgeToPath(path, x, y + ph, 'left', p.edges.left, pw, ph, tabW, tabH);
+        // LEFT
+        if (shape.left !== 0) this.lineToTab(path, 0, h, 0, 0, shape.left * t);
+        else path.lineTo(0, 0);
 
         path.closePath();
         return path;
     }
 
-    // Añade un lado al path. sidePoint es el corner start point (x,y) correspondiente.
-    _addEdgeToPath(path, startX, startY, side, dir, pw, ph, tabW, tabH) {
-        // dir: -1 (tab in), 0 (flat), 1 (tab out)
-        // We'll draw the edge going clockwise: top -> right -> bottom -> left
-        // For each side, compute coordinates of cubic Bezier tab centered in middle third.
+    /**
+     * Dibuja una curva de rompecabezas estándar entre (x1,y1) y (x2,y2).
+     * amp = amplitud de la pestaña (positiva o negativa)
+     */
+    lineToTab(path, x1, y1, x2, y2, amp) {
+        const w = x2 - x1;
+        const h = y2 - y1;
+        
+        // Puntos base a lo largo del segmento
+        // Cuello de la pestaña ocupa el 30% central
+        const cx = x1 + w * 0.5;
+        const cy = y1 + h * 0.5;
+        
+        // Vectores para "salir" perpendicularmente del lado
+        // Si vamos horizontal (h=0), la perpendicular es en Y
+        // Si vamos vertical (w=0), la perpendicular es en X
+        const perpX = -h / Math.abs(h || 1); 
+        const perpY = w / Math.abs(w || 1);
 
-        // Helper to compute points relative to the start point depending on side
-        const thirdX = pw / 3;
-        const thirdY = ph / 3;
+        // Geometría clásica Jigsaw
+        // Hombros
+        const xA = x1 + w * 0.35;
+        const yA = y1 + h * 0.35;
+        const xB = x1 + w * 0.65;
+        const yB = y1 + h * 0.65;
 
-        if (side === 'top') {
-            // start at (startX, startY) which is top-left
-            // line to 1/3
-            path.lineTo(startX + thirdX, startY);
-            if (dir === 0) {
-                path.lineTo(startX + 2 * thirdX, startY);
-            } else {
-                // tab centered between thirdX and 2*thirdX
-                const cx = startX + pw / 2;
-                const cy = startY;
-                const out = dir === 1; // true -> outwards (up), false -> inwards (down)
-                const controlY = cy + (out ? -tabH : tabH);
-                // Left half curve
-                path.bezierCurveTo(
-                    startX + thirdX + tabW * 0.2, startY,
-                    cx - tabW * 0.6, controlY,
-                    cx, controlY
-                );
-                // Right half curve
-                path.bezierCurveTo(
-                    cx + tabW * 0.6, controlY,
-                    startX + 2 * thirdX - tabW * 0.2, startY,
-                    startX + 2 * thirdX, startY
-                );
+        // Puntos de control para la curva Bézier
+        // Base del cuello
+        path.lineTo(xA, yA);
+
+        path.bezierCurveTo(
+            xA + (perpX * amp * 0.2), yA + (perpY * amp * 0.2), // CP1
+            cx - (w * 0.1) + (perpX * amp), cy - (h * 0.1) + (perpY * amp), // CP2
+            cx + (perpX * amp), cy + (perpY * amp) // Punta
+        );
+        
+        path.bezierCurveTo(
+            cx + (w * 0.1) + (perpX * amp), cy + (h * 0.1) + (perpY * amp), // CP1
+            xB + (perpX * amp * 0.2), yB + (perpY * amp * 0.2), // CP2
+            xB, yB // Base derecha
+        );
+
+        path.lineTo(x2, y2);
+    }
+
+    /* --- RENDER LOOP (FIX CRÍTICO AQUÍ) --- */
+
+    render() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Ordenar piezas: Locked al fondo, Selected al tope
+        const renderList = [
+            ...this.pieces.filter(p => p.isLocked),
+            ...this.pieces.filter(p => !p.isLocked && p !== this.selectedPiece)
+        ];
+        if (this.selectedPiece) renderList.push(this.selectedPiece);
+
+        renderList.forEach(p => this.renderPiece(p));
+    }
+
+    renderPiece(p) {
+        const ctx = this.ctx;
+        const isSelected = p === this.selectedPiece;
+        
+        ctx.save();
+        ctx.translate(p.currentX, p.currentY);
+
+        // 1. Sombra (solo si está suelta)
+        if (!p.isLocked) {
+            ctx.shadowColor = "rgba(0,0,0,0.3)";
+            ctx.shadowBlur = isSelected ? 15 : 4;
+            ctx.shadowOffsetY = isSelected ? 5 : 2;
+            if(isSelected) {
+                // Escala visual al levantar
+                ctx.translate(this.pieceWidth/2, this.pieceHeight/2);
+                ctx.scale(1.05, 1.05);
+                ctx.translate(-this.pieceWidth/2, -this.pieceHeight/2);
             }
-            path.lineTo(startX + pw, startY); // move to top-right corner
-        } else if (side === 'right') {
-            // start at top-right corner (startX, startY)
-            path.lineTo(startX, startY + thirdY);
-            if (dir === 0) {
-                path.lineTo(startX, startY + 2 * thirdY);
-            } else {
-                const cx = startX;
-                const cy = startY + ph / 2;
-                const out = dir === 1; // outwards to right
-                const controlX = cx + (out ? tabW : -tabW);
-                path.bezierCurveTo(
-                    cx, startY + thirdY + tabH * 0.2,
-                    controlX, cy - tabH * 0.6,
-                    controlX, cy
-                );
-                path.bezierCurveTo(
-                    controlX, cy + tabH * 0.6,
-                    cx, startY + 2 * thirdY - tabH * 0.2,
-                    cx, startY + 2 * thirdY
-                );
+        }
+
+        // 2. Definir Máscara de Recorte
+        ctx.stroke(p.path); // Fix antialiasing en bordes clip
+        ctx.clip(p.path);
+
+        /* --- FIX CRÍTICO DE IMAGEN CORTADA --- 
+           Calculamos un margen extra (bleed) proporcional al tamaño de la pestaña.
+           Tomamos más imagen de la fuente para rellenar la pestaña.
+        */
+        
+        // Escala entre la imagen original HD y el canvas
+        const scaleX = p.imgData.sw / this.pieceWidth;
+        const scaleY = p.imgData.sh / this.pieceHeight;
+        
+        // Margen de seguridad: Tamaño de la pestaña + un poco más
+        const bleed = this.tabSize * 1.5; 
+
+        // Dibujamos la imagen DESPLAZADA hacia atrás (-bleed)
+        // y con tamaño AUMENTADO (+bleed*2)
+        ctx.drawImage(
+            this.img,
+            // Source (Imagen original): Restamos margen escalado
+            p.imgData.sx - (bleed * scaleX),
+            p.imgData.sy - (bleed * scaleY),
+            p.imgData.sw + (bleed * 2 * scaleX),
+            p.imgData.sh + (bleed * 2 * scaleY),
+            // Destination (Canvas local 0,0): Restamos margen local
+            -bleed, 
+            -bleed,
+            this.pieceWidth + (bleed * 2),
+            this.pieceHeight + (bleed * 2)
+        );
+
+        // 3. Efectos de Borde (Solo piezas sueltas)
+        // Si está locked, no dibujamos borde para que se funda la imagen
+        ctx.restore(); // Salimos del CLIP
+
+        if (!p.isLocked) {
+            ctx.save();
+            ctx.translate(p.currentX, p.currentY);
+            if(isSelected) {
+                // Escala debe coincidir
+                ctx.translate(this.pieceWidth/2, this.pieceHeight/2);
+                ctx.scale(1.05, 1.05);
+                ctx.translate(-this.pieceWidth/2, -this.pieceHeight/2);
             }
-            path.lineTo(startX, startY + ph); // bottom-right corner
-        } else if (side === 'bottom') {
-            // start at bottom-right corner (startX, startY)
-            path.lineTo(startX - thirdX, startY);
-            if (dir === 0) {
-                path.lineTo(startX - 2 * thirdX, startY);
-            } else {
-                const cx = startX - pw / 2;
-                const cy = startY;
-                const out = dir === 1; // outwards down
-                const controlY = cy + (out ? tabH : -tabH);
-                path.bezierCurveTo(
-                    startX - thirdX - tabW * 0.2, startY,
-                    cx + tabW * 0.6, controlY,
-                    cx, controlY
-                );
-                path.bezierCurveTo(
-                    cx - tabW * 0.6, controlY,
-                    startX - 2 * thirdX + tabW * 0.2, startY,
-                    startX - 2 * thirdX, startY
-                );
-            }
-            path.lineTo(startX - pw, startY); // bottom-left corner
-        } else if (side === 'left') {
-            // start at bottom-left corner (startX, startY)
-            path.lineTo(startX, startY - thirdY);
-            if (dir === 0) {
-                path.lineTo(startX, startY - 2 * thirdY);
-            } else {
-                const cx = startX;
-                const cy = startY - ph / 2;
-                const out = dir === 1; // outwards left
-                const controlX = cx + (out ? -tabW : tabW);
-                path.bezierCurveTo(
-                    cx, startY - thirdY - tabH * 0.2,
-                    controlX, cy + tabH * 0.6,
-                    controlX, cy
-                );
-                path.bezierCurveTo(
-                    controlX, cy - tabH * 0.6,
-                    cx, startY - 2 * thirdY + tabH * 0.2,
-                    cx, startY - 2 * thirdY
-                );
-            }
-            path.lineTo(startX, startY - ph); // back to top-left corner
+
+            // Brillo Biselado
+            ctx.strokeStyle = "rgba(255,255,255,0.5)";
+            ctx.lineWidth = 1.5;
+            ctx.stroke(p.path);
+            
+            // Contorno sutil
+            ctx.strokeStyle = "rgba(0,0,0,0.2)";
+            ctx.lineWidth = 1;
+            ctx.stroke(p.path);
+            
+            ctx.restore();
         }
     }
 
-    /* --- INPUT HANDLING (Touch & Mouse unificados) --- */
+    /* --- INPUT & LOGICA --- */
 
     getPointerPos(e) {
         const rect = this.canvas.getBoundingClientRect();
@@ -335,27 +325,28 @@ export class PuzzleEngine {
         e.preventDefault();
         const { x, y } = this.getPointerPos(e);
 
-        // Buscar si tocamos una pieza (iterar al revés para agarrar la de arriba)
+        // Hit detection preciso usando isPointInPath
         for (let i = this.pieces.length - 1; i >= 0; i--) {
             const p = this.pieces[i];
-            if (p.isLocked) continue; // No mover piezas ya colocadas
+            if (p.isLocked) continue;
 
-            // Use Path2D hit test for accurate shape interaction
-            const path = this.createPiecePath(p);
-            if (this.ctx.isPointInPath(path, x, y)) {
+            this.ctx.save();
+            this.ctx.translate(p.currentX, p.currentY);
+            const hit = this.ctx.isPointInPath(p.path, x - p.currentX, y - p.currentY);
+            this.ctx.restore();
+
+            if (hit) {
                 this.selectedPiece = p;
                 this.isDragging = true;
-
-                // Offset para agarrar la pieza desde donde se hizo click
                 this.dragOffsetX = x - p.currentX;
                 this.dragOffsetY = y - p.currentY;
-
-                // Traer al frente (mover al final del array)
+                
+                // Mover al final (top z-index)
                 this.pieces.splice(i, 1);
                 this.pieces.push(p);
-
-                if (this.callbacks.onSound) this.callbacks.onSound('click');
-                this.render();
+                
+                this.playSound('click');
+                requestAnimationFrame(() => this.render());
                 return;
             }
         }
@@ -364,169 +355,78 @@ export class PuzzleEngine {
     handleMove(e) {
         if (!this.isDragging || !this.selectedPiece) return;
         e.preventDefault();
-
         const { x, y } = this.getPointerPos(e);
         this.selectedPiece.currentX = x - this.dragOffsetX;
         this.selectedPiece.currentY = y - this.dragOffsetY;
-
-        this.render();
+        requestAnimationFrame(() => this.render());
     }
 
     handleEnd(e) {
         if (!this.isDragging || !this.selectedPiece) return;
+        
+        // SNAP Logic
+        const dist = Math.hypot(
+            this.selectedPiece.currentX - this.selectedPiece.correctX,
+            this.selectedPiece.currentY - this.selectedPiece.correctY
+        );
 
-        // Lógica Snap-to-Grid (por centro objetivo)
-        const targetX = this.selectedPiece.correctCol * this.pieceWidth;
-        const targetY = this.selectedPiece.correctRow * this.pieceHeight;
-
-        const dist = Math.hypot(this.selectedPiece.currentX - targetX, this.selectedPiece.currentY - targetY);
-        const snapThreshold = Math.min(this.pieceWidth, this.pieceHeight) * this.snapThresholdRatio;
-
-        if (dist < snapThreshold) {
-            // Smooth snap animation (simple)
-            this._animateSnap(this.selectedPiece, targetX, targetY, () => {
-                this.selectedPiece.isLocked = true;
-                if (this.callbacks.onSound) this.callbacks.onSound('snap');
-                this.checkVictory();
-            });
+        // Umbral de 25% del tamaño de pieza
+        if (dist < this.pieceWidth * 0.25) {
+            // SNAP DURO
+            this.selectedPiece.currentX = this.selectedPiece.correctX;
+            this.selectedPiece.currentY = this.selectedPiece.correctY;
+            this.selectedPiece.isLocked = true;
+            this.playSound('snap');
+            
+            // Check Victory INMEDIATO
+            if (this.checkVictory()) {
+                this.isDragging = false;
+                this.selectedPiece = null;
+                this.render();
+                return;
+            }
         }
 
         this.isDragging = false;
         this.selectedPiece = null;
-        this.render();
-    }
-
-    // Simple linear animation for snap (non-blocking)
-    _animateSnap(piece, toX, toY, cb) {
-        const fromX = piece.currentX;
-        const fromY = piece.currentY;
-        const duration = 140;
-        const start = performance.now();
-        const step = (now) => {
-            const t = Math.min(1, (now - start) / duration);
-            // easeOutQuad
-            const eased = 1 - (1 - t) * (1 - t);
-            piece.currentX = fromX + (toX - fromX) * eased;
-            piece.currentY = fromY + (toY - fromY) * eased;
-            this.render();
-            if (t < 1) {
-                requestAnimationFrame(step);
-            } else {
-                piece.currentX = toX;
-                piece.currentY = toY;
-                if (cb) cb();
-            }
-        };
-        requestAnimationFrame(step);
-    }
-
-    /* --- RENDER LOOP --- */
-
-    render() {
-        // Limpiar canvas
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // 1. Dibujar "Grid Fantasma" (Guía visual tenue)
-        this.ctx.save();
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        for (let i = 0; i <= this.gridSize; i++) {
-            this.ctx.moveTo(i * this.pieceWidth, 0);
-            this.ctx.lineTo(i * this.pieceWidth, this.canvas.height);
-            this.ctx.moveTo(0, i * this.pieceHeight);
-            this.ctx.lineTo(this.canvas.width, i * this.pieceHeight);
-        }
-        this.ctx.stroke();
-        this.ctx.restore();
-
-        // 2. Dibujar Piezas: dibujamos de abajo a arriba (order in array)
-        for (let idx = 0; idx < this.pieces.length; idx++) {
-            const p = this.pieces[idx];
-
-            // Build shape path for this piece
-            const path = this.createPiecePath(p);
-
-            // If selected: add shadow + slightly larger stroke
-            if (p === this.selectedPiece) {
-                this.ctx.save();
-                this.ctx.shadowColor = 'rgba(0,0,0,0.45)';
-                this.ctx.shadowBlur = 16;
-            } else {
-                this.ctx.save();
-                this.ctx.shadowBlur = 0;
-            }
-
-            // Clip to piece shape and draw the corresponding image region
-            this.ctx.save();
-            this.ctx.clip(path);
-
-            // Map source image region to piece area:
-            // Source size
-            const srcW = this.img.width / this.gridSize;
-            const srcH = this.img.height / this.gridSize;
-
-            // Draw image clipped
-            this.ctx.drawImage(
-                this.img,
-                p.sx, p.sy, srcW, srcH, // Source
-                p.currentX, p.currentY, this.pieceWidth, this.pieceHeight // Dest
-            );
-            this.ctx.restore(); // restore after clip
-
-            // Draw outline of piece
-            this.ctx.strokeStyle = p === this.selectedPiece ? 'rgba(255,255,255,0.95)' : 'rgba(0,0,0,0.6)';
-            this.ctx.lineWidth = p === this.selectedPiece ? 2.5 : 1.2;
-            this.ctx.stroke(path);
-
-            this.ctx.restore(); // restore for next piece
-        }
+        requestAnimationFrame(() => this.render());
     }
 
     checkVictory() {
-        const allLocked = this.pieces.every(p => p.isLocked);
-        if (allLocked) {
-            if (this.callbacks.onSound) this.callbacks.onSound('win');
-            setTimeout(() => {
-                if (this.callbacks.onWin) this.callbacks.onWin();
-            }, 300);
-            this.removeEventListeners();
+        const wins = this.pieces.every(p => p.isLocked);
+        if (wins) {
+            this.playSound('win');
+            if(this.callbacks.onWin) setTimeout(this.callbacks.onWin, 300);
+            this.destroy();
+        }
+        return wins;
+    }
+
+    playSound(type) {
+        const now = Date.now();
+        if (now - this.lastSound > 100) {
+            if(this.callbacks.onSound) this.callbacks.onSound(type);
+            this.lastSound = now;
         }
     }
 
     addEventListeners() {
         this.canvas.addEventListener('mousedown', this.handleStart);
-        this.canvas.addEventListener('mousemove', this.handleMove);
+        window.addEventListener('mousemove', this.handleMove);
         window.addEventListener('mouseup', this.handleEnd);
-
         this.canvas.addEventListener('touchstart', this.handleStart, { passive: false });
-        this.canvas.addEventListener('touchmove', this.handleMove, { passive: false });
+        window.addEventListener('touchmove', this.handleMove, { passive: false });
         window.addEventListener('touchend', this.handleEnd);
-
-        // Resize observer to adjust canvas when parent changes size
-        if (!this._resizeObserver && typeof ResizeObserver !== 'undefined') {
-            this._resizeObserver = new ResizeObserver(this.handleResize);
-            this._resizeObserver.observe(this.canvas.parentElement);
-        }
-    }
-
-    removeEventListeners() {
-        this.canvas.removeEventListener('mousedown', this.handleStart);
-        this.canvas.removeEventListener('mousemove', this.handleMove);
-        window.removeEventListener('mouseup', this.handleEnd);
-
-        this.canvas.removeEventListener('touchstart', this.handleStart);
-        this.canvas.removeEventListener('touchmove', this.handleMove);
-        window.removeEventListener('touchend', this.handleEnd);
-
-        if (this._resizeObserver) {
-            this._resizeObserver.disconnect();
-            this._resizeObserver = null;
-        }
     }
 
     destroy() {
-        this.removeEventListeners();
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // Limpiar todo al ganar/salir
+        const c = this.canvas; // alias
+        c.removeEventListener('mousedown', this.handleStart);
+        window.removeEventListener('mousemove', this.handleMove);
+        window.removeEventListener('mouseup', this.handleEnd);
+        c.removeEventListener('touchstart', this.handleStart);
+        window.removeEventListener('touchmove', this.handleMove);
+        window.removeEventListener('touchend', this.handleEnd);
     }
 }
