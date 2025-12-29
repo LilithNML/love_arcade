@@ -16,9 +16,8 @@
 
         <header class="top-bar">
             <div class="brand">Love Arcade <span class="game-tag">| Puzzle</span></div>
-            <div class="coins-display" id="global-coins-display" hidden>
-                💰 <span id="coins-val">...</span>
-            </div>
+            <div class="coins-display" id="global-coins-display">
+                </div>
         </header>
 
         <section id="screen-menu" class="screen active">
@@ -59,7 +58,6 @@
                 <div id="tutorial-overlay" class="overlay hidden">
                     <div class="tutorial-hand">👆</div>
                     <p>Arrastra las piezas para unirlas</p>
-                    <button class="btn btn-sm btn-primary" id="btn-close-tutorial">Entendido</button>
                 </div>
             </div>
         </section>
@@ -77,10 +75,6 @@
                 <div class="setting-item">
                     <label>Volumen SFX</label>
                     <input type="range" id="setting-volume" min="0" max="1" step="0.1" value="0.8">
-                </div>
-                <div class="setting-item">
-                    <label>Modo Ahorro (Low FX)</label>
-                    <input type="checkbox" id="setting-performance">
                 </div>
                 <hr>
                 <button id="btn-reset-progress" class="btn btn-outline-danger">Borrar Progreso Local</button>
@@ -100,20 +94,19 @@
                 <h3>¡Nivel Completado!</h3>
                 <div class="star-animation">⭐⭐⭐</div>
                 <p>Tiempo: <span id="victory-time">00:00</span></p>
-                
                 <div class="reward-box">
                     <p>Recompensa:</p>
                     <div class="coin-animation">
                         💰 <span id="victory-coins">0</span>
                     </div>
                 </div>
-
                 <button id="btn-next-level" class="btn btn-primary">Siguiente Nivel</button>
                 <button id="btn-victory-menu" class="btn btn-secondary">Menú</button>
             </div>
         </div>
-
     </main>
+
+    <script src="../../app.js"></script>
 
     <script type="module" src="./src/main.js"></script>
 </body>
