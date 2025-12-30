@@ -1,7 +1,7 @@
 /**
- * PuzzleEngine.js v6.0
- * - Fix Huecos: Aumento masivo del sangrado (Bleed) en drawImage.
- * - Fix Desorden: Distribución "Smart Scatter" que despeja el centro.
+ * PuzzleEngine.js v7.0 
+ * - Fix Visual: Super Bleed (300%) para eliminar huecos en piezas deformadas.
+ * - Fix Gameplay: Distribución en Anillo (Ring Scatter) para despejar el centro.
  */
 
 export class PuzzleEngine {
@@ -26,7 +26,6 @@ export class PuzzleEngine {
         this.lastSound = 0;
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
         
-        // Binds
         this.handleStart = this.handleStart.bind(this);
         this.handleMove = this.handleMove.bind(this);
         this.handleEnd = this.handleEnd.bind(this);
@@ -39,54 +38,9 @@ export class PuzzleEngine {
         this.resizeCanvas();
         this.generateTopology();
         this.createPieces(); 
-        this.shufflePieces(); // Ahora usa lógica inteligente
+        this.shufflePieces(); 
         this.addEventListeners();
         requestAnimationFrame(() => this.render());
-    }
-
-    /* --- GESTIÓN DE ESTADO --- */
-    exportState() {
-        return this.pieces.map(p => ({
-            id: p.id,
-            cx: p.currentX,
-            cy: p.currentY,
-            locked: p.isLocked
-        }));
-    }
-
-    importState(savedState) {
-        if (!savedState || !Array.isArray(savedState)) return;
-        savedState.forEach(savedP => {
-            const piece = this.pieces.find(p => p.id === savedP.id);
-            if (piece) {
-                piece.currentX = savedP.cx;
-                piece.currentY = savedP.cy;
-                piece.isLocked = savedP.locked;
-            }
-        });
-        this.render();
-    }
-
-    /* --- FEATURES --- */
-    togglePreview(active) {
-        this.showPreview = active;
-        this.render();
-    }
-
-    autoPlacePiece() {
-        const loosePieces = this.pieces.filter(p => !p.isLocked);
-        if (loosePieces.length === 0) return false;
-
-        const piece = loosePieces[Math.floor(Math.random() * loosePieces.length)];
-        this.spawnParticles(piece.correctX + this.pieceWidth/2, piece.correctY + this.pieceHeight/2, 'gold');
-        piece.currentX = piece.correctX;
-        piece.currentY = piece.correctY;
-        piece.isLocked = true;
-        
-        if(this.callbacks.onSound) this.callbacks.onSound('snap');
-        this.checkVictory();
-        this.render();
-        return true;
     }
 
     /* --- SETUP & RESIZE --- */
@@ -110,9 +64,9 @@ export class PuzzleEngine {
             cssWidth = cssHeight * imgRatio;
         }
 
-        // Importante: Dejar margen (85%) para tener espacio de trabajo
-        cssWidth *= 0.85;
-        cssHeight *= 0.85;
+        // Margen del 80% para dar espacio al Scatter
+        cssWidth *= 0.80;
+        cssHeight *= 0.80;
 
         this.canvas.width = cssWidth * this.dpr;
         this.canvas.height = cssHeight * this.dpr;
@@ -145,10 +99,10 @@ export class PuzzleEngine {
                 
                 row.push({ top, right, bottom, left });
                 jitterRow.push({
-                    top: (Math.random() - 0.5) * 0.2,
-                    right: (Math.random() - 0.5) * 0.2,
-                    bottom: (Math.random() - 0.5) * 0.2,
-                    left: (Math.random() - 0.5) * 0.2
+                    top: (Math.random() - 0.5) * 0.25, // Jitter aumentado ligeramente
+                    right: (Math.random() - 0.5) * 0.25,
+                    bottom: (Math.random() - 0.5) * 0.25,
+                    left: (Math.random() - 0.5) * 0.25
                 });
             }
             this.shapes.push(row);
@@ -195,72 +149,115 @@ export class PuzzleEngine {
         }
     }
 
-    /* --- SOLUCIÓN #2: SMART SCATTER (Dispersión Inteligente) --- */
+    /* --- FIX #2: DISTRIBUCIÓN EN ANILLO (RING SCATTER) --- */
     shufflePieces() {
-        // Definir la "Zona Prohibida" (El centro donde se arma el puzzle)
-        // Dejamos un margen del 10% alrededor del puzzle resuelto
-        const forbiddenZone = {
-            x: 0,
-            y: 0,
-            width: this.logicalWidth,
-            height: this.logicalHeight
-        };
+        // Colocar piezas formando un marco rectangular alrededor del centro
+        const pieces = this.pieces;
+        const total = pieces.length;
         
-        // Pero espera, logicalWidth es el tamaño del puzzle resuelto (con margins).
-        // Queremos poner las piezas ALREDEDOR si hay espacio, o distribuirlas uniformemente
-        // evitando que todas caigan en el centro exacto.
-        
-        this.pieces.forEach(p => {
+        // Coordenadas del área disponible
+        const W = this.logicalWidth;
+        const H = this.logicalHeight;
+        const pW = this.pieceWidth;
+        const pH = this.pieceHeight;
+
+        pieces.forEach((p, index) => {
             p.isLocked = false;
-
-            // Estrategia: Dividir el canvas en 4 cuadrantes exteriores imaginarios
-            // O simplemente aleatorizar pero empujando hacia los bordes.
             
-            // Random simple inicial
-            let rx = Math.random() * (this.logicalWidth - this.pieceWidth);
-            let ry = Math.random() * (this.logicalHeight - this.pieceHeight);
-            
-            // Si hay muchas piezas, intentar no apilar
-            // Añadimos un "ruido" dispersivo
-            p.currentX = rx;
-            p.currentY = ry;
-        });
-        
-        // MEJORA: Algoritmo de "Repulsión" simple para desapilarlas
-        // Ejecutamos varias pasadas para separar piezas que estén muy cerca
-        for(let k=0; k<5; k++) {
-            for(let i=0; i<this.pieces.length; i++) {
-                for(let j=i+1; j<this.pieces.length; j++) {
-                    const p1 = this.pieces[i];
-                    const p2 = this.pieces[j];
-                    const dx = p1.currentX - p2.currentX;
-                    const dy = p1.currentY - p2.currentY;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    const minDist = this.pieceWidth * 0.5; // Deben estar separadas al menos media pieza
+            // Distribuir a lo largo del perímetro
+            // Posición (0 a 1) a lo largo del perímetro del rectángulo
+            const pos = index / total; 
+            const perimeter = 2 * (W + H);
+            const distance = pos * perimeter;
 
-                    if(dist < minDist && dist > 0) {
-                        // Empujar en direcciones opuestas
-                        const angle = Math.atan2(dy, dx);
-                        const force = (minDist - dist) / 2;
-                        const pushX = Math.cos(angle) * force;
-                        const pushY = Math.sin(angle) * force;
-                        
-                        p1.currentX += pushX;
-                        p1.currentY += pushY;
-                        p2.currentX -= pushX;
-                        p2.currentY -= pushY;
-                    }
-                }
+            let x, y;
+
+            // Mapear distancia a coordenadas (Top -> Right -> Bottom -> Left)
+            if (distance < W) { // Top edge
+                x = distance;
+                y = Math.random() * (pH * 0.5); // Pegado arriba
+            } else if (distance < W + H) { // Right edge
+                x = W - pW - (Math.random() * (pW * 0.5)); // Pegado derecha
+                y = distance - W;
+            } else if (distance < 2 * W + H) { // Bottom edge
+                x = (2 * W + H) - distance;
+                y = H - pH - (Math.random() * (pH * 0.5)); // Pegado abajo
+            } else { // Left edge
+                x = Math.random() * (pW * 0.5); // Pegado izquierda
+                y = (2 * W + 2 * H) - distance;
             }
-        }
 
-        // Clamp final para que no se salgan de pantalla tras la repulsión
-        this.pieces.forEach(p => {
-            p.currentX = Math.max(0, Math.min(p.currentX, this.logicalWidth - this.pieceWidth));
-            p.currentY = Math.max(0, Math.min(p.currentY, this.logicalHeight - this.pieceHeight));
+            // Asegurar que estén dentro del canvas
+            p.currentX = Math.max(0, Math.min(x, W - pW));
+            p.currentY = Math.max(0, Math.min(y, H - pH));
+            
+            // Añadir un poco de caos natural
+            p.currentX += (Math.random() - 0.5) * (pW * 0.2);
+            p.currentY += (Math.random() - 0.5) * (pH * 0.2);
         });
 
         this.render();
+    }
+
+    /* --- RENDERING --- */
+    
+    // FIX #1: RENDER PIECE CON SUPER BLEED
+    renderPiece(p, type) {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.translate(p.currentX, p.currentY);
+
+        if (type !== 'locked') {
+            ctx.shadowColor = "rgba(0,0,0,0.3)";
+            ctx.shadowBlur = type === 'selected' ? 10 : 3;
+            ctx.shadowOffsetY = type === 'selected' ? 5 : 2;
+            if (type === 'selected') {
+                ctx.translate(this.pieceWidth/2, this.pieceHeight/2);
+                ctx.scale(1.05, 1.05);
+                ctx.translate(-this.pieceWidth/2, -this.pieceHeight/2);
+            }
+        } else {
+            ctx.shadowColor = "transparent";
+        }
+
+        ctx.clip(p.path);
+        
+        // --- HYPER BLEED ---
+        // Aumentamos el margen de seguridad a 3.0 veces el tamaño de la pestaña.
+        // Esto garantiza que incluso con jitter extremo, siempre haya imagen.
+        const bleedRatio = 3.0; 
+        const bleed = this.tabSize * bleedRatio;
+        
+        const scaleX = p.imgData.sw / this.pieceWidth;
+        const scaleY = p.imgData.sh / this.pieceHeight;
+
+        ctx.drawImage(
+            this.img, 
+            p.imgData.sx - (bleed * scaleX), 
+            p.imgData.sy - (bleed * scaleY), 
+            p.imgData.sw + (bleed * 2 * scaleX), 
+            p.imgData.sh + (bleed * 2 * scaleY), 
+            -bleed, 
+            -bleed, 
+            this.pieceWidth + (bleed * 2), 
+            this.pieceHeight + (bleed * 2)
+        );
+        
+        ctx.restore();
+
+        // Bordes
+        if (type !== 'locked') {
+            ctx.save();
+            ctx.translate(p.currentX, p.currentY);
+            if (type === 'selected') {
+                ctx.translate(this.pieceWidth/2, this.pieceHeight/2);
+                ctx.scale(1.05, 1.05);
+                ctx.translate(-this.pieceWidth/2, -this.pieceHeight/2);
+            }
+            ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = 1.5; ctx.stroke(p.path);
+            ctx.strokeStyle = "rgba(0,0,0,0.15)"; ctx.lineWidth = 1; ctx.stroke(p.path);
+            ctx.restore();
+        }
     }
 
     createPath(w, h, shape, jitter) {
@@ -289,7 +286,6 @@ export class PuzzleEngine {
         path.lineTo(x2, y2);
     }
 
-    /* --- RENDER --- */
     render() {
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
 
@@ -299,7 +295,6 @@ export class PuzzleEngine {
             this.ctx.drawImage(this.img, 0, 0, this.logicalWidth, this.logicalHeight);
             this.ctx.restore();
         } else {
-            // Guía tenue del tablero vacío
             this.ctx.strokeStyle = "rgba(255,255,255,0.05)";
             this.ctx.lineWidth = 2;
             this.ctx.strokeRect(0, 0, this.logicalWidth, this.logicalHeight);
@@ -323,60 +318,7 @@ export class PuzzleEngine {
         }
     }
 
-    renderPiece(p, type) {
-        const ctx = this.ctx;
-        ctx.save();
-        ctx.translate(p.currentX, p.currentY);
-
-        // Sombras
-        if (type !== 'locked') {
-            ctx.shadowColor = "rgba(0,0,0,0.3)";
-            ctx.shadowBlur = type === 'selected' ? 10 : 3;
-            ctx.shadowOffsetY = type === 'selected' ? 5 : 2;
-            if (type === 'selected') {
-                ctx.translate(this.pieceWidth/2, this.pieceHeight/2);
-                ctx.scale(1.05, 1.05);
-                ctx.translate(-this.pieceWidth/2, -this.pieceHeight/2);
-            }
-        } else {
-            ctx.shadowColor = "transparent";
-        }
-
-        ctx.clip(p.path);
-        
-        // --- SOLUCIÓN #1: HYPER BLEED ---
-        // Aumentamos drásticamente el margen de seguridad para evitar huecos.
-        // 35% del tamaño de la pieza (antes era ~20%)
-        const scaleX = p.imgData.sw / this.pieceWidth;
-        const scaleY = p.imgData.sh / this.pieceHeight;
-        
-        // Sangrado masivo para cubrir cualquier deformación Jitter
-        const bleed = Math.max(this.pieceWidth, this.pieceHeight) * 0.35;
-
-        ctx.drawImage(this.img, 
-            p.imgData.sx - (bleed*scaleX), p.imgData.sy - (bleed*scaleY), 
-            p.imgData.sw + (bleed*2*scaleX), p.imgData.sh + (bleed*2*scaleY), 
-            -bleed, -bleed, 
-            this.pieceWidth+(bleed*2), this.pieceHeight+(bleed*2)
-        );
-        ctx.restore();
-
-        // Bordes (Solo para piezas sueltas)
-        if (type !== 'locked') {
-            ctx.save();
-            ctx.translate(p.currentX, p.currentY);
-            if (type === 'selected') {
-                ctx.translate(this.pieceWidth/2, this.pieceHeight/2);
-                ctx.scale(1.05, 1.05);
-                ctx.translate(-this.pieceWidth/2, -this.pieceHeight/2);
-            }
-            ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = 1.5; ctx.stroke(p.path);
-            ctx.strokeStyle = "rgba(0,0,0,0.15)"; ctx.lineWidth = 1; ctx.stroke(p.path);
-            ctx.restore();
-        }
-    }
-
-    /* --- PARTICLES --- */
+    /* --- PARTICLES & UTILS --- */
     spawnParticles(x, y, type = 'spark') {
         const count = type === 'confetti' ? 50 : 10;
         const colors = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#ffffff'];
@@ -406,7 +348,7 @@ export class PuzzleEngine {
         this.ctx.globalAlpha = 1.0;
     }
 
-    /* --- INPUT HANDLING (Bounding Box) --- */
+    /* --- INPUT HANDLING --- */
     getPointerPos(e) {
         const rect = this.canvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -417,23 +359,18 @@ export class PuzzleEngine {
     handleStart(e) {
         e.preventDefault(); 
         const { x, y } = this.getPointerPos(e);
-        
         for (let i = this.pieces.length - 1; i >= 0; i--) {
             const p = this.pieces[i]; 
             if (p.isLocked) continue;
-            
-            const m = this.tabSize * 2.0; // Margen de toque aumentado para facilitar selección
+            const m = this.tabSize * 2.0; 
             if (x >= p.currentX - m && x <= p.currentX + this.pieceWidth + m && 
                 y >= p.currentY - m && y <= p.currentY + this.pieceHeight + m) {
-                
                 this.selectedPiece = p; 
                 this.isDragging = true;
                 this.dragOffsetX = x - p.currentX; 
                 this.dragOffsetY = y - p.currentY;
-                
                 this.pieces.splice(i, 1); 
                 this.pieces.push(p);
-                
                 if(this.callbacks.onSound) this.callbacks.onSound('click');
                 requestAnimationFrame(() => this.render()); 
                 return;
@@ -452,26 +389,18 @@ export class PuzzleEngine {
 
     handleEnd(e) {
         if (!this.isDragging || !this.selectedPiece) return;
-        
-        const dist = Math.hypot(
-            this.selectedPiece.currentX - this.selectedPiece.correctX, 
-            this.selectedPiece.currentY - this.selectedPiece.correctY
-        );
-        
+        const dist = Math.hypot(this.selectedPiece.currentX - this.selectedPiece.correctX, this.selectedPiece.currentY - this.selectedPiece.correctY);
         if (dist < this.pieceWidth * 0.3) {
             this.selectedPiece.currentX = this.selectedPiece.correctX;
             this.selectedPiece.currentY = this.selectedPiece.correctY;
             this.selectedPiece.isLocked = true;
             this.spawnParticles(this.selectedPiece.currentX + this.pieceWidth/2, this.selectedPiece.currentY + this.pieceHeight/2, 'spark');
-            
             if(this.callbacks.onSound) this.callbacks.onSound('snap');
             if(this.callbacks.onStateChange) this.callbacks.onStateChange();
-            
             this.checkVictory();
         } else {
             if(this.callbacks.onStateChange) this.callbacks.onStateChange();
         }
-
         this.isDragging = false;
         this.selectedPiece = null;
         requestAnimationFrame(() => this.render());
@@ -488,6 +417,21 @@ export class PuzzleEngine {
         }
     }
 
+    /* --- MISC --- */
+    exportState() { return this.pieces.map(p => ({ id: p.id, cx: p.currentX, cy: p.currentY, locked: p.isLocked })); }
+    importState(s) { if(!s) return; s.forEach(sp => { const p = this.pieces.find(x=>x.id===sp.id); if(p){ p.currentX=sp.cx; p.currentY=sp.cy; p.isLocked=sp.locked; } }); this.render(); }
+    togglePreview(a) { this.showPreview = a; this.render(); }
+    autoPlacePiece() {
+        const loose = this.pieces.filter(p => !p.isLocked);
+        if(loose.length === 0) return false;
+        const p = loose[Math.floor(Math.random()*loose.length)];
+        this.spawnParticles(p.correctX+this.pieceWidth/2, p.correctY+this.pieceHeight/2, 'gold');
+        p.currentX = p.correctX; p.currentY = p.correctY; p.isLocked = true;
+        if(this.callbacks.onSound) this.callbacks.onSound('snap');
+        this.checkVictory(); this.render();
+        return true;
+    }
+
     addEventListeners() {
         this.canvas.addEventListener('mousedown', this.handleStart);
         window.addEventListener('mousemove', this.handleMove);
@@ -495,10 +439,19 @@ export class PuzzleEngine {
         this.canvas.addEventListener('touchstart', this.handleStart, { passive: false });
         window.addEventListener('touchmove', this.handleMove, { passive: false });
         window.addEventListener('touchend', this.handleEnd);
-        
         if (!this._resizeObserver && typeof ResizeObserver !== 'undefined') {
             this._resizeObserver = new ResizeObserver(() => this.handleResize());
             this._resizeObserver.observe(this.canvas.parentElement);
         }
+    }
+
+    destroy() {
+        this.canvas.removeEventListener('mousedown', this.handleStart);
+        window.removeEventListener('mousemove', this.handleMove);
+        window.removeEventListener('mouseup', this.handleEnd);
+        this.canvas.removeEventListener('touchstart', this.handleStart);
+        window.removeEventListener('touchmove', this.handleMove);
+        window.removeEventListener('touchend', this.handleEnd);
+        if (this._resizeObserver) this._resizeObserver.disconnect();
     }
 }
