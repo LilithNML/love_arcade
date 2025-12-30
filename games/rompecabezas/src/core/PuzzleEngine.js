@@ -2,7 +2,7 @@
  * PuzzleEngine.js v8.0 - Anchor Point & Side Scatter
  * * MEJORAS CRÍTICAS:
  * 1. RENDERIZADO POR ANCLAJE: Se alinea el punto (0,0) del Path con el punto exacto de la imagen fuente.
- * Ya no importa cuánto se deforme la pieza o el sangrado, la imagen siempre coincidirá.
+ * Ya  no importa cuánto se deforme la pieza o el sangrado, la imagen siempre coincidirá.
  * 2. ORGANIZACIÓN LATERAL: Las piezas aparecen ordenadas en columnas a los lados (Left/Right columns).
  */
 
