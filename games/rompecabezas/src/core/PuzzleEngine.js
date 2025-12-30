@@ -1,6 +1,7 @@
 /**
- * PuzzleEngine.js v5.1 - Gold Master (Full)
- * Versión completa sin omisiones.
+ * PuzzleEngine.js v6.0
+ * - Fix Huecos: Aumento masivo del sangrado (Bleed) en drawImage.
+ * - Fix Desorden: Distribución "Smart Scatter" que despeja el centro.
  */
 
 export class PuzzleEngine {
@@ -8,30 +9,24 @@ export class PuzzleEngine {
         this.canvas = canvasElement;
         this.ctx = this.canvas.getContext('2d', { alpha: false });
         
-        // Configuración
         this.img = config.image;
         this.gridSize = Math.sqrt(config.pieces);
         this.callbacks = callbacks || {};
         
-        // Estado
         this.pieces = [];
         this.particles = []; 
         this.selectedPiece = null;
         this.isDragging = false;
         this.showPreview = false;
         
-        // Variables Input
         this.dragOffsetX = 0;
         this.dragOffsetY = 0;
         
-        // Jitter Seed
         this.jitterMap = []; 
         this.lastSound = 0;
-
-        // High DPI
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
         
-        // Binds (Ahora todas las funciones existen abajo)
+        // Binds
         this.handleStart = this.handleStart.bind(this);
         this.handleMove = this.handleMove.bind(this);
         this.handleEnd = this.handleEnd.bind(this);
@@ -44,7 +39,7 @@ export class PuzzleEngine {
         this.resizeCanvas();
         this.generateTopology();
         this.createPieces(); 
-        this.shufflePieces();
+        this.shufflePieces(); // Ahora usa lógica inteligente
         this.addEventListeners();
         requestAnimationFrame(() => this.render());
     }
@@ -83,8 +78,6 @@ export class PuzzleEngine {
         if (loosePieces.length === 0) return false;
 
         const piece = loosePieces[Math.floor(Math.random() * loosePieces.length)];
-        
-        // Efecto visual
         this.spawnParticles(piece.correctX + this.pieceWidth/2, piece.correctY + this.pieceHeight/2, 'gold');
         piece.currentX = piece.correctX;
         piece.currentY = piece.correctY;
@@ -96,7 +89,7 @@ export class PuzzleEngine {
         return true;
     }
 
-    /* --- CORE SETUP --- */
+    /* --- SETUP & RESIZE --- */
     handleResize() {
         this.resizeCanvas();
         this.createPiecesPathsOnly(); 
@@ -117,6 +110,7 @@ export class PuzzleEngine {
             cssWidth = cssHeight * imgRatio;
         }
 
+        // Importante: Dejar margen (85%) para tener espacio de trabajo
         cssWidth *= 0.85;
         cssHeight *= 0.85;
 
@@ -139,7 +133,6 @@ export class PuzzleEngine {
     generateTopology() {
         this.shapes = [];
         this.jitterMap = [];
-        
         for (let y = 0; y < this.gridSize; y++) {
             const row = [];
             const jitterRow = [];
@@ -151,7 +144,6 @@ export class PuzzleEngine {
                 if (x < this.gridSize - 1) right = Math.random() > 0.5 ? 1 : -1;
                 
                 row.push({ top, right, bottom, left });
-                
                 jitterRow.push({
                     top: (Math.random() - 0.5) * 0.2,
                     right: (Math.random() - 0.5) * 0.2,
@@ -173,7 +165,6 @@ export class PuzzleEngine {
             for (let x = 0; x < this.gridSize; x++) {
                 const shape = this.shapes[y][x];
                 const jitter = this.jitterMap[y][x];
-                
                 const path = this.createPath(this.pieceWidth, this.pieceHeight, shape, jitter);
 
                 this.pieces.push({
@@ -194,16 +185,82 @@ export class PuzzleEngine {
             p.path = this.createPath(this.pieceWidth, this.pieceHeight, p.shape, p.jitter);
             p.correctX = (p.id.split('-')[0]) * this.pieceWidth;
             p.correctY = (p.id.split('-')[1]) * this.pieceHeight;
-            
             if(p.isLocked) {
                 p.currentX = p.correctX;
                 p.currentY = p.correctY;
             } else {
-                // Mantener posición relativa si se redimensiona (simple clamp)
                 p.currentX = Math.min(p.currentX, this.logicalWidth - this.pieceWidth);
                 p.currentY = Math.min(p.currentY, this.logicalHeight - this.pieceHeight);
             }
         }
+    }
+
+    /* --- SOLUCIÓN #2: SMART SCATTER (Dispersión Inteligente) --- */
+    shufflePieces() {
+        // Definir la "Zona Prohibida" (El centro donde se arma el puzzle)
+        // Dejamos un margen del 10% alrededor del puzzle resuelto
+        const forbiddenZone = {
+            x: 0,
+            y: 0,
+            width: this.logicalWidth,
+            height: this.logicalHeight
+        };
+        
+        // Pero espera, logicalWidth es el tamaño del puzzle resuelto (con margins).
+        // Queremos poner las piezas ALREDEDOR si hay espacio, o distribuirlas uniformemente
+        // evitando que todas caigan en el centro exacto.
+        
+        this.pieces.forEach(p => {
+            p.isLocked = false;
+
+            // Estrategia: Dividir el canvas en 4 cuadrantes exteriores imaginarios
+            // O simplemente aleatorizar pero empujando hacia los bordes.
+            
+            // Random simple inicial
+            let rx = Math.random() * (this.logicalWidth - this.pieceWidth);
+            let ry = Math.random() * (this.logicalHeight - this.pieceHeight);
+            
+            // Si hay muchas piezas, intentar no apilar
+            // Añadimos un "ruido" dispersivo
+            p.currentX = rx;
+            p.currentY = ry;
+        });
+        
+        // MEJORA: Algoritmo de "Repulsión" simple para desapilarlas
+        // Ejecutamos varias pasadas para separar piezas que estén muy cerca
+        for(let k=0; k<5; k++) {
+            for(let i=0; i<this.pieces.length; i++) {
+                for(let j=i+1; j<this.pieces.length; j++) {
+                    const p1 = this.pieces[i];
+                    const p2 = this.pieces[j];
+                    const dx = p1.currentX - p2.currentX;
+                    const dy = p1.currentY - p2.currentY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const minDist = this.pieceWidth * 0.5; // Deben estar separadas al menos media pieza
+
+                    if(dist < minDist && dist > 0) {
+                        // Empujar en direcciones opuestas
+                        const angle = Math.atan2(dy, dx);
+                        const force = (minDist - dist) / 2;
+                        const pushX = Math.cos(angle) * force;
+                        const pushY = Math.sin(angle) * force;
+                        
+                        p1.currentX += pushX;
+                        p1.currentY += pushY;
+                        p2.currentX -= pushX;
+                        p2.currentY -= pushY;
+                    }
+                }
+            }
+        }
+
+        // Clamp final para que no se salgan de pantalla tras la repulsión
+        this.pieces.forEach(p => {
+            p.currentX = Math.max(0, Math.min(p.currentX, this.logicalWidth - this.pieceWidth));
+            p.currentY = Math.max(0, Math.min(p.currentY, this.logicalHeight - this.pieceHeight));
+        });
+
+        this.render();
     }
 
     createPath(w, h, shape, jitter) {
@@ -232,25 +289,20 @@ export class PuzzleEngine {
         path.lineTo(x2, y2);
     }
 
-    shufflePieces() {
-        this.pieces.forEach(p => {
-            p.currentX = Math.random() * (this.logicalWidth - this.pieceWidth);
-            p.currentY = Math.random() * (this.logicalHeight - this.pieceHeight);
-            p.isLocked = false;
-        });
-        this.render();
-    }
-
-    /* --- RENDERING --- */
+    /* --- RENDER --- */
     render() {
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
 
-        // Preview
         if (this.showPreview) {
             this.ctx.save();
             this.ctx.globalAlpha = 0.3;
             this.ctx.drawImage(this.img, 0, 0, this.logicalWidth, this.logicalHeight);
             this.ctx.restore();
+        } else {
+            // Guía tenue del tablero vacío
+            this.ctx.strokeStyle = "rgba(255,255,255,0.05)";
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(0, 0, this.logicalWidth, this.logicalHeight);
         }
 
         const locked = [], loose = [];
@@ -292,15 +344,24 @@ export class PuzzleEngine {
 
         ctx.clip(p.path);
         
-        // Bleed (Sangrado)
-        const sX = p.imgData.sw / this.pieceWidth;
-        const sY = p.imgData.sh / this.pieceHeight;
-        const bleed = this.tabSize * 1.5;
+        // --- SOLUCIÓN #1: HYPER BLEED ---
+        // Aumentamos drásticamente el margen de seguridad para evitar huecos.
+        // 35% del tamaño de la pieza (antes era ~20%)
+        const scaleX = p.imgData.sw / this.pieceWidth;
+        const scaleY = p.imgData.sh / this.pieceHeight;
+        
+        // Sangrado masivo para cubrir cualquier deformación Jitter
+        const bleed = Math.max(this.pieceWidth, this.pieceHeight) * 0.35;
 
-        ctx.drawImage(this.img, p.imgData.sx - (bleed*sX), p.imgData.sy - (bleed*sY), p.imgData.sw + (bleed*2*sX), p.imgData.sh + (bleed*2*sY), -bleed, -bleed, this.pieceWidth+(bleed*2), this.pieceHeight+(bleed*2));
+        ctx.drawImage(this.img, 
+            p.imgData.sx - (bleed*scaleX), p.imgData.sy - (bleed*scaleY), 
+            p.imgData.sw + (bleed*2*scaleX), p.imgData.sh + (bleed*2*scaleY), 
+            -bleed, -bleed, 
+            this.pieceWidth+(bleed*2), this.pieceHeight+(bleed*2)
+        );
         ctx.restore();
 
-        // Bordes
+        // Bordes (Solo para piezas sueltas)
         if (type !== 'locked') {
             ctx.save();
             ctx.translate(p.currentX, p.currentY);
@@ -319,7 +380,6 @@ export class PuzzleEngine {
     spawnParticles(x, y, type = 'spark') {
         const count = type === 'confetti' ? 50 : 10;
         const colors = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#ffffff'];
-        
         for (let i = 0; i < count; i++) {
             this.particles.push({
                 x: x, y: y,
@@ -335,19 +395,10 @@ export class PuzzleEngine {
 
     updateParticles() {
         if (this.particles.length === 0) return;
-        
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += 0.2; // Gravedad
-            p.life -= 0.02;
-            
-            if (p.life <= 0) {
-                this.particles.splice(i, 1);
-                continue;
-            }
-            
+            p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.02;
+            if (p.life <= 0) { this.particles.splice(i, 1); continue; }
             this.ctx.globalAlpha = p.life;
             this.ctx.fillStyle = p.color;
             this.ctx.fillRect(p.x, p.y, p.size, p.size);
@@ -367,13 +418,11 @@ export class PuzzleEngine {
         e.preventDefault(); 
         const { x, y } = this.getPointerPos(e);
         
-        // Iterar al revés para seleccionar la pieza superior visualmente
         for (let i = this.pieces.length - 1; i >= 0; i--) {
             const p = this.pieces[i]; 
             if (p.isLocked) continue;
             
-            // Hitbox generosa
-            const m = this.tabSize * 1.5;
+            const m = this.tabSize * 2.0; // Margen de toque aumentado para facilitar selección
             if (x >= p.currentX - m && x <= p.currentX + this.pieceWidth + m && 
                 y >= p.currentY - m && y <= p.currentY + this.pieceHeight + m) {
                 
@@ -382,7 +431,6 @@ export class PuzzleEngine {
                 this.dragOffsetX = x - p.currentX; 
                 this.dragOffsetY = y - p.currentY;
                 
-                // Traer al frente
                 this.pieces.splice(i, 1); 
                 this.pieces.push(p);
                 
@@ -410,7 +458,6 @@ export class PuzzleEngine {
             this.selectedPiece.currentY - this.selectedPiece.correctY
         );
         
-        // Snap Threshold
         if (dist < this.pieceWidth * 0.3) {
             this.selectedPiece.currentX = this.selectedPiece.correctX;
             this.selectedPiece.currentY = this.selectedPiece.correctY;
@@ -453,15 +500,5 @@ export class PuzzleEngine {
             this._resizeObserver = new ResizeObserver(() => this.handleResize());
             this._resizeObserver.observe(this.canvas.parentElement);
         }
-    }
-
-    destroy() {
-        this.canvas.removeEventListener('mousedown', this.handleStart);
-        window.removeEventListener('mousemove', this.handleMove);
-        window.removeEventListener('mouseup', this.handleEnd);
-        this.canvas.removeEventListener('touchstart', this.handleStart);
-        window.removeEventListener('touchmove', this.handleMove);
-        window.removeEventListener('touchend', this.handleEnd);
-        if (this._resizeObserver) this._resizeObserver.disconnect();
     }
 }
