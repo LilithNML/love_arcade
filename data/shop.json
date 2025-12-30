@@ -4,23 +4,79 @@
     "name": "Dibujo",
     "desc": "Dibujo de Furina hecho especialmente para ti",
     "price": 800,
-    "stock": 1,
-    "image": "https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=400&q=80"
+    "stock": 0,
+    "image": "https://via.placeholder.com/400x400?text=Pr%C3%B3ximamente"
   },
   {
     "id": 2,
     "name": "Dibujo",
     "desc": "Dibujo de Hu Tao hecho especialmente para ti",
     "price": 250,
-    "stock": 1,
-    "image": "https://wallpapercave.com/wp/wp5924545.jpg"
+    "stock": 0,
+    "image": "https://via.placeholder.com/400x400?text=Pr%C3%B3ximamente"
   },
   {
     "id": 3,
     "name": "Crunchyroll",
     "desc": "Cuenta compartida",
     "price": 150,
-    "stock": 1,
-    "image": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=400&q=80"
+    "stock": 0,
+    "image": "https://via.placeholder.com/400x400?text=Pr%C3%B3ximamente"
+  },
+  {
+    "id": 4,
+    "name": "Wallpaper",
+    "desc": "Wallpaper exclusivo hecho por mí",
+    "price": 200,
+    "stock": 0,
+    "image": "https://via.placeholder.com/400x400?text=Pr%C3%B3ximamente"
+  },
+  {
+    "id": 5,
+    "name": "Carta",
+    "desc": "Carta digital escrita especialmente para ti",
+    "price": 100,
+    "stock": 0,
+    "image": "https://via.placeholder.com/400x400?text=Pr%C3%B3ximamente"
+  },
+  {
+    "id": 6,
+    "name": "Juego",
+    "desc": "Elegir el próximo juego para jugar juntos",
+    "price": 300,
+    "stock": 0,
+    "image": "https://via.placeholder.com/400x400?text=Pr%C3%B3ximamente"
+  },
+  {
+    "id": 7,
+    "name": "Película",
+    "desc": "Elegir película o serie para ver juntos",
+    "price": 250,
+    "stock": 0,
+    "image": "https://via.placeholder.com/400x400?text=Pr%C3%B3ximamente"
+  },
+  {
+    "id": 8,
+    "name": "Video",
+    "desc": "Video especial grabado para ti",
+    "price": 180,
+    "stock": 0,
+    "image": "https://via.placeholder.com/400x400?text=Pr%C3%B3ximamente"
+  },
+  {
+    "id": 9,
+    "name": "Sorpresa",
+    "desc": "Sorpresa misteriosa",
+    "price": 400,
+    "stock": 0,
+    "image": "https://via.placeholder.com/400x400?text=Pr%C3%B3ximamente"
+  },
+  {
+    "id": 10,
+    "name": "Peluche",
+    "desc": "Peluche pequeño enviado con amor",
+    "price": 600,
+    "stock": 0,
+    "image": "https://via.placeholder.com/400x400?text=Pr%C3%B3ximamente"
   }
 ]
