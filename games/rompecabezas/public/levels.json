@@ -18,7 +18,7 @@
   {
     "id": "lvl_3",
     "image": "./assets/Nivel3.webp",
-    "pieces": 16,
+    "pieces": 48,
     "rewardCoins": 200,
     "description": "Desafío Hardcore",
     "timeLimit": 120
