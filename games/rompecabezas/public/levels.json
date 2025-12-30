@@ -3,24 +3,80 @@
     "id": "lvl_1",
     "image": "./assets/Nivel1.webp",
     "pieces": 4,
-    "rewardCoins": 50,
-    "description": "Tutorial (Sin tiempo)",
-    "timeLimit": 0 
+    "rewardCoins": 20,
+    "description": "Introducción básica",
+    "timeLimit": 0
   },
   {
     "id": "lvl_2",
     "image": "./assets/Nivel2.webp",
-    "pieces": 9,
-    "rewardCoins": 100,
-    "description": "Contrarreloj: 60 seg",
-    "timeLimit": 60 
+    "pieces": 6,
+    "rewardCoins": 40,
+    "description": "Primer desafío",
+    "timeLimit": 0
   },
   {
     "id": "lvl_3",
     "image": "./assets/Nivel3.webp",
+    "pieces": 9,
+    "rewardCoins": 70,
+    "description": "Un poco más complejo",
+    "timeLimit": 0
+  },
+  {
+    "id": "lvl_4",
+    "image": "./assets/Nivel4.webp",
+    "pieces": 12,
+    "rewardCoins": 100,
+    "description": "Atención al detalle",
+    "timeLimit": 0
+  },
+  {
+    "id": "lvl_5",
+    "image": "./assets/Nivel5.webp",
+    "pieces": 16,
+    "rewardCoins": 140,
+    "description": "Dificultad media",
+    "timeLimit": 0
+  },
+  {
+    "id": "lvl_6",
+    "image": "./assets/Nivel6.webp",
+    "pieces": 20,
+    "rewardCoins": 180,
+    "description": "Empieza el reto",
+    "timeLimit": 0
+  },
+  {
+    "id": "lvl_7",
+    "image": "./assets/Nivel7.webp",
+    "pieces": 25,
+    "rewardCoins": 220,
+    "description": "Nivel avanzado",
+    "timeLimit": 0
+  },
+  {
+    "id": "lvl_8",
+    "image": "./assets/Nivel8.webp",
+    "pieces": 30,
+    "rewardCoins": 250,
+    "description": "Alta concentración",
+    "timeLimit": 0
+  },
+  {
+    "id": "lvl_9",
+    "image": "./assets/Nivel9.webp",
+    "pieces": 36,
+    "rewardCoins": 280,
+    "description": "Desafío experto",
+    "timeLimit": 0
+  },
+  {
+    "id": "lvl_10",
+    "image": "./assets/Nivel10.webp",
     "pieces": 48,
-    "rewardCoins": 200,
-    "description": "Desafío Hardcore",
-    "timeLimit": 120
+    "rewardCoins": 300,
+    "description": "Reto final",
+    "timeLimit": 0
   }
 ]
