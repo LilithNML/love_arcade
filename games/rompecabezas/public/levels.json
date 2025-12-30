@@ -10,7 +10,7 @@
   {
     "id": "lvl_2",
     "image": "./assets/Nivel2.webp",
-    "pieces": 6,
+    "pieces": 9,
     "rewardCoins": 40,
     "description": "Primer desafío",
     "timeLimit": 0
@@ -26,7 +26,7 @@
   {
     "id": "lvl_4",
     "image": "./assets/Nivel4.webp",
-    "pieces": 12,
+    "pieces": 16,
     "rewardCoins": 100,
     "description": "Atención al detalle",
     "timeLimit": 0
@@ -42,7 +42,7 @@
   {
     "id": "lvl_6",
     "image": "./assets/Nivel6.webp",
-    "pieces": 20,
+    "pieces": 25,
     "rewardCoins": 180,
     "description": "Empieza el reto",
     "timeLimit": 0
@@ -58,7 +58,7 @@
   {
     "id": "lvl_8",
     "image": "./assets/Nivel8.webp",
-    "pieces": 30,
+    "pieces": 36,
     "rewardCoins": 250,
     "description": "Alta concentración",
     "timeLimit": 0
@@ -74,11 +74,11 @@
   {
     "id": "lvl_10",
     "image": "./assets/Nivel10.webp",
-    "pieces": 48,
+    "pieces": 49,
     "rewardCoins": 300,
     "description": "Reto final",
     "timeLimit": 0
-  }
+  },
   {
     "id": "lvl_11",
     "image": "./assets/Nivel11.webp",
@@ -90,7 +90,7 @@
   {
     "id": "lvl_12",
     "image": "./assets/Nivel12.webp",
-    "pieces": 40,
+    "pieces": 36,
     "rewardCoins": 1,
     "description": "Nada garantizado",
     "timeLimit": 0
@@ -98,7 +98,7 @@
   {
     "id": "lvl_13",
     "image": "./assets/Nivel13.webp",
-    "pieces": 42,
+    "pieces": 49,
     "rewardCoins": 260,
     "description": "El doble golpe",
     "timeLimit": 0
@@ -106,7 +106,7 @@
   {
     "id": "lvl_14",
     "image": "./assets/Nivel14.webp",
-    "pieces": 38,
+    "pieces": 36,
     "rewardCoins": 200,
     "description": "Constancia silenciosa",
     "timeLimit": 0
@@ -114,7 +114,7 @@
   {
     "id": "lvl_15",
     "image": "./assets/Nivel15.webp",
-    "pieces": 45,
+    "pieces": 49,
     "rewardCoins": 300,
     "description": "Recompensa máxima",
     "timeLimit": 0
@@ -122,7 +122,7 @@
   {
     "id": "lvl_16",
     "image": "./assets/Nivel16.webp",
-    "pieces": 48,
+    "pieces": 49,
     "rewardCoins": 5,
     "description": "El engaño",
     "timeLimit": 0
@@ -130,7 +130,7 @@
   {
     "id": "lvl_17",
     "image": "./assets/Nivel17.webp",
-    "pieces": 40,
+    "pieces": 36,
     "rewardCoins": 250,
     "description": "Rebote inesperado",
     "timeLimit": 0
@@ -138,7 +138,7 @@
   {
     "id": "lvl_18",
     "image": "./assets/Nivel18.webp",
-    "pieces": 44,
+    "pieces": 49,
     "rewardCoins": 200,
     "description": "Nada fácil",
     "timeLimit": 0
@@ -146,7 +146,7 @@
   {
     "id": "lvl_19",
     "image": "./assets/Nivel19.webp",
-    "pieces": 46,
+    "pieces": 49,
     "rewardCoins": 290,
     "description": "Casi todo",
     "timeLimit": 0
@@ -154,7 +154,7 @@
   {
     "id": "lvl_20",
     "image": "./assets/Nivel20.webp",
-    "pieces": 48,
+    "pieces": 49,
     "rewardCoins": 300,
     "description": "El cierre perfecto",
     "timeLimit": 0
