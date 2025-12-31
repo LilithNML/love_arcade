@@ -1,31 +1,40 @@
 /**
- * PuzzleEngine.js v10.0 - Performance & Visual Mastery
- * * MEJORAS DE RENDIMIENTO:
- * - Double Buffering: Usa un canvas en memoria (staticCanvas) para las piezas bloqueadas.
- * - Render Loop Inteligente: Solo dibuja lo que se mueve.
- * * MEJORAS VISUALES:
- * - Seam Healing: Micro-traslape en piezas bloqueadas para eliminar líneas de unión.
- * - Imagen Lisa: El resultado final se ve como una sola foto, no como un rompecabezas.
+ * PuzzleEngine.js v11.0 
+ * * OPTIMIZACIÓN CRÍTICA (High-Res Images):
+ * - Source Canvas: Pre-escala la imagen gigante al tamaño del tablero una sola vez.
+ * Esto elimina el costoso downsampling en tiempo real de imágenes 4K/WebP.
+ * * OPTIMIZACIONES DE LOOP:
+ * - List Caching: Cachea listas de 'locked' y 'loose' para evitar .filter() en cada frame.
+ * - Dynamic Shadows: Reduce calidad de sombras en tableros densos.
+ * - Particle Throttling: Limita partículas si hay muchas piezas.
  */
 
 export class PuzzleEngine {
     constructor(canvasElement, config, callbacks) {
         this.canvas = canvasElement;
-        // alpha: false mejora rendimiento al decirle al navegador que no hay transparencia detrás del canvas
         this.ctx = this.canvas.getContext('2d', { alpha: false });
         
-        this.img = config.image;
+        this.img = config.image; // Imagen original (potencialmente gigante)
         this.gridSize = Math.sqrt(config.pieces);
         this.callbacks = callbacks || {};
         
-        // --- DOBLE BUFFERING (CLAVE PARA RENDIMIENTO) ---
-        // Este canvas nunca se muestra en el DOM, vive en la memoria RAM
+        // --- DOBLE BUFFERING (Capas) ---
+        // 1. Static Canvas: Fondo + Piezas bloqueadas (Ya implementado en v10)
         this.staticCanvas = document.createElement('canvas');
-        this.staticCtx = this.staticCanvas.getContext('2d', { alpha: true }); // Alpha true para capas
-        this.needsStaticUpdate = true; // Bandera para redibujar el fondo solo cuando sea necesario
+        this.staticCtx = this.staticCanvas.getContext('2d', { alpha: true });
+        
+        // 2. Source Canvas (NUEVO): Buffer pre-escalado de la imagen original
+        //    Evita reescalar una imagen de 40MB en cada frame.
+        this.sourceCanvas = document.createElement('canvas');
+        this.sourceCtx = this.sourceCanvas.getContext('2d', { alpha: false });
+
+        this.needsStaticUpdate = true;
 
         // Estado
         this.pieces = [];
+        this.lockedPieces = []; // Cache
+        this.loosePieces = [];  // Cache
+        
         this.particles = []; 
         this.selectedPiece = null;
         this.isDragging = false;
@@ -39,9 +48,11 @@ export class PuzzleEngine {
         
         this.lastSound = 0;
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-        
-        // Loop Control (Para detener render si no hay actividad)
         this.isActive = true; 
+
+        // Configuración de rendimiento dinámica
+        this.shadowBlur = this.gridSize > 6 ? 2 : 5; // Menos blur en puzzles grandes
+        this.particleLimit = this.gridSize > 6 ? 30 : 60;
 
         // Binds
         this.handleStart = this.handleStart.bind(this);
@@ -53,22 +64,18 @@ export class PuzzleEngine {
     }
 
     init() {
-        this.resizeCanvas();
+        this.resizeCanvas(); // Aquí se genera el sourceCanvas
         this.generateSharedTopology();
         this.createPieces(); 
         this.shufflePieces(); 
         this.addEventListeners();
-        this.animate(); // Iniciar loop optimizado
+        this.animate(); 
     }
 
-    /* --- RENDIMIENTO: GAME LOOP OPTIMIZADO --- */
     animate() {
         if (!this.isActive) return;
 
-        // Solo renderizar si:
-        // 1. Estamos arrastrando una pieza
-        // 2. Hay partículas vivas (animación)
-        // 3. Se solicitó una actualización forzada (resize, preview, init)
+        // Render bajo demanda
         if (this.isDragging || this.particles.length > 0 || this.needsStaticUpdate || this.showPreview) {
             this.render();
         }
@@ -76,13 +83,12 @@ export class PuzzleEngine {
         requestAnimationFrame(() => this.animate());
     }
 
-    /* --- SETUP & RESIZE --- */
     handleResize() {
         this.resizeCanvas();
         this.createPiecesPathsOnly(); 
         this.shufflePieces(true);
-        this.needsStaticUpdate = true; // Forzar redibujado del fondo
-        this.render(); // Render inmediato
+        this.needsStaticUpdate = true; 
+        this.render(); 
     }
 
     resizeCanvas() {
@@ -103,20 +109,18 @@ export class PuzzleEngine {
         cssWidth *= workAreaScale;
         cssHeight *= workAreaScale;
 
-        // Configurar Main Canvas
+        // Configurar Main & Static Canvas
         this.canvas.width = parent.clientWidth * this.dpr;
         this.canvas.height = parent.clientHeight * this.dpr;
         this.canvas.style.width = "100%";
         this.canvas.style.height = "100%";
         this.ctx.scale(this.dpr, this.dpr);
 
-        // Configurar Static Canvas (Mismo tamaño lógico)
-        // No necesita estilo CSS ni scale dpr porque lo usamos como imagen fuente
         this.staticCanvas.width = this.canvas.width; 
         this.staticCanvas.height = this.canvas.height;
         this.staticCtx.scale(this.dpr, this.dpr);
 
-        // Métricas
+        // Métricas del Tablero
         this.boardWidth = cssWidth;
         this.boardHeight = cssHeight;
         this.boardX = Math.round((parent.clientWidth - cssWidth) / 2);
@@ -125,43 +129,65 @@ export class PuzzleEngine {
         this.pieceWidth = this.boardWidth / this.gridSize;
         this.pieceHeight = this.boardHeight / this.gridSize;
         this.tabSize = Math.min(this.pieceWidth, this.pieceHeight) * 0.25;
-        
         this.logicalWidth = parent.clientWidth;
         this.logicalHeight = parent.clientHeight;
+
+        // --- OPTIMIZACIÓN CRÍTICA: SOURCE CANVAS ---
+        // Pre-escalamos la imagen gigante al tamaño exacto que tendrá en el tablero.
+        // Esto reduce el consumo de memoria efectiva de pintado y acelera la GPU.
+        this.sourceCanvas.width = Math.ceil(this.boardWidth * this.dpr); // Usar resolución real
+        this.sourceCanvas.height = Math.ceil(this.boardHeight * this.dpr);
+        
+        // Dibujamos la imagen original redimensionada UNA SOLA VEZ
+        this.sourceCtx.clearRect(0, 0, this.sourceCanvas.width, this.sourceCanvas.height);
+        this.sourceCtx.drawImage(
+            this.img, 
+            0, 0, 
+            this.sourceCanvas.width, 
+            this.sourceCanvas.height
+        );
+        
+        // Nota: sourceCanvas está en resolución de dispositivo (high dpi), 
+        // pero sourceCtx no está escalado, trabajamos en pixeles físicos para nitidez máxima.
     }
 
     /* --- RENDERIZADO PRINCIPAL --- */
     render() {
-        // 1. Actualizar Buffer Estático (Si hubo cambios)
+        // 1. Actualizar Buffer Estático
         if (this.needsStaticUpdate) {
             this.updateStaticLayer();
             this.needsStaticUpdate = false;
         }
 
-        // 2. Limpiar Canvas Visible
+        // 2. Limpiar
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
 
-        // 3. Dibujar Buffer Estático (Fondo + Piezas Bloqueadas)
-        // Esto pinta TODAS las piezas armadas en una sola operación ultrarrápida
-        this.ctx.drawImage(
-            this.staticCanvas, 
-            0, 0, this.logicalWidth, this.logicalHeight
-        );
+        // 3. Dibujar Fondo Estático (1 sola llamada a GPU)
+        this.ctx.drawImage(this.staticCanvas, 0, 0, this.logicalWidth, this.logicalHeight);
 
-        // 4. Vista Previa (Fantasma)
+        // 4. Preview
         if (this.showPreview) {
             this.ctx.save();
             this.ctx.globalAlpha = 0.3;
-            this.ctx.drawImage(this.img, this.boardX, this.boardY, this.boardWidth, this.boardHeight);
+            // Usamos sourceCanvas para preview también (es más rápido)
+            this.ctx.drawImage(
+                this.sourceCanvas, 
+                0, 0, this.sourceCanvas.width, this.sourceCanvas.height,
+                this.boardX, this.boardY, this.boardWidth, this.boardHeight
+            );
             this.ctx.restore();
         }
 
-        // 5. Dibujar Piezas Sueltas (Dinámicas)
-        // Filtramos para dibujar solo las que NO están bloqueadas
-        const loosePieces = this.pieces.filter(p => !p.isLocked && p !== this.selectedPiece);
-        loosePieces.forEach(p => this.renderPieceToContext(this.ctx, p, false));
+        // 5. Piezas Sueltas (Usando cache)
+        // Filtramos la seleccionada del cache loosePieces para no dibujarla dos veces
+        for(let i=0; i<this.loosePieces.length; i++) {
+            const p = this.loosePieces[i];
+            if(p !== this.selectedPiece) {
+                this.renderPieceToContext(this.ctx, p, false);
+            }
+        }
 
-        // 6. Dibujar Pieza Seleccionada (Tope)
+        // 6. Pieza Seleccionada
         if (this.selectedPiece) {
             this.renderPieceToContext(this.ctx, this.selectedPiece, true);
         }
@@ -170,36 +196,20 @@ export class PuzzleEngine {
         this.updateParticles();
     }
 
-    /**
-     * Dibuja el fondo estático: Tablero vacío + Piezas ya colocadas.
-     * Esta función es pesada pero solo se llama cuando una pieza encaja.
-     */
     updateStaticLayer() {
         const ctx = this.staticCtx;
-        
-        // Limpiar
         ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
 
-        // Dibujar borde del tablero (Guía)
         ctx.strokeStyle = "rgba(255,255,255,0.1)";
         ctx.lineWidth = 2;
         ctx.strokeRect(Math.round(this.boardX), Math.round(this.boardY), Math.round(this.boardWidth), Math.round(this.boardHeight));
 
-        // Dibujar TODAS las piezas bloqueadas
-        // IMPORTANTE: Al dibujarlas aquí, aplicamos el "Seam Healing"
-        const lockedPieces = this.pieces.filter(p => p.isLocked);
-        lockedPieces.forEach(p => {
-            this.renderPieceToContext(ctx, p, false, true); // true = isStaticRender
-        });
+        // Dibujar cache de Locked Pieces
+        for(let i=0; i<this.lockedPieces.length; i++) {
+            this.renderPieceToContext(ctx, this.lockedPieces[i], false, true);
+        }
     }
 
-    /**
-     * Renderizador Universal de Pieza
-     * @param ctx - Contexto donde dibujar (Main o Static)
-     * @param p - Objeto pieza
-     * @param isSelected - Si está siendo arrastrada
-     * @param isStaticRender - Si estamos renderizando para el buffer estático (para aplicar fixes visuales)
-     */
     renderPieceToContext(ctx, p, isSelected, isStaticRender = false) {
         ctx.save();
         
@@ -207,59 +217,59 @@ export class PuzzleEngine {
         const drawY = Math.round(p.currentY);
         ctx.translate(drawX, drawY);
 
-        // Sombras (Solo si NO es render estático y NO está bloqueada)
+        // Sombra Dinámica (Optimizada)
         if (!isStaticRender && !p.isLocked) {
             ctx.shadowColor = "rgba(0,0,0,0.4)";
-            ctx.shadowBlur = isSelected ? 15 : 5;
+            ctx.shadowBlur = isSelected ? 15 : this.shadowBlur; // Blur reducido si hay muchas piezas
             ctx.shadowOffsetY = isSelected ? 8 : 2;
             if (isSelected) {
-                // Escala visual al levantar
                 ctx.translate(this.pieceWidth/2, this.pieceHeight/2);
                 ctx.scale(1.1, 1.1);
                 ctx.translate(-this.pieceWidth/2, -this.pieceHeight/2);
             }
         }
 
-        // --- SEAM HEALING (SOLUCIÓN "IMAGEN LISA") ---
-        // Si es render estático (pieza bloqueada), dibujamos un borde extra
-        // alrededor del path para que se solape con sus vecinas.
-        if (isStaticRender) {
-            ctx.lineWidth = 1; // 1px de solapamiento
-            ctx.strokeStyle = "rgba(0,0,0,0)"; // Truco: Stroke invisible pero expande el área de clip? No.
-            // Mejor estrategia: Inflar el path ligeramente?
-            // Haremos algo más simple: NO dibujamos borde stroke en estático.
-            // La magia ocurre en el drawImage de abajo.
-        }
-
         ctx.clip(p.path);
 
-        // --- RENDERIZADO DE IMAGEN ---
-        const scaleX = this.boardWidth / this.img.width;
-        const scaleY = this.boardHeight / this.img.height;
-
-        // Margen base
-        let margin = Math.max(this.pieceWidth, this.pieceHeight);
+        // --- RENDERIZADO OPTIMIZADO USANDO SOURCE CANVAS ---
+        // Ya no calculamos ratios respecto a this.img.width, sino respecto al sourceCanvas pre-escalado.
         
-        // TRUCO FINAL: Si es estático, dibujamos la imagen 0.5px más grande/desplazada
-        // para cubrir el antialiasing del borde.
+        const margin = Math.max(this.pieceWidth, this.pieceHeight);
         let overlapFix = isStaticRender ? 0.6 : 0; 
 
-        const srcRectX = p.srcOriginX - (margin / scaleX);
-        const srcRectY = p.srcOriginY - (margin / scaleY);
-        const srcRectW = p.srcPieceW + (margin * 2 / scaleX);
-        const srcRectH = p.srcPieceH + (margin * 2 / scaleY);
+        // Cálculo de coordenadas en el Source Canvas (Pre-escalado)
+        // Como el sourceCanvas tiene el tamaño exacto del tablero (multiplicado por dpr),
+        // las coordenadas son proporcionales a la posición de la pieza en el grid.
+        
+        // Ancho/Alto de pieza en el sourceCanvas
+        const srcPieceW_SC = (this.sourceCanvas.width / this.gridSize);
+        const srcPieceH_SC = (this.sourceCanvas.height / this.gridSize);
+        
+        // Origen de la pieza en sourceCanvas
+        const srcOriginX_SC = p.gridX * srcPieceW_SC;
+        const srcOriginY_SC = p.gridY * srcPieceH_SC;
 
+        // Factor de escala entre canvas lógico y sourceCanvas (dpr)
+        const scaleToSource = this.dpr; // sourceCanvas es boardWidth * dpr
+
+        // Coordenadas Source (en sourceCanvas)
+        const srcX = srcOriginX_SC - (margin * scaleToSource);
+        const srcY = srcOriginY_SC - (margin * scaleToSource);
+        const srcW = srcPieceW_SC + (margin * 2 * scaleToSource);
+        const srcH = srcPieceH_SC + (margin * 2 * scaleToSource);
+
+        // Coordenadas Destino (en canvas lógico local 0,0)
         const dstX = -margin - overlapFix;
         const dstY = -margin - overlapFix;
         const dstW = this.pieceWidth + (margin * 2) + (overlapFix * 2);
         const dstH = this.pieceHeight + (margin * 2) + (overlapFix * 2);
 
-        ctx.drawImage(this.img, srcRectX, srcRectY, srcRectW, srcRectH, dstX, dstY, dstW, dstH);
+        // DIBUJAR DESDE CACHE PRE-ESCALADO (RÁPIDO ⚡)
+        ctx.drawImage(this.sourceCanvas, srcX, srcY, srcW, srcH, dstX, dstY, dstW, dstH);
 
         ctx.restore();
 
-        // BORDES VISUALES (Solo para piezas sueltas)
-        // Si está bloqueada (static), NO dibujamos borde para que se vea lisa.
+        // Bordes (Solo sueltas)
         if (!isStaticRender && !p.isLocked) {
             ctx.save();
             ctx.translate(drawX, drawY);
@@ -274,7 +284,44 @@ export class PuzzleEngine {
         }
     }
 
-    /* --- TOPOLOGÍA Y CREACIÓN (Igual que v9, funciona bien) --- */
+    /* --- GESTIÓN DE PIEZAS & CACHE --- */
+    updatePieceCaches() {
+        this.lockedPieces = this.pieces.filter(p => p.isLocked);
+        this.loosePieces = this.pieces.filter(p => !p.isLocked);
+    }
+
+    createPieces() {
+        this.pieces = [];
+        // Ya no necesitamos srcOrigin de la imagen original para el render loop,
+        // pero lo guardamos por si acaso necesitamos referencia absoluta.
+        for (let y = 0; y < this.gridSize; y++) {
+            for (let x = 0; x < this.gridSize; x++) {
+                const shape = this.shapes[y][x];
+                // Jitter compartido desde matrices globales
+                const jitter = {
+                    top: this.horizontalEdges[y][x],
+                    bottom: this.horizontalEdges[y+1][x],
+                    left: this.verticalEdges[y][x],
+                    right: this.verticalEdges[y][x+1]
+                };
+                
+                const path = this.createPath(this.pieceWidth, this.pieceHeight, shape, jitter);
+
+                this.pieces.push({
+                    id: `${x}-${y}`,
+                    gridX: x, gridY: y,
+                    correctX: this.boardX + (x * this.pieceWidth),
+                    correctY: this.boardY + (y * this.pieceHeight),
+                    currentX: 0, currentY: 0,
+                    isLocked: false,
+                    shape, jitter, path
+                });
+            }
+        }
+        this.updatePieceCaches();
+    }
+
+    /* --- TOPOLOGÍA, SCATTER Y EVENTOS (Igual v9) --- */
     generateSharedTopology() {
         const jitterStrength = this.gridSize > 6 ? 0.08 : 0.15;
         this.shapes = [];
@@ -310,38 +357,6 @@ export class PuzzleEngine {
         }
     }
 
-    createPieces() {
-        this.pieces = [];
-        const srcPieceW = this.img.width / this.gridSize;
-        const srcPieceH = this.img.height / this.gridSize;
-
-        for (let y = 0; y < this.gridSize; y++) {
-            for (let x = 0; x < this.gridSize; x++) {
-                const shape = this.shapes[y][x];
-                const jitter = {
-                    top: this.horizontalEdges[y][x],
-                    bottom: this.horizontalEdges[y+1][x],
-                    left: this.verticalEdges[y][x],
-                    right: this.verticalEdges[y][x+1]
-                };
-                const path = this.createPath(this.pieceWidth, this.pieceHeight, shape, jitter);
-                this.pieces.push({
-                    id: `${x}-${y}`,
-                    gridX: x, gridY: y,
-                    correctX: this.boardX + (x * this.pieceWidth),
-                    correctY: this.boardY + (y * this.pieceHeight),
-                    currentX: 0, currentY: 0,
-                    isLocked: false,
-                    shape, jitter, path,
-                    srcOriginX: x * srcPieceW,
-                    srcOriginY: y * srcPieceH,
-                    srcPieceW: srcPieceW,
-                    srcPieceH: srcPieceH
-                });
-            }
-        }
-    }
-
     createPiecesPathsOnly() {
         for (let p of this.pieces) {
             p.path = this.createPath(this.pieceWidth, this.pieceHeight, p.shape, p.jitter);
@@ -355,7 +370,9 @@ export class PuzzleEngine {
     }
 
     shufflePieces(repositionOnly = false) {
-        const loosePieces = this.pieces.filter(p => !p.isLocked);
+        this.updatePieceCaches(); // Asegurar cache antes de iterar
+        const loose = this.loosePieces;
+        
         const leftLimit = this.boardX - this.pieceWidth; 
         const rightStart = this.boardX + this.boardWidth + 10;
         const topMargin = 80;
@@ -364,7 +381,7 @@ export class PuzzleEngine {
         const overlapY = this.pieceHeight * 0.4;
         const slotsPerColumn = Math.ceil(availHeight / overlapY);
         
-        loosePieces.forEach((p, i) => {
+        loose.forEach((p, i) => {
             if (repositionOnly && p.isLocked) return;
             p.isLocked = false;
             const isLeft = i % 2 === 0;
@@ -384,11 +401,13 @@ export class PuzzleEngine {
             p.currentX = posX + (Math.random() * 5);
             p.currentY = posY + (Math.random() * 5);
         });
+        
+        this.updatePieceCaches(); // Actualizar después de shuffle
         this.needsStaticUpdate = true;
         this.render();
     }
 
-    /* --- CURVAS --- */
+    // Bézier Standard
     createPath(w, h, shape, jitter) {
         const path = new Path2D();
         const t = this.tabSize; 
@@ -413,19 +432,65 @@ export class PuzzleEngine {
         path.lineTo(x2, y2);
     }
 
-    /* --- INPUT & EVENTS --- */
+    // Input Handling
+    getPointerPos(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+    handleStart(e) {
+        e.preventDefault(); 
+        const { x, y } = this.getPointerPos(e);
+        
+        // Iterar solo sobre piezas sueltas (optimización)
+        // Usar iteración inversa para seleccionar la de arriba
+        for (let i = this.loosePieces.length - 1; i >= 0; i--) {
+            const p = this.loosePieces[i]; 
+            const m = this.tabSize * 2.0; 
+            if (x >= p.currentX - m && x <= p.currentX + this.pieceWidth + m && 
+                y >= p.currentY - m && y <= p.currentY + this.pieceHeight + m) {
+                
+                this.selectedPiece = p; 
+                this.isDragging = true;
+                this.dragOffsetX = x - p.currentX; 
+                this.dragOffsetY = y - p.currentY;
+                
+                // Mover al frente visual (reordenar array y caché)
+                // 1. Quitar de loosePieces
+                this.loosePieces.splice(i, 1);
+                // 2. Poner al final
+                this.loosePieces.push(p);
+                // 3. (Opcional) Sincronizar array principal si fuera necesario, 
+                // pero como renderizamos desde loosePieces, esto basta visualmente.
+                
+                if(this.callbacks.onSound) this.callbacks.onSound('click');
+                this.render(); // Render forzado para feedback inmediato
+                return;
+            }
+        }
+    }
+    handleMove(e) {
+        if (!this.isDragging || !this.selectedPiece) return;
+        e.preventDefault(); 
+        const { x, y } = this.getPointerPos(e);
+        this.selectedPiece.currentX = x - this.dragOffsetX;
+        this.selectedPiece.currentY = y - this.dragOffsetY;
+        // No llamamos render(), el loop animate() se encarga
+    }
     handleEnd(e) {
         if (!this.isDragging || !this.selectedPiece) return;
         const dist = Math.hypot(this.selectedPiece.currentX - this.selectedPiece.correctX, this.selectedPiece.currentY - this.selectedPiece.correctY);
         
         if (dist < this.pieceWidth * 0.3) {
-            // SNAP & LOCK
+            // SNAP
             this.selectedPiece.currentX = this.selectedPiece.correctX;
             this.selectedPiece.currentY = this.selectedPiece.correctY;
             this.selectedPiece.isLocked = true;
+            this.needsStaticUpdate = true; // Redibujar fondo
             
-            // EFECTO VISUAL: Actualizar el fondo estático
-            this.needsStaticUpdate = true; // <--- CRÍTICO PARA EL RENDIMIENTO Y VISUAL
+            // Actualizar cachés
+            this.updatePieceCaches();
             
             this.spawnParticles(this.selectedPiece.currentX + this.pieceWidth/2, this.selectedPiece.currentY + this.pieceHeight/2, 'spark');
             if(this.callbacks.onSound) this.callbacks.onSound('snap');
@@ -436,39 +501,59 @@ export class PuzzleEngine {
         }
         this.isDragging = false;
         this.selectedPiece = null;
-        // No llamamos render() aquí, el loop animate() lo hará
+        this.render();
     }
 
-    /* --- BOILERPLATE --- */
-    spawnParticles(x, y, type) { /* ... partículas igual ... */ 
+    checkVictory() {
+        if (this.loosePieces.length === 0) { // Check optimizado
+            this.spawnParticles(this.logicalWidth/2, this.logicalHeight/2, 'confetti');
+            if(this.callbacks.onSound) this.callbacks.onSound('win');
+            if(this.callbacks.onWin) setTimeout(this.callbacks.onWin, 1500);
+            this.canvas.removeEventListener('mousedown', this.handleStart);
+            this.canvas.removeEventListener('touchstart', this.handleStart);
+        }
+    }
+
+    spawnParticles(x, y, type) {
+        if (this.particles.length > this.particleLimit) return; // Throttling
         const count = type === 'confetti' ? 50 : 10;
         const colors = ['#f43f5e', '#3b82f6', '#10b981', '#fbbf24', '#fff'];
-        for(let i=0; i<count; i++) this.particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1.0, color: colors[Math.floor(Math.random()*colors.length)], size: Math.random()*4+2 });
+        for(let i=0; i<count; i++) {
+            this.particles.push({
+                x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
+                life: 1.0, color: colors[Math.floor(Math.random()*colors.length)], size: Math.random()*4+2
+            });
+        }
     }
     updateParticles() {
         if(this.particles.length===0) return;
         for(let i=this.particles.length-1; i>=0; i--) {
-            let p=this.particles[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.2; p.life-=0.03;
+            let p=this.particles[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.3; p.life-=0.03;
             if(p.life<=0) this.particles.splice(i,1);
             else { this.ctx.globalAlpha=p.life; this.ctx.fillStyle=p.color; this.ctx.fillRect(p.x,p.y,p.size,p.size); }
         }
         this.ctx.globalAlpha=1;
     }
-    
-    // Métodos estándar (sin cambios mayores, solo integración)
-    getPointerPos(e) { const r=this.canvas.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return {x:cx-r.left, y:cy-r.top}; }
-    handleStart(e) { e.preventDefault(); const {x,y}=this.getPointerPos(e); for(let i=this.pieces.length-1; i>=0; i--) { const p=this.pieces[i]; if(p.isLocked) continue; const m=this.tabSize*2; if(x>=p.currentX-m && x<=p.currentX+this.pieceWidth+m && y>=p.currentY-m && y<=p.currentY+this.pieceHeight+m) { this.selectedPiece=p; this.isDragging=true; this.dragOffsetX=x-p.currentX; this.dragOffsetY=y-p.currentY; this.pieces.splice(i,1); this.pieces.push(p); if(this.callbacks.onSound) this.callbacks.onSound('click'); return; } } }
-    handleMove(e) { if(!this.isDragging||!this.selectedPiece) return; e.preventDefault(); const {x,y}=this.getPointerPos(e); this.selectedPiece.currentX=x-this.dragOffsetX; this.selectedPiece.currentY=y-this.dragOffsetY; }
-    
-    checkVictory() { if(this.pieces.every(p=>p.isLocked)) { this.spawnParticles(this.logicalWidth/2, this.logicalHeight/2, 'confetti'); if(this.callbacks.onSound) this.callbacks.onSound('win'); if(this.callbacks.onWin) setTimeout(this.callbacks.onWin, 1500); this.canvas.removeEventListener('mousedown', this.handleStart); this.canvas.removeEventListener('touchstart', this.handleStart); } }
+
     exportState() { return this.pieces.map(p => ({ id: p.id, cx: p.currentX, cy: p.currentY, locked: p.isLocked })); }
-    importState(s) { if(!s) return; s.forEach(sp => { const p=this.pieces.find(x=>x.id===sp.id); if(p){ p.currentX=sp.cx; p.currentY=sp.cy; p.isLocked=sp.locked; } }); this.needsStaticUpdate=true; }
-    togglePreview(a) { this.showPreview=a; }
+    importState(s) { 
+        if(!s) return; 
+        s.forEach(sp => { 
+            const p = this.pieces.find(x=>x.id===sp.id); 
+            if(p){ p.currentX=sp.cx; p.currentY=sp.cy; p.isLocked=sp.locked; } 
+        }); 
+        this.updatePieceCaches();
+        this.needsStaticUpdate=true; 
+        this.render();
+    }
+    togglePreview(a) { this.showPreview=a; this.render(); }
     autoPlacePiece() { 
-        const loose=this.pieces.filter(p=>!p.isLocked); if(loose.length===0) return false; 
-        const p=loose[Math.floor(Math.random()*loose.length)]; 
+        if(this.loosePieces.length===0) return false; 
+        const p = this.loosePieces[Math.floor(Math.random()*this.loosePieces.length)]; 
         this.spawnParticles(p.correctX+this.pieceWidth/2, p.correctY+this.pieceHeight/2, 'gold'); 
-        p.currentX=p.correctX; p.currentY=p.correctY; p.isLocked=true; this.needsStaticUpdate=true;
+        p.currentX=p.correctX; p.currentY=p.correctY; p.isLocked=true; 
+        this.updatePieceCaches();
+        this.needsStaticUpdate=true;
         if(this.callbacks.onSound) this.callbacks.onSound('snap'); this.checkVictory(); return true; 
     }
     addEventListeners() {
