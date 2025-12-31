@@ -1,8 +1,9 @@
 /**
- * PuzzleEngine.js v8.1 - CRITICAL FIX
- * - Fixed: 'scaleY is not defined' error.
- * - Improved: Side Scatter (Organización lateral limpia).
- * - Improved: Anchor Point Rendering (Imagen perfecta sin huecos).
+ * PuzzleEngine.js v9.0 - Topology Fix & Pixel Perfect
+ * * DIAGNÓSTICO RESOLUCIONADO:
+ * 1. Topología Compartida: Los bordes vecinos ahora comparten matemáticamente el mismo jitter.
+ * 2. Pixel Snapping: Coordenadas enteras para evitar sub-pixel rendering borroso.
+ * 3. Dynamic Jitter: Menos distorsión en niveles con muchas piezas.
  */
 
 export class PuzzleEngine {
@@ -14,6 +15,7 @@ export class PuzzleEngine {
         this.gridSize = Math.sqrt(config.pieces);
         this.callbacks = callbacks || {};
         
+        // Estado
         this.pieces = [];
         this.particles = []; 
         this.selectedPiece = null;
@@ -23,7 +25,10 @@ export class PuzzleEngine {
         this.dragOffsetX = 0;
         this.dragOffsetY = 0;
         
-        this.jitterMap = []; 
+        // Topología Global (Bordes compartidos)
+        this.verticalEdges = []; 
+        this.horizontalEdges = []; 
+        
         this.lastSound = 0;
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
         
@@ -37,18 +42,17 @@ export class PuzzleEngine {
 
     init() {
         this.resizeCanvas();
-        this.generateTopology();
+        this.generateSharedTopology(); // <--- NUEVO SISTEMA
         this.createPieces(); 
         this.shufflePieces(); 
         this.addEventListeners();
         requestAnimationFrame(() => this.render());
     }
 
-    /* --- SETUP & RESIZE --- */
     handleResize() {
         this.resizeCanvas();
         this.createPiecesPathsOnly(); 
-        this.shufflePieces(true); 
+        this.shufflePieces(true);
         this.render();
     }
 
@@ -66,58 +70,74 @@ export class PuzzleEngine {
             cssWidth = cssHeight * imgRatio;
         }
 
-        // REDUCIMOS AL 65% para dejar espacio claro a los lados para las piezas
         const workAreaScale = 0.65; 
         cssWidth *= workAreaScale;
         cssHeight *= workAreaScale;
 
-        this.canvas.width = parent.clientWidth * this.dpr; 
+        this.canvas.width = parent.clientWidth * this.dpr;
         this.canvas.height = parent.clientHeight * this.dpr;
-        
         this.canvas.style.width = "100%";
         this.canvas.style.height = "100%";
 
         this.ctx.scale(this.dpr, this.dpr);
 
-        // Tablero centrado
         this.boardWidth = cssWidth;
         this.boardHeight = cssHeight;
-        this.boardX = (parent.clientWidth - cssWidth) / 2;
-        this.boardY = (parent.clientHeight - cssHeight) / 2;
+        this.boardX = Math.round((parent.clientWidth - cssWidth) / 2); // Snap pixel
+        this.boardY = Math.round((parent.clientHeight - cssHeight) / 2);
 
         this.pieceWidth = this.boardWidth / this.gridSize;
         this.pieceHeight = this.boardHeight / this.gridSize;
         
         this.tabSize = Math.min(this.pieceWidth, this.pieceHeight) * 0.25;
-        
-        // Guardamos dimensiones lógicas del canvas completo para el scatter
         this.logicalWidth = parent.clientWidth;
         this.logicalHeight = parent.clientHeight;
     }
 
-    generateTopology() {
+    /* --- SOLUCIÓN 1 & 4: JITTER COMPARTIDO Y DINÁMICO --- */
+    generateSharedTopology() {
+        // 1. Calcular fuerza del jitter según densidad (Solución 4)
+        // Menos jitter si hay muchas piezas para evitar caos visual y solapamientos extremos
+        const jitterStrength = this.gridSize > 6 ? 0.08 : 0.15;
+
+        // 2. Generar formas (Tabs/Slots)
         this.shapes = [];
-        this.jitterMap = [];
         for (let y = 0; y < this.gridSize; y++) {
             const row = [];
-            const jitterRow = [];
             for (let x = 0; x < this.gridSize; x++) {
                 let top = 0, right = 0, bottom = 0, left = 0;
                 if (y > 0) top = -this.shapes[y - 1][x].bottom;
                 if (y < this.gridSize - 1) bottom = Math.random() > 0.5 ? 1 : -1;
                 if (x > 0) left = -row[x - 1].right;
                 if (x < this.gridSize - 1) right = Math.random() > 0.5 ? 1 : -1;
-                
                 row.push({ top, right, bottom, left });
-                jitterRow.push({
-                    top: (Math.random() - 0.5) * 0.15,
-                    right: (Math.random() - 0.5) * 0.15,
-                    bottom: (Math.random() - 0.5) * 0.15,
-                    left: (Math.random() - 0.5) * 0.15
-                });
             }
             this.shapes.push(row);
-            this.jitterMap.push(jitterRow);
+        }
+
+        // 3. Generar JITTER GLOBAL POR BORDE (Solución 1 - Clave)
+        // Matriz Vertical: (gridSize) filas x (gridSize + 1) columnas de líneas verticales
+        this.verticalEdges = []; 
+        for(let y = 0; y < this.gridSize; y++) {
+            const row = [];
+            for(let x = 0; x <= this.gridSize; x++) {
+                // Bordes externos (x=0 o x=gridSize) tienen jitter 0 (rectos)
+                if (x === 0 || x === this.gridSize) row.push(0);
+                else row.push((Math.random() - 0.5) * jitterStrength);
+            }
+            this.verticalEdges.push(row);
+        }
+
+        // Matriz Horizontal: (gridSize + 1) filas x (gridSize) columnas de líneas horizontales
+        this.horizontalEdges = [];
+        for(let y = 0; y <= this.gridSize; y++) {
+            const row = [];
+            for(let x = 0; x < this.gridSize; x++) {
+                // Bordes externos (y=0 o y=gridSize) tienen jitter 0
+                if (y === 0 || y === this.gridSize) row.push(0);
+                else row.push((Math.random() - 0.5) * jitterStrength);
+            }
+            this.horizontalEdges.push(row);
         }
     }
 
@@ -129,7 +149,20 @@ export class PuzzleEngine {
         for (let y = 0; y < this.gridSize; y++) {
             for (let x = 0; x < this.gridSize; x++) {
                 const shape = this.shapes[y][x];
-                const jitter = this.jitterMap[y][x];
+                
+                // --- ASIGNACIÓN DE JITTER COMPARTIDO ---
+                // Pieza en (x,y) usa:
+                // Top: HorizontalEdge[y][x]
+                // Bottom: HorizontalEdge[y+1][x]
+                // Left: VerticalEdge[y][x]
+                // Right: VerticalEdge[y][x+1]
+                const jitter = {
+                    top: this.horizontalEdges[y][x],
+                    bottom: this.horizontalEdges[y+1][x],
+                    left: this.verticalEdges[y][x],
+                    right: this.verticalEdges[y][x+1]
+                };
+
                 const path = this.createPath(this.pieceWidth, this.pieceHeight, shape, jitter);
 
                 this.pieces.push({
@@ -139,7 +172,7 @@ export class PuzzleEngine {
                     correctY: this.boardY + (y * this.pieceHeight),
                     currentX: 0, currentY: 0,
                     isLocked: false,
-                    shape, jitter, path,
+                    shape, jitter, path, // Guardamos el jitter sincronizado
                     srcOriginX: x * srcPieceW,
                     srcOriginY: y * srcPieceH,
                     srcPieceW: srcPieceW,
@@ -151,9 +184,12 @@ export class PuzzleEngine {
 
     createPiecesPathsOnly() {
         for (let p of this.pieces) {
+            // Regenerar path usando el jitter guardado (que ya es coherente con vecinos)
             p.path = this.createPath(this.pieceWidth, this.pieceHeight, p.shape, p.jitter);
+            
             p.correctX = this.boardX + (p.gridX * this.pieceWidth);
             p.correctY = this.boardY + (p.gridY * this.pieceHeight);
+            
             if(p.isLocked) {
                 p.currentX = p.correctX;
                 p.currentY = p.correctY;
@@ -161,65 +197,51 @@ export class PuzzleEngine {
         }
     }
 
-    /* --- SIDE SCATTER: COLUMNAS LATERALES --- */
     shufflePieces(repositionOnly = false) {
         const loosePieces = this.pieces.filter(p => !p.isLocked);
-        
-        // Espacio disponible a los lados
         const leftLimit = this.boardX - this.pieceWidth; 
         const rightStart = this.boardX + this.boardWidth + 10;
-        
-        // Márgenes verticales
         const topMargin = 80;
         const bottomMargin = this.logicalHeight - 80;
         const availHeight = bottomMargin - topMargin;
-        
-        // Calcular cuántas caben por columna
-        const overlapY = this.pieceHeight * 0.4; // Solapamiento para que quepan
+        const overlapY = this.pieceHeight * 0.4;
         const slotsPerColumn = Math.ceil(availHeight / overlapY);
         
         loosePieces.forEach((p, i) => {
             if (repositionOnly && p.isLocked) return;
             p.isLocked = false;
-
-            // Determinar si va a izquierda o derecha
             const isLeft = i % 2 === 0;
             const indexInSide = Math.floor(i / 2);
-            
-            // Calcular posición Y en columna
-            // Si se acaban los slots, vuelve a empezar arriba con un offset en X
             const columnOffset = Math.floor(indexInSide / slotsPerColumn) * (this.pieceWidth * 0.3);
             const rowInColumn = indexInSide % slotsPerColumn;
-            
             let posX, posY;
 
             if (isLeft) {
-                posX = 10 + columnOffset; // Pegado a la izquierda
-                // Asegurar que no se meta al tablero
+                posX = 10 + columnOffset;
                 posX = Math.min(posX, leftLimit - 10);
             } else {
-                posX = rightStart + columnOffset; // Pegado a la derecha
-                // Asegurar que no se salga de pantalla
+                posX = rightStart + columnOffset;
                 posX = Math.min(posX, this.logicalWidth - this.pieceWidth - 10);
             }
-
             posY = topMargin + (rowInColumn * overlapY);
-
-            // Asignar con una pequeña variación natural
             p.currentX = posX + (Math.random() * 5);
             p.currentY = posY + (Math.random() * 5);
         });
-
         this.render();
     }
 
-    /* --- RENDER PIECE (AQUÍ ESTABA EL ERROR) --- */
+    /* --- SOLUCIÓN 2: PIXEL SNAPPING RENDERER --- */
     renderPiece(p, type) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(p.currentX, p.currentY);
+        
+        // SNAP: Redondear coordenadas de dibujo para evitar antialiasing en bordes rectos
+        // Esto hace que el "clip" sea mucho más nítido en los bordes de unión
+        const drawX = Math.round(p.currentX);
+        const drawY = Math.round(p.currentY);
+        
+        ctx.translate(drawX, drawY);
 
-        // Sombras
         if (type !== 'locked') {
             ctx.shadowColor = "rgba(0,0,0,0.4)";
             ctx.shadowBlur = type === 'selected' ? 15 : 5;
@@ -235,31 +257,37 @@ export class PuzzleEngine {
 
         ctx.clip(p.path);
 
-        // --- CORRECCIÓN: Definición de scaleY ---
+        // --- DIBUJADO DE IMAGEN (Anchor Point Logic V8) ---
         const scaleX = this.boardWidth / this.img.width;
-        const scaleY = this.boardHeight / this.img.height; // <--- ¡AQUÍ FALTABA ESTO!
+        const scaleY = this.boardHeight / this.img.height;
 
-        // Dibujar solo el trozo necesario (Optimizado con margen de seguridad)
         const margin = Math.max(this.pieceWidth, this.pieceHeight);
         
         const srcRectX = p.srcOriginX - (margin / scaleX);
-        const srcRectY = p.srcOriginY - (margin / scaleY); // Usamos scaleY
+        const srcRectY = p.srcOriginY - (margin / scaleY);
         const srcRectW = p.srcPieceW + (margin * 2 / scaleX);
-        const srcRectH = p.srcPieceH + (margin * 2 / scaleY); // Usamos scaleY
+        const srcRectH = p.srcPieceH + (margin * 2 / scaleY);
 
         const dstX = -margin;
         const dstY = -margin;
         const dstW = this.pieceWidth + (margin * 2);
         const dstH = this.pieceHeight + (margin * 2);
 
-        ctx.drawImage(this.img, srcRectX, srcRectY, srcRectW, srcRectH, dstX, dstY, dstW, dstH);
+        // Opcional: Epsilon Overdraw (Solución 3 - ligera expansión para sellar)
+        // Dibujamos la imagen un 0.5px más grande si está bloqueada para sellar grietas
+        if (type === 'locked') {
+             // Técnica avanzada: no escalamos la imagen, confiamos en el shared jitter.
+             // Si aún hay líneas, descomenta esto:
+             // ctx.lineWidth = 0.5; ctx.strokeStyle = "rgba(0,0,0,0)"; ctx.stroke(p.path);
+        }
 
+        ctx.drawImage(this.img, srcRectX, srcRectY, srcRectW, srcRectH, dstX, dstY, dstW, dstH);
         ctx.restore();
 
-        // Bordes
+        // Bordes (Solo sueltas)
         if (type !== 'locked') {
             ctx.save();
-            ctx.translate(p.currentX, p.currentY);
+            ctx.translate(drawX, drawY); // Usar mismo snap
             if (type === 'selected') {
                 ctx.translate(this.pieceWidth/2, this.pieceHeight/2);
                 ctx.scale(1.1, 1.1);
@@ -271,14 +299,57 @@ export class PuzzleEngine {
         }
     }
 
-    /* --- RENDER LOOP --- */
+    /* --- CURVAS BÉZIER (Adaptadas a Jitter Individual por lado) --- */
+    createPath(w, h, shape, jitter) {
+        const path = new Path2D();
+        const t = this.tabSize; 
+        path.moveTo(0, 0);
+        
+        // Cada lado usa SU propio jitter calculado globalmente
+        shape.top !== 0 ? this.lineToTab(path, 0, 0, w, 0, shape.top * t, jitter.top * t) : path.lineTo(w, 0);
+        shape.right !== 0 ? this.lineToTab(path, w, 0, w, h, shape.right * t, jitter.right * t) : path.lineTo(w, h);
+        shape.bottom !== 0 ? this.lineToTab(path, w, h, 0, h, shape.bottom * t, jitter.bottom * t) : path.lineTo(0, h);
+        shape.left !== 0 ? this.lineToTab(path, 0, h, 0, 0, shape.left * t, jitter.left * t) : path.lineTo(0, 0);
+        
+        path.closePath();
+        return path;
+    }
+
+    lineToTab(path, x1, y1, x2, y2, amp, shift) {
+        const w = x2 - x1; const h = y2 - y1;
+        
+        // Jitter se aplica como desplazamiento perpendicular en el centro de la curva
+        // shift viene de la topología compartida
+        const cx = x1 + w * 0.5 + (w===0 ? shift : 0); // Si es vertical, shift en X
+        const cy = y1 + h * 0.5 + (h===0 ? shift : 0); // Si es horizontal, shift en Y
+        
+        const perpX = -h / Math.abs(h || 1); 
+        const perpY = w / Math.abs(w || 1);
+        
+        const xA = x1 + w * 0.35; const yA = y1 + h * 0.35;
+        const xB = x1 + w * 0.65; const yB = y1 + h * 0.65;
+
+        path.lineTo(xA, yA);
+        path.bezierCurveTo(
+            xA + (perpX * amp * 0.2), yA + (perpY * amp * 0.2), 
+            cx - (w * 0.1) + (perpX * amp), cy - (h * 0.1) + (perpY * amp), 
+            cx + (perpX * amp), cy + (perpY * amp)
+        );
+        path.bezierCurveTo(
+            cx + (w * 0.1) + (perpX * amp), cy + (h * 0.1) + (perpY * amp), 
+            xB + (perpX * amp * 0.2), yB + (perpY * amp * 0.2), 
+            xB, yB
+        );
+        path.lineTo(x2, y2);
+    }
+
     render() {
-        // Usar logicalWidth/Height que definimos en resize
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
 
         this.ctx.strokeStyle = "rgba(255,255,255,0.1)";
         this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(this.boardX, this.boardY, this.boardWidth, this.boardHeight);
+        // Snap al dibujar el borde del tablero también
+        this.ctx.strokeRect(Math.round(this.boardX), Math.round(this.boardY), Math.round(this.boardWidth), Math.round(this.boardHeight));
 
         if (this.showPreview) {
             this.ctx.save();
@@ -305,7 +376,7 @@ export class PuzzleEngine {
         }
     }
 
-    /* --- UTILS & INPUT --- */
+    /* --- UTILS --- */
     spawnParticles(x, y, type) {
         const count = type === 'confetti' ? 50 : 10;
         const colors = ['#f43f5e', '#3b82f6', '#10b981', '#fbbf24', '#fff'];
@@ -326,31 +397,6 @@ export class PuzzleEngine {
         }
         this.ctx.globalAlpha=1;
     }
-
-    createPath(w, h, shape, jitter) {
-        const path = new Path2D();
-        const t = this.tabSize; 
-        path.moveTo(0, 0);
-        shape.top !== 0 ? this.lineToTab(path, 0, 0, w, 0, shape.top * t, jitter.top * t) : path.lineTo(w, 0);
-        shape.right !== 0 ? this.lineToTab(path, w, 0, w, h, shape.right * t, jitter.right * t) : path.lineTo(w, h);
-        shape.bottom !== 0 ? this.lineToTab(path, w, h, 0, h, shape.bottom * t, jitter.bottom * t) : path.lineTo(0, h);
-        shape.left !== 0 ? this.lineToTab(path, 0, h, 0, 0, shape.left * t, jitter.left * t) : path.lineTo(0, 0);
-        path.closePath();
-        return path;
-    }
-    lineToTab(path, x1, y1, x2, y2, amp, shift) {
-        const w = x2 - x1; const h = y2 - y1;
-        const cx = x1 + w * 0.5 + (w===0 ? shift : 0);
-        const cy = y1 + h * 0.5 + (h===0 ? shift : 0);
-        const perpX = -h / Math.abs(h || 1); const perpY = w / Math.abs(w || 1);
-        const xA = x1 + w * 0.35; const yA = y1 + h * 0.35;
-        const xB = x1 + w * 0.65; const yB = y1 + h * 0.65;
-        path.lineTo(xA, yA);
-        path.bezierCurveTo(xA + (perpX * amp * 0.2), yA + (perpY * amp * 0.2), cx - (w * 0.1) + (perpX * amp), cy - (h * 0.1) + (perpY * amp), cx + (perpX * amp), cy + (perpY * amp));
-        path.bezierCurveTo(cx + (w * 0.1) + (perpX * amp), cy + (h * 0.1) + (perpY * amp), xB + (perpX * amp * 0.2), yB + (perpY * amp * 0.2), xB, yB);
-        path.lineTo(x2, y2);
-    }
-
     getPointerPos(e) {
         const rect = this.canvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
