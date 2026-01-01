@@ -1,74 +1,86 @@
 /**
- * Storage.js
- * Wrapper para localStorage con namespacing para evitar conflictos.
- * [span_6](start_span)PROHIBIDO tocar claves reservadas del sistema[span_6](end_span).
+ * Storage.js v2.0 - Secure & Versioned
+ * Gestiona el localStorage con protección contra corrupción y versiones de esquema.
  */
 
-const PREFIX = 'puz_rompecabezas_'; // Namespacing propio
-
-const DEFAULTS = {
-    progress: {
-        unlockedLevels: ['lvl_1'], // Nivel 1 desbloqueado por defecto
-        completedLevels: [],       // IDs de niveles terminados
-        bestTimes: {}              // { 'lvl_1': 45 } (segundos)
-    },
-    settings: {
-        sound: true,
-        volume: 0.8,
-        performanceMode: false // false = alta calidad, true = ahorro
-    }
-};
+const SCHEMA_VERSION = 1; // Incrementa esto si cambias drásticamente la estructura de datos en el futuro
+const PREFIX = 'puz_arcade_'; // Prefijo para no mezclar con otras apps en el mismo dominio
 
 export const Storage = {
     /**
-     * Obtiene datos del almacenamiento
-     * @param {string} key - 'progress' o 'settings'
-     */
-    get: (key) => {
-        try {
-            const data = localStorage.getItem(PREFIX + key);
-            return data ? JSON.parse(data) : DEFAULTS[key];
-        } catch (e) {
-            console.error('[Storage] Error leyendo datos:', e);
-            return DEFAULTS[key];
-        }
-    },
-
-    /**
-     * Guarda datos en el almacenamiento
-     * @param {string} key - 'progress' o 'settings'
-     * @param {object} value - Objeto a guardar
+     * Guarda un valor con metadata de versión.
      */
     set: (key, value) => {
         try {
-            localStorage.setItem(PREFIX + key, JSON.stringify(value));
+            const payload = {
+                ver: SCHEMA_VERSION,
+                timestamp: Date.now(),
+                data: value
+            };
+            localStorage.setItem(PREFIX + key, JSON.stringify(payload));
         } catch (e) {
-            console.error('[Storage] Error guardando datos:', e);
+            console.error('[Storage] Error al guardar:', e);
         }
     },
 
     /**
-     * Actualiza una propiedad parcial del progreso
+     * Recupera un valor validando su integridad y versión.
+     * Retorna 'defaultValue' si falla o no existe.
      */
-    unlockLevel: (levelId) => {
-        const progress = Storage.get('progress');
-        if (!progress.unlockedLevels.includes(levelId)) {
-            progress.unlockedLevels.push(levelId);
-            Storage.set('progress', progress);
+    get: (key, defaultValue = null) => {
+        try {
+            const raw = localStorage.getItem(PREFIX + key);
+            if (!raw) return defaultValue;
+
+            const parsed = JSON.parse(raw);
+
+            // Verificación de esquema
+            // Si el dato guardado no tiene versión o es vieja, lo descartamos (o migramos)
+            if (!parsed.ver || parsed.ver !== SCHEMA_VERSION) {
+                console.warn(`[Storage] Datos obsoletos para ${key}. Se usará valor por defecto.`);
+                // Aquí podrías implementar lógica de migración si fuera necesario
+                return defaultValue;
+            }
+
+            return parsed.data;
+        } catch (e) {
+            console.error('[Storage] Datos corruptos, reseteando:', key);
+            return defaultValue;
         }
     },
+
+    /**
+     * Helpers específicos para el juego
+     */
     
-    markCompleted: (levelId, timeSeconds) => {
-        const progress = Storage.get('progress');
-        // Marcar completado
-        if (!progress.completedLevels.includes(levelId)) {
-            progress.completedLevels.push(levelId);
+    // Guarda el progreso de estrellas (0 a 3)
+    saveStars: (levelId, stars) => {
+        const current = Storage.get('progress', {});
+        // Solo guardamos si mejoramos la puntuación anterior
+        if (!current[levelId] || stars > current[levelId]) {
+            current[levelId] = stars;
+            Storage.set('progress', current);
+            return true; // Nuevo récord
         }
-        // Guardar mejor tiempo
-        const prevTime = progress.bestTimes[levelId];
-        if (!prevTime || timeSeconds < prevTime) {
-            progress.bestTimes[levelId] = timeSeconds;
+        return false;
+    },
+
+    getStars: (levelId) => {
+        const progress = Storage.get('progress', {});
+        return progress[levelId] || 0;
+    },
+
+    // Desbloqueo de niveles
+    unlockLevel: (levelId) => {
+        const unlocked = Storage.get('unlocked', ['lvl_1']); // Nivel 1 siempre desbloqueado
+        if (!unlocked.includes(levelId)) {
+            unlocked.push(levelId);
+            Storage.set('unlocked', unlocked);
         }
-        Storage.set('progress', progress);
+    },
+
+    isUnlocked: (levelId) => {
+        const unlocked = Storage.get('unlocked', ['lvl_1']);
+        return unlocked.includes(levelId);
     }
 };
