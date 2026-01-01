@@ -2,7 +2,7 @@ import { LevelManager } from './core/LevelManager.js';
 import { UI } from './ui/UIController.js';
 import { Storage } from './systems/Storage.js';
 import { PuzzleEngine } from './core/PuzzleEngine.js';
-import { AudioSynth } from './systems/AudioSynth.js';
+import { AudioMgr } from './systems/AudioManager.js';
 import { Economy } from './systems/Economy.js';
 
 const levelManager = new LevelManager();
