@@ -632,3 +632,9 @@ canvas {
     max-width: 800px;
     margin: 0 auto;
 }
+
+/* Forzar limpieza de pseudo-elementos antiguos */
+.level-card::after, .level-card::before {
+    content: none !important;
+    display: none !important;
+}
