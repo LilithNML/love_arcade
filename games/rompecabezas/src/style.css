@@ -576,3 +576,29 @@ canvas {
 .level-card img.loaded {
     opacity: 1;
 }
+
+/* Overlay en cartas de nivel */
+.level-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    color: white;
+    font-size: 1.5rem;
+    font-weight: bold;
+    pointer-events: none;
+    background: linear-gradient(to top, rgba(0,0,0,0.6), transparent); /* Gradiente para legibilidad */
+}
+
+.level-card.locked {
+    filter: grayscale(100%);
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.stars-display {
+    letter-spacing: 2px;
+}
