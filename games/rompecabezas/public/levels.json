@@ -2,6 +2,7 @@
   {
     "id": "lvl_1",
     "image": "./assets/Nivel1.webp",
+    "thumbnail": "./assets/thumbnails/Nivel1_thumb.webp",
     "pieces": 4,
     "rewardCoins": 20,
     "description": "Introducción básica",
@@ -10,6 +11,7 @@
   {
     "id": "lvl_2",
     "image": "./assets/Nivel2.webp",
+    "thumbnail": "./assets/thumbnails/Nivel2_thumb.webp",
     "pieces": 9,
     "rewardCoins": 40,
     "description": "Primer desafío",
@@ -18,6 +20,7 @@
   {
     "id": "lvl_3",
     "image": "./assets/Nivel3.webp",
+    "thumbnail": "./assets/thumbnails/Nivel3_thumb.webp",
     "pieces": 9,
     "rewardCoins": 70,
     "description": "Un poco más complejo",
@@ -26,6 +29,7 @@
   {
     "id": "lvl_4",
     "image": "./assets/Nivel4.webp",
+    "thumbnail": "./assets/thumbnails/Nivel4_thumb.webp",
     "pieces": 16,
     "rewardCoins": 100,
     "description": "Atención al detalle",
@@ -34,6 +38,7 @@
   {
     "id": "lvl_5",
     "image": "./assets/Nivel5.webp",
+    "thumbnail": "./assets/thumbnails/Nivel5_thumb.webp",
     "pieces": 16,
     "rewardCoins": 140,
     "description": "Dificultad media",
@@ -42,6 +47,7 @@
   {
     "id": "lvl_6",
     "image": "./assets/Nivel6.webp",
+    "thumbnail": "./assets/thumbnails/Nivel6_thumb.webp",
     "pieces": 25,
     "rewardCoins": 180,
     "description": "Empieza el reto",
@@ -50,6 +56,7 @@
   {
     "id": "lvl_7",
     "image": "./assets/Nivel7.webp",
+    "thumbnail": "./assets/thumbnails/Nivel7_thumb.webp",
     "pieces": 25,
     "rewardCoins": 220,
     "description": "Nivel avanzado",
@@ -58,6 +65,7 @@
   {
     "id": "lvl_8",
     "image": "./assets/Nivel8.webp",
+    "thumbnail": "./assets/thumbnails/Nivel8_thumb.webp",
     "pieces": 36,
     "rewardCoins": 250,
     "description": "Alta concentración",
@@ -66,6 +74,7 @@
   {
     "id": "lvl_9",
     "image": "./assets/Nivel9.webp",
+    "thumbnail": "./assets/thumbnails/Nivel9_thumb.webp",
     "pieces": 36,
     "rewardCoins": 280,
     "description": "Desafío experto",
@@ -74,6 +83,7 @@
   {
     "id": "lvl_10",
     "image": "./assets/Nivel10.webp",
+    "thumbnail": "./assets/thumbnails/Nivel10_thumb.webp",
     "pieces": 49,
     "rewardCoins": 300,
     "description": "Reto final",
@@ -82,6 +92,7 @@
   {
     "id": "lvl_11",
     "image": "./assets/Nivel11.webp",
+    "thumbnail": "./assets/thumbnails/Nivel11_thumb.webp",
     "pieces": 36,
     "rewardCoins": 210,
     "description": "Precisión y paciencia",
@@ -90,6 +101,7 @@
   {
     "id": "lvl_12",
     "image": "./assets/Nivel12.webp",
+    "thumbnail": "./assets/thumbnails/Nivel12_thumb.webp",
     "pieces": 36,
     "rewardCoins": 1,
     "description": "Nada garantizado",
@@ -98,6 +110,7 @@
   {
     "id": "lvl_13",
     "image": "./assets/Nivel13.webp",
+    "thumbnail": "./assets/thumbnails/Nivel13_thumb.webp",
     "pieces": 49,
     "rewardCoins": 260,
     "description": "El doble golpe",
@@ -106,6 +119,7 @@
   {
     "id": "lvl_14",
     "image": "./assets/Nivel14.webp",
+    "thumbnail": "./assets/thumbnails/Nivel14_thumb.webp",
     "pieces": 36,
     "rewardCoins": 200,
     "description": "Constancia silenciosa",
@@ -114,6 +128,7 @@
   {
     "id": "lvl_15",
     "image": "./assets/Nivel15.webp",
+    "thumbnail": "./assets/thumbnails/Nivel15_thumb.webp",
     "pieces": 49,
     "rewardCoins": 300,
     "description": "Recompensa máxima",
@@ -122,6 +137,7 @@
   {
     "id": "lvl_16",
     "image": "./assets/Nivel16.webp",
+    "thumbnail": "./assets/thumbnails/Nivel16_thumb.webp",
     "pieces": 49,
     "rewardCoins": 5,
     "description": "El engaño",
@@ -130,6 +146,7 @@
   {
     "id": "lvl_17",
     "image": "./assets/Nivel17.webp",
+    "thumbnail": "./assets/thumbnails/Nivel17_thumb.webp",
     "pieces": 36,
     "rewardCoins": 250,
     "description": "Rebote inesperado",
@@ -138,6 +155,7 @@
   {
     "id": "lvl_18",
     "image": "./assets/Nivel18.webp",
+    "thumbnail": "./assets/thumbnails/Nivel18_thumb.webp",
     "pieces": 49,
     "rewardCoins": 200,
     "description": "Nada fácil",
@@ -146,6 +164,7 @@
   {
     "id": "lvl_19",
     "image": "./assets/Nivel19.webp",
+    "thumbnail": "./assets/thumbnails/Nivel19_thumb.webp",
     "pieces": 49,
     "rewardCoins": 290,
     "description": "Casi todo",
@@ -154,6 +173,7 @@
   {
     "id": "lvl_20",
     "image": "./assets/Nivel20.webp",
+    "thumbnail": "./assets/thumbnails/Nivel20_thumb.webp",
     "pieces": 49,
     "rewardCoins": 300,
     "description": "El cierre perfecto",
