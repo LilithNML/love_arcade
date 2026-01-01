@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Rubik:wght@400;600&display=swap');
 
 /* =========================================
-   VARIABLES & TEMA (Cyber-Arcade Premium)
+   1. VARIABLES & TEMA (Cyber-Arcade Premium)
    ========================================= */
 :root {
     /* Colores Principales */
@@ -26,7 +26,7 @@
 }
 
 /* =========================================
-   RESET & LAYOUT CRÍTICO (Mobile Fixes)
+   2. RESET & LAYOUT CRÍTICO (Mobile First)
    ========================================= */
 * {
     box-sizing: border-box;
@@ -46,9 +46,9 @@ body {
     
     /* CRÍTICO: Layout rígido al viewport. Soluciona el overflow. */
     position: fixed;
-    inset: 0;       /* Top:0, Right:0, Bottom:0, Left:0 */
+    inset: 0;       
     width: 100%;
-    height: 100%;
+    height: 100dvh; /* Dynamic Viewport Height para móviles */
     overflow: hidden;
     
     display: flex;
@@ -56,7 +56,7 @@ body {
 }
 
 /* =========================================
-   FONDO & AMBIENTACIÓN
+   3. FONDO & AMBIENTACIÓN
    ========================================= */
 .dynamic-bg {
     position: absolute;
@@ -85,22 +85,7 @@ body {
 }
 
 /* =========================================
-   ICONOS SVG (Utilidad Global)
-   ========================================= */
-.icon {
-    width: 20px;
-    height: 20px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    display: inline-block;
-    vertical-align: middle;
-}
-
-/* =========================================
-   HEADER (Barra Superior)
+   4. HEADER & APP SHELL
    ========================================= */
 #app {
     width: 100%;
@@ -146,8 +131,20 @@ body {
     letter-spacing: 1px;
 }
 
+.icon {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    display: inline-block;
+    vertical-align: middle;
+}
+
 /* =========================================
-   SISTEMA DE PANTALLAS (SPA Transitions)
+   5. SISTEMA DE PANTALLAS (SPA)
    ========================================= */
 .screen {
     /* Ocupa todo el espacio debajo del header */
@@ -164,7 +161,7 @@ body {
     
     /* Estado por defecto: Oculto */
     opacity: 0;
-    pointer-events: none; /* No clickeable cuando está oculto */
+    pointer-events: none; 
     transform: scale(0.98);
     transition: opacity 0.3s ease, transform 0.3s ease;
 }
@@ -178,7 +175,7 @@ body {
 }
 
 /* =========================================
-   PANTALLA: MENÚ PRINCIPAL
+   6. PANTALLA: MENÚ PRINCIPAL
    ========================================= */
 #screen-menu {
     justify-content: center;
@@ -218,7 +215,191 @@ body {
 }
 
 /* =========================================
-   COMPONENTES UI: BOTONES
+   7. PANTALLA: NIVELES (Scroll Fix & Thumbnails)
+   ========================================= */
+/* Ajuste contenedor principal para permitir scroll */
+#screen-levels {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - var(--header-h)); /* Altura total menos header */
+    overflow: hidden; /* Evita scroll en el padre */
+    padding-top: 10px;
+}
+
+.screen-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px 20px;
+    flex-shrink: 0; /* Header fijo */
+}
+.screen-header h2 { font-family: 'Rajdhani'; text-transform: uppercase; }
+
+/* Contenedor de Grilla con Scroll */
+#levels-container {
+    flex: 1; /* Ocupa el espacio restante */
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 20px;
+    padding: 20px;
+    padding-bottom: 100px; /* Espacio extra abajo */
+    
+    overflow-y: auto; /* SCROLL VERTICAL ACTIVO */
+    -webkit-overflow-scrolling: touch; /* Suavidad iOS */
+    
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    
+    /* Permitir interacción táctil para scroll */
+    touch-action: pan-y; 
+}
+
+/* Tarjeta de Nivel */
+.level-card {
+    aspect-ratio: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden; /* Importante para el skeleton */
+}
+
+.level-card:hover { 
+    background: rgba(255, 255, 255, 0.1); 
+    transform: translateY(-2px); 
+}
+
+/* Imagen dentro de la tarjeta */
+.level-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--radius-lg);
+    opacity: 0; /* Fade in controlado por JS */
+    transition: opacity 0.3s ease;
+}
+.level-card img.loaded { opacity: 1; }
+
+/* Overlay (Info y Estrellas) */
+.level-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    color: white;
+    font-size: 1.5rem;
+    font-weight: bold;
+    pointer-events: none;
+    background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+}
+
+.stars-display { letter-spacing: 2px; }
+
+/* Estados */
+.level-card.locked {
+    filter: grayscale(100%);
+    opacity: 0.7;
+    cursor: not-allowed;
+    background: rgba(0,0,0,0.2);
+}
+.level-card.completed { 
+    border-color: var(--success); 
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.15); 
+}
+
+/* Limpieza de pseudo-elementos antiguos */
+.level-card::after, .level-card::before {
+    content: none !important;
+    display: none !important;
+}
+
+/* =========================================
+   8. PANTALLA: JUEGO UI
+   ========================================= */
+.hud {
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    flex-shrink: 0;
+    z-index: 20;
+}
+
+.hud-stats {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.2rem;
+    font-weight: bold;
+    display: flex;
+    gap: 20px;
+    color: var(--text-muted);
+}
+.hud-stats span { color: var(--text-main); }
+.timer-display.low-time { color: #ef4444; animation: pulse 1s infinite; }
+
+.canvas-wrapper {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1;
+}
+
+canvas {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.5));
+}
+
+/* Controles Flotantes */
+.game-controls {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    z-index: 60;
+}
+
+.btn-circle {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(30, 41, 59, 0.9);
+    color: var(--text-main);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: transform 0.1s, background 0.2s;
+    border: 1px solid rgba(255,255,255,0.1);
+    pointer-events: auto;
+}
+.btn-circle:active { transform: scale(0.9); }
+.btn-circle.gold {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    border: 1px solid #fbbf24;
+}
+
+/* =========================================
+   9. COMPONENTES: BOTONES & MODALES
    ========================================= */
 .btn {
     border: none;
@@ -229,16 +410,14 @@ body {
     font-size: 1.1rem;
     text-transform: uppercase;
     cursor: pointer;
-    
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 10px; /* Espacio icono-texto */
-    
+    gap: 10px;
     transition: all 0.2s;
     position: relative;
     overflow: hidden;
-    text-decoration: none; /* Para enlaces */
+    text-decoration: none;
 }
 
 .btn:active { transform: translateY(2px); }
@@ -264,146 +443,62 @@ body {
 }
 .btn-danger:hover { background: rgba(239, 68, 68, 0.1); }
 
-/* Botones Icono (Back, Pause, etc.) */
-.btn-icon {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    
+/* Modales */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
     align-items: center;
-    
-    border: none;
-    cursor: pointer;
-    transition: background 0.2s;
-    
-    /* Asegurar clickabilidad */
-    pointer-events: auto;
-    z-index: 20;
-}
-.btn-icon:hover { background: rgba(255, 255, 255, 0.2); }
-
-/* =========================================
-   PANTALLA: JUEGO (Gameplay UI)
-   ========================================= */
-.hud {
-    padding: 10px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: rgba(0, 0, 0, 0.2);
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    flex-shrink: 0;
-    /* Z-Index para estar sobre el canvas */
-    z-index: 20;
-}
-
-.hud-stats {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 1.2rem;
-    font-weight: bold;
-    display: flex;
-    gap: 20px;
-    color: var(--text-muted);
-}
-.hud-stats span { color: var(--text-main); }
-.timer-display.low-time { color: #ef4444; animation: pulse 1s infinite; }
-
-.canvas-wrapper {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1; /* Nivel base */
-}
-
-canvas {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.5));
+    z-index: 100;
+    opacity: 1;
     transition: opacity 0.3s;
 }
+.modal-backdrop.hidden { opacity: 0; pointer-events: none; }
+
+.modal-content {
+    background: #1e293b;
+    padding: 30px;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+    width: 90%;
+    max-width: 350px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
 
 /* =========================================
-   CONTROLES FLOTANTES (Imán, Ojo)
+   10. UTILIDADES & ANIMACIONES
    ========================================= */
-.game-controls {
+/* Skeleton Loading (Carga visual) */
+.skeleton {
+    background: #1e293b;
+    position: relative;
+    overflow: hidden;
+}
+.skeleton::after {
+    content: "";
     position: absolute;
-    bottom: 20px;
-    right: 20px;
-    
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    
-    /* CRÍTICO: Z-Index alto para estar sobre overlay/canvas */
-    z-index: 60;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0,
+        rgba(255, 255, 255, 0.05) 20%,
+        rgba(255, 255, 255, 0.1) 60%,
+        rgba(255, 255, 255, 0)
+    );
+    animation: shimmer 2s infinite;
 }
 
-.btn-circle {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(30, 41, 59, 0.9);
-    color: var(--text-main);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-    cursor: pointer;
-    
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    
-    transition: transform 0.1s, background 0.2s;
-    border: 1px solid rgba(255,255,255,0.1);
-    
-    /* Asegurar eventos de puntero */
-    pointer-events: auto;
-}
-
-.btn-circle:active { transform: scale(0.9); }
-
-/* Variante Dorada (Imán) */
-.btn-circle.gold {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: white;
-    border: 1px solid #fbbf24;
-    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
-}
-
-/* Overlay Tutorial (Pequeño mensaje) */
-.overlay {
-    position: absolute;
-    bottom: 100px; /* Encima de controles */
-    background: rgba(0,0,0,0.8);
-    padding: 10px 20px;
-    border-radius: 30px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: white;
-    font-size: 0.9rem;
-    pointer-events: none; /* No bloquear clicks */
-    animation: float 2s infinite ease-in-out;
-    border: 1px solid rgba(255,255,255,0.1);
-    z-index: 50;
-}
-.overlay.hidden { display: none; }
-
-/* =========================================
-   LOADER & SPINNER
-   ========================================= */
 .loading-overlay {
     position: absolute;
     inset: 0;
     background: rgba(15, 23, 42, 0.95);
-    z-index: 30; /* Tapando canvas mientras carga */
+    z-index: 30;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -421,111 +516,9 @@ canvas {
     animation: spin 1s linear infinite;
 }
 
-/* =========================================
-   PANTALLA: NIVELES
-   ========================================= */
-.screen-header {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    padding: 20px;
-    padding-bottom: 10px;
-    flex-shrink: 0;
-}
-.screen-header h2 { font-family: 'Rajdhani'; text-transform: uppercase; }
-
-.levels-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 15px;
-    padding: 20px;
-    overflow-y: auto; /* Scroll interno solo aquí */
-    flex: 1;
-}
-
-.level-card {
-    aspect-ratio: 1;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: var(--radius-lg);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 1.5rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-}
-.level-card:hover { 
-    background: rgba(255, 255, 255, 0.1); 
-    transform: translateY(-2px); 
-}
-.level-card.locked { opacity: 0.4; pointer-events: none; background: rgba(0,0,0,0.2); }
-.level-card.completed { border-color: var(--success); color: var(--success); box-shadow: 0 0 15px rgba(16, 185, 129, 0.15); }
-
-/* =========================================
-   MODALES (Pausa, Victoria, etc.)
-   ========================================= */
-.modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(8px);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 100; /* Siempre encima de todo */
-    opacity: 1;
-    transition: opacity 0.3s;
-}
-
-.modal-backdrop.hidden {
-    opacity: 0;
-    pointer-events: none;
-}
-
-.modal-content {
-    background: #1e293b;
-    padding: 30px;
-    border-radius: var(--radius-lg);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    text-align: center;
-    width: 90%;
-    max-width: 350px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
-    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.modal-content h3 {
-    margin-bottom: 10px;
-    font-family: 'Rajdhani';
-    text-transform: uppercase;
-    font-size: 1.8rem;
-}
-
-/* =========================================
-   PANTALLA: AJUSTES
-   ========================================= */
-.settings-list { padding: 20px; }
-.setting-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px;
-    background: rgba(255,255,255,0.03);
-    border-radius: var(--radius-sm);
-    margin-bottom: 10px;
-    border: 1px solid rgba(255,255,255,0.05);
-}
-
-/* =========================================
-   ANIMACIONES
-   ========================================= */
+/* Keyframes */
 @keyframes spin { to { transform: rotate(360deg); } }
-@keyframes float { 0%, 100% {transform: translateY(0);} 50% {transform: translateY(-5px);} }
-@keyframes bounce { 0%, 100% {transform: translateY(0);} 50% {transform: translateY(-3px);} }
+@keyframes shimmer { 100% { transform: translateX(100%); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 @keyframes popIn { 
     from { transform: scale(0.8); opacity: 0; } 
@@ -537,104 +530,15 @@ canvas {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
 
-/* SKELETON LOADING */
-.skeleton {
-    background: #1e293b;
-    position: relative;
-    overflow: hidden;
-}
-
-.skeleton::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    transform: translateX(-100%);
-    background-image: linear-gradient(
-        90deg,
-        rgba(255, 255, 255, 0) 0,
-        rgba(255, 255, 255, 0.05) 20%,
-        rgba(255, 255, 255, 0.1) 60%,
-        rgba(255, 255, 255, 0)
-    );
-    animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-    100% { transform: translateX(100%); }
-}
-
-/* Ajuste para que la imagen oculte el skeleton al cargar */
-.level-card img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: var(--radius-lg);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.level-card img.loaded {
-    opacity: 1;
-}
-
-/* Overlay en cartas de nivel */
-.level-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
+/* Ajustes */
+.settings-list { padding: 20px; }
+.setting-item {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-    color: white;
-    font-size: 1.5rem;
-    font-weight: bold;
-    pointer-events: none;
-    background: linear-gradient(to top, rgba(0,0,0,0.6), transparent); /* Gradiente para legibilidad */
-}
-
-.level-card.locked {
-    filter: grayscale(100%);
-    opacity: 0.7;
-    cursor: not-allowed;
-}
-
-.stars-display {
-    letter-spacing: 2px;
-}
-
-/* Asegurar que la pantalla de niveles ocupe el 100% y maneje el layout */
-#screen-levels {
-    display: flex;
-    flex-direction: column;
-    height: 100dvh; /* dynamic viewport height */
-    overflow: hidden; /* Evita scroll en el body */
-    padding-top: 20px;
-}
-
-/* El contenedor del título o cabecera debe ser fijo */
-#screen-levels h2 {
-    flex-shrink: 0;
-    margin-bottom: 15px;
-}
-
-/* El contenedor de la cuadrícula es el que hace scroll */
-#levels-container {
-    flex: 1; /* Ocupa el espacio restante */
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 20px;
-    padding: 20px;
-    padding-bottom: 100px; /* Espacio extra abajo para que el último nivel no quede tapado por botones */
-    overflow-y: auto; /* PERMITE SCROLL VERTICAL */
-    -webkit-overflow-scrolling: touch; /* Scroll suave en iOS */
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-}
-
-/* Forzar limpieza de pseudo-elementos antiguos */
-.level-card::after, .level-card::before {
-    content: none !important;
-    display: none !important;
+    padding: 15px;
+    background: rgba(255,255,255,0.03);
+    border-radius: var(--radius-sm);
+    margin-bottom: 10px;
+    border: 1px solid rgba(255,255,255,0.05);
 }
