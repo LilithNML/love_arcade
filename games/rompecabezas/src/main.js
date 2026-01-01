@@ -2,7 +2,7 @@ import { LevelManager } from './core/LevelManager.js';
 import { UI } from './ui/UIController.js';
 import { Storage } from './systems/Storage.js';
 import { PuzzleEngine } from './core/PuzzleEngine.js';
-import { AudioMgr } from './systems/AudioManager.js';
+import { AudioSynth } from './systems/AudioSynth.js';
 import { Economy } from './systems/Economy.js';
 
 const levelManager = new LevelManager();
@@ -49,7 +49,7 @@ function startGame(levelId, loadSaved = false) {
         activeGame = new PuzzleEngine(canvas, {
             image: img, pieces: levelConfig.pieces
         }, {
-            onSound: (t) => AudioMgr.play(t),
+            onSound: (t) => AudioSynth.play(t),
             onWin: () => handleVictory(levelConfig),
             onStateChange: () => saveProgress(levelId)
         });
