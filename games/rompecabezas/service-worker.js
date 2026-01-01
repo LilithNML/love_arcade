@@ -1,10 +1,10 @@
 /**
- * service-worker.js v1.2
+ * service-worker.js v1.32
  * Encargado del cacheo de recursos para funcionamiento Offline (PWA).
  * CORRECCIÓN APLICADA: Ruta de levels.json actualizada a ./public/
  */
 
-const CACHE_NAME = 'puzzle-v1.2-production'; // Versión actualizada para limpiar caché viejo
+const CACHE_NAME = 'puzzle-v1.32-production'; // Versión actualizada para limpiar caché viejo
 
 // 1. GENERACIÓN DINÁMICA DE RUTAS DE NIVELES
 // Evita escribir manualmente 40 líneas de código para imágenes y thumbnails.
