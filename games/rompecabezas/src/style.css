@@ -602,3 +602,33 @@ canvas {
 .stars-display {
     letter-spacing: 2px;
 }
+
+/* Asegurar que la pantalla de niveles ocupe el 100% y maneje el layout */
+#screen-levels {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh; /* dynamic viewport height */
+    overflow: hidden; /* Evita scroll en el body */
+    padding-top: 20px;
+}
+
+/* El contenedor del título o cabecera debe ser fijo */
+#screen-levels h2 {
+    flex-shrink: 0;
+    margin-bottom: 15px;
+}
+
+/* El contenedor de la cuadrícula es el que hace scroll */
+#levels-container {
+    flex: 1; /* Ocupa el espacio restante */
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 20px;
+    padding: 20px;
+    padding-bottom: 100px; /* Espacio extra abajo para que el último nivel no quede tapado por botones */
+    overflow-y: auto; /* PERMITE SCROLL VERTICAL */
+    -webkit-overflow-scrolling: touch; /* Scroll suave en iOS */
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+}
