@@ -49,7 +49,7 @@ function startGame(levelId, loadSaved = false) {
         activeGame = new PuzzleEngine(canvas, {
             image: img, pieces: levelConfig.pieces
         }, {
-            onSound: (t) => AudioSynth.play(t),
+            onSound: (t) => AudioMgr.play(t),
             onWin: () => handleVictory(levelConfig),
             onStateChange: () => saveProgress(levelId)
         });
