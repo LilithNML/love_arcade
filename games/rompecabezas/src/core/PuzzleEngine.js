@@ -1,13 +1,16 @@
 /**
- * PuzzleEngine.js v13.0 - Visual Fix & Stability
- * - Fix Crash: Corrección de nombres de métodos (createPiecesPathsOnly).
- * - UX Visual: Fondo de tablero delimitado (Tapete) para contraste con piezas oscuras.
- * - Stability: Renderizado inicial forzado para evitar "piezas invisibles".
+ * PuzzleEngine.js v13.0
+ * * FIXES CRÍTICOS:
+ * - Reset de Transform Matrix: Evita acumulación de escala en resize.
+ * - SourceCanvas Optimizado: Tamaño lógico (sin DPR) para ahorro de RAM.
+ * - Smart Loop: El render se detiene (Sleep Mode) si no hay actividad.
+ * - Margen Eficiente: Reduce el fill-rate en piezas pequeñas.
  */
 
 export class PuzzleEngine {
     constructor(canvasElement, config, callbacks) {
         this.canvas = canvasElement;
+        // alpha: false mejora rendimiento (el compositor ignora lo de atrás)
         this.ctx = this.canvas.getContext('2d', { alpha: false });
         
         this.img = config.image;
@@ -40,11 +43,14 @@ export class PuzzleEngine {
         this.horizontalEdges = []; 
         
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-        this.isActive = true; 
+        
+        // --- LOOP CONTROL (Battery Saver) ---
+        this.isLoopRunning = false; // Estado del requestAnimationFrame
 
-        // Configuración visual
-        this.shadowBlur = this.gridSize > 6 ? 2 : 5;
-        this.particleLimit = this.gridSize > 6 ? 30 : 60;
+        // Configuración visual dinámica
+        // Desactivar sombras en grids grandes o móviles lentos
+        this.shadowBlur = this.gridSize >= 8 ? 0 : 5; 
+        this.particleLimit = this.gridSize >= 8 ? 20 : 50;
 
         // Binds
         this.handleStart = this.handleStart.bind(this);
@@ -62,28 +68,40 @@ export class PuzzleEngine {
         this.shufflePieces(); 
         this.addEventListeners();
         
-        // Iniciar loop
-        this.animate(); 
-        
-        // Render inicial forzado para asegurar visibilidad
-        setTimeout(() => this.render(), 100);
+        // Render inicial y arranque del loop
+        this.wakeUp();
+    }
+
+    /* --- GESTIÓN DE LOOP INTELIGENTE --- */
+    wakeUp() {
+        if (!this.isLoopRunning) {
+            this.isLoopRunning = true;
+            this.animate();
+        }
     }
 
     animate() {
-        if (!this.isActive) return;
-        if (this.isDragging || this.particles.length > 0 || this.needsStaticUpdate || this.showPreview) {
-            this.render();
+        // Criterio de suspensión: Si no pasa nada, dormir.
+        if (!this.isDragging && 
+            this.particles.length === 0 && 
+            !this.needsStaticUpdate && 
+            !this.showPreview) {
+            
+            this.isLoopRunning = false;
+            return; // STOP LOOP (Ahorro batería)
         }
+
+        this.render();
         requestAnimationFrame(() => this.animate());
     }
 
+    /* --- SETUP & RESIZE --- */
     handleResize() {
         this.resizeCanvas();
-        // Corrección del error de tipeo anterior
         this.createPiecesPathsOnly(); 
         this.shufflePieces(true);
         this.needsStaticUpdate = true; 
-        this.render(); 
+        this.wakeUp(); // Despertar loop al redimensionar
     }
 
     resizeCanvas() {
@@ -104,19 +122,24 @@ export class PuzzleEngine {
         cssW *= workAreaScale;
         cssH *= workAreaScale;
 
-        // Main Canvas
+        // 1. Configurar Main Canvas
         this.canvas.width = w * this.dpr;
         this.canvas.height = h * this.dpr;
         this.canvas.style.width = "100%";
         this.canvas.style.height = "100%";
+        
+        // FIX #1: Resetear transformación antes de escalar (Evita acumulación)
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
         this.ctx.scale(this.dpr, this.dpr);
 
-        // Static Canvas
+        // 2. Configurar Static Canvas
         this.staticCanvas.width = this.canvas.width; 
         this.staticCanvas.height = this.canvas.height;
+        
+        this.staticCtx.setTransform(1, 0, 0, 1, 0, 0); // Reset también aquí
         this.staticCtx.scale(this.dpr, this.dpr);
 
-        // Métricas
+        // Métricas Lógicas
         this.boardWidth = cssW;
         this.boardHeight = cssH;
         this.boardX = Math.round((w - cssW) / 2);
@@ -128,16 +151,19 @@ export class PuzzleEngine {
         this.logicalWidth = w;
         this.logicalHeight = h;
 
-        // Source Canvas (Pre-escalado)
-        this.sourceCanvas.width = Math.ceil(this.boardWidth * this.dpr);
-        this.sourceCanvas.height = Math.ceil(this.boardHeight * this.dpr);
+        // 3. Configurar Source Canvas (Optimización #2)
+        // Usamos tamaño lógico (Math.round), SIN DPR.
+        // Esto ahorra RAM y la GPU escala al dibujar en el canvas principal (que sí tiene DPR).
+        this.sourceCanvas.width = Math.round(this.boardWidth);
+        this.sourceCanvas.height = Math.round(this.boardHeight);
+        
         this.sourceCtx.clearRect(0, 0, this.sourceCanvas.width, this.sourceCanvas.height);
         this.sourceCtx.drawImage(this.img, 0, 0, this.sourceCanvas.width, this.sourceCanvas.height);
         
         this.needsStaticUpdate = true;
     }
 
-    /* --- UX: ZONA DE SEGURIDAD (BOTONES) --- */
+    /* --- UX: ZONA DE SEGURIDAD --- */
     isInRestrictedArea(x, y) {
         const safeMarginRight = 90; 
         const safeMarginBottom = 160; 
@@ -165,14 +191,15 @@ export class PuzzleEngine {
 
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
         
-        // 1. Dibujar Fondo Estático (Tablero + Piezas Fijas)
+        // 1. Fondo Estático
         this.ctx.drawImage(this.staticCanvas, 0, 0, this.logicalWidth, this.logicalHeight);
 
         // 2. Vista Previa
         if (this.showPreview) {
             this.ctx.save();
             this.ctx.globalAlpha = 0.3;
-            this.ctx.drawImage(this.sourceCanvas, 0, 0, this.sourceCanvas.width, this.sourceCanvas.height, this.boardX, this.boardY, this.boardWidth, this.boardHeight);
+            // Dibujar sourceCanvas estirado al tamaño del tablero
+            this.ctx.drawImage(this.sourceCanvas, this.boardX, this.boardY, this.boardWidth, this.boardHeight);
             this.ctx.restore();
         }
 
@@ -191,26 +218,18 @@ export class PuzzleEngine {
         this.updateParticles();
     }
 
-    /**
-     * Dibuja el fondo y las piezas bloqueadas.
-     * AQUÍ AGREGAMOS LA MEJORA VISUAL DEL TABLERO.
-     */
     updateStaticLayer() {
         const ctx = this.staticCtx;
         ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
 
-        // --- UX MEJORA: FONDO DEL TABLERO (TAPETE) ---
-        // Dibujamos un rectángulo semitransparente donde va el puzzle.
-        // Esto ayuda a ver piezas negras sobre el fondo negro.
-        ctx.fillStyle = "rgba(255, 255, 255, 0.06)"; // Gris muy suave
+        // Tapete del tablero (Mejora visual para piezas oscuras)
+        ctx.fillStyle = "rgba(255, 255, 255, 0.06)"; 
         ctx.fillRect(Math.round(this.boardX), Math.round(this.boardY), Math.round(this.boardWidth), Math.round(this.boardHeight));
         
-        // Borde brillante del tablero
         ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
         ctx.lineWidth = 2;
         ctx.strokeRect(Math.round(this.boardX), Math.round(this.boardY), Math.round(this.boardWidth), Math.round(this.boardHeight));
 
-        // Dibujar piezas bloqueadas
         for(let i=0; i<this.lockedPieces.length; i++) {
             this.renderPieceToContext(ctx, this.lockedPieces[i], false, true);
         }
@@ -218,11 +237,13 @@ export class PuzzleEngine {
 
     renderPieceToContext(ctx, p, isSelected, isStaticRender = false) {
         ctx.save();
+        
+        // Snap pixel para bordes nítidos
         const drawX = Math.round(p.currentX);
         const drawY = Math.round(p.currentY);
         ctx.translate(drawX, drawY);
 
-        if (!isStaticRender && !p.isLocked) {
+        if (!isStaticRender && !p.isLocked && this.shadowBlur > 0) {
             ctx.shadowColor = "rgba(0,0,0,0.4)";
             ctx.shadowBlur = isSelected ? 15 : this.shadowBlur;
             ctx.shadowOffsetY = isSelected ? 8 : 2;
@@ -235,14 +256,23 @@ export class PuzzleEngine {
 
         ctx.clip(p.path);
 
-        const margin = Math.max(this.pieceWidth, this.pieceHeight);
+        // --- OPTIMIZACIÓN MARGEN (Feedback 3) ---
+        // Evita leer demasiados píxeles innecesarios en grids grandes
+        const margin = Math.min(
+            Math.max(this.pieceWidth, this.pieceHeight),
+            this.tabSize * 3 // Límite razonable
+        );
+        
         let overlapFix = isStaticRender ? 0.6 : 0; 
 
+        // Coordenadas relativas al SourceCanvas (que es 1:1 lógico)
         const srcPieceW_SC = (this.sourceCanvas.width / this.gridSize);
         const srcPieceH_SC = (this.sourceCanvas.height / this.gridSize);
         const srcOriginX_SC = p.gridX * srcPieceW_SC;
         const srcOriginY_SC = p.gridY * srcPieceH_SC;
-        const scaleToSource = this.dpr; 
+        
+        // Scale to Source es 1 porque sourceCanvas es igual al tamaño lógico del board
+        const scaleToSource = 1; 
 
         const srcX = srcOriginX_SC - (margin * scaleToSource);
         const srcY = srcOriginY_SC - (margin * scaleToSource);
@@ -271,12 +301,12 @@ export class PuzzleEngine {
         }
     }
 
-    /* --- LÓGICA CORE --- */
     updatePieceCaches() {
         this.lockedPieces = this.pieces.filter(p => p.isLocked);
         this.loosePieces = this.pieces.filter(p => !p.isLocked);
     }
 
+    /* --- LÓGICA DE INICIALIZACIÓN --- */
     createPieces() {
         this.pieces = [];
         for (let y = 0; y < this.gridSize; y++) {
@@ -301,7 +331,6 @@ export class PuzzleEngine {
         this.updatePieceCaches();
     }
 
-    // FIX: Método renombrado correctamente para evitar crash
     createPiecesPathsOnly() {
         for (let p of this.pieces) {
             p.path = this.createPath(this.pieceWidth, this.pieceHeight, p.shape, p.jitter);
@@ -353,7 +382,7 @@ export class PuzzleEngine {
         
         this.updatePieceCaches();
         this.needsStaticUpdate = true;
-        this.render();
+        this.wakeUp();
     }
 
     generateSharedTopology() {
@@ -408,57 +437,82 @@ export class PuzzleEngine {
         path.lineTo(x2, y2);
     }
 
-    /* --- INPUT --- */
+    /* --- INPUT HANDLING --- */
     getPointerPos(e) {
         const rect = this.canvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
         return { x: clientX - rect.left, y: clientY - rect.top };
     }
+
     handleStart(e) {
         e.preventDefault(); const { x, y } = this.getPointerPos(e);
+        
         for (let i = this.loosePieces.length - 1; i >= 0; i--) {
             const p = this.loosePieces[i]; 
             const m = this.tabSize * 2.0; 
             if (x >= p.currentX - m && x <= p.currentX + this.pieceWidth + m && 
                 y >= p.currentY - m && y <= p.currentY + this.pieceHeight + m) {
-                this.selectedPiece = p; this.isDragging = true;
-                this.dragOffsetX = x - p.currentX; this.dragOffsetY = y - p.currentY;
-                if(this.callbacks.onSound) this.callbacks.onSound('click');
-                this.loosePieces.splice(i, 1); this.loosePieces.push(p);
-                this.render(); return;
+                
+                this.selectedPiece = p; 
+                this.isDragging = true;
+                this.dragOffsetX = x - p.currentX; 
+                this.dragOffsetY = y - p.currentY;
+                
+                // Despertar loop
+                this.wakeUp();
+                
+                this.callbacks.onSound && this.callbacks.onSound('click');
+                
+                this.loosePieces.splice(i, 1);
+                this.loosePieces.push(p);
+                return;
             }
         }
     }
+
     handleMove(e) {
         if (!this.isDragging || !this.selectedPiece) return;
-        e.preventDefault(); const { x, y } = this.getPointerPos(e);
+        e.preventDefault(); 
+        const { x, y } = this.getPointerPos(e);
+        
         this.selectedPiece.currentX = x - this.dragOffsetX;
         this.selectedPiece.currentY = y - this.dragOffsetY;
+        
         this.clampPosition(this.selectedPiece);
     }
+
     handleEnd(e) {
         if (!this.isDragging || !this.selectedPiece) return;
+        
         const dist = Math.hypot(this.selectedPiece.currentX - this.selectedPiece.correctX, this.selectedPiece.currentY - this.selectedPiece.correctY);
+        
         if (dist < this.pieceWidth * 0.3) {
             this.selectedPiece.currentX = this.selectedPiece.correctX;
             this.selectedPiece.currentY = this.selectedPiece.correctY;
             this.selectedPiece.isLocked = true;
             this.needsStaticUpdate = true; 
             this.updatePieceCaches();
-            if(this.callbacks.onSound) this.callbacks.onSound('snap');
+            
+            this.callbacks.onSound && this.callbacks.onSound('snap');
             this.spawnParticles(this.selectedPiece.currentX + this.pieceWidth/2, this.selectedPiece.currentY + this.pieceHeight/2, 'ripple');
+            
             if(this.callbacks.onStateChange) this.callbacks.onStateChange();
             this.checkVictory();
         } else {
             if(this.callbacks.onStateChange) this.callbacks.onStateChange();
         }
-        this.isDragging = false; this.selectedPiece = null; this.render();
+        
+        this.isDragging = false;
+        this.selectedPiece = null;
     }
     
     checkVictory() { 
         if (this.loosePieces.length === 0) { 
-            this.spawnParticles(this.logicalWidth/2, this.logicalHeight/2, 'confetti'); 
+            // Si el grid es muy grande, reducir partículas para evitar crash
+            if (this.gridSize < 8) {
+                this.spawnParticles(this.logicalWidth/2, this.logicalHeight/2, 'confetti'); 
+            }
             if(this.callbacks.onSound) this.callbacks.onSound('win'); 
             if(this.callbacks.onWin) setTimeout(this.callbacks.onWin, 1500); 
             this.canvas.removeEventListener('mousedown', this.handleStart); 
@@ -475,8 +529,8 @@ export class PuzzleEngine {
             const count = 30; const colors = ['#f43f5e', '#3b82f6', '#10b981', '#fbbf24', '#fff'];
             for(let i=0; i<count; i++) this.particles.push({ type: 'confetti', x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1.0, color: colors[Math.floor(Math.random()*colors.length)], size: Math.random()*4+2 });
         }
-        this.render();
     }
+
     updateParticles() {
         if(this.particles.length===0) return;
         for(let i=this.particles.length-1; i>=0; i--) {
@@ -495,12 +549,14 @@ export class PuzzleEngine {
     }
 
     exportState() { return this.pieces.map(p => ({ id: p.id, cx: p.currentX, cy: p.currentY, locked: p.isLocked })); }
+    
     importState(s) { 
         if(!s) return; 
         s.forEach(sp => { const p = this.pieces.find(x=>x.id===sp.id); if(p){ p.currentX=sp.cx; p.currentY=sp.cy; p.isLocked=sp.locked; } }); 
-        this.updatePieceCaches(); this.needsStaticUpdate=true; this.render(); 
+        this.updatePieceCaches(); this.needsStaticUpdate=true; this.wakeUp();
     }
-    togglePreview(a) { this.showPreview=a; this.render(); }
+    
+    togglePreview(a) { this.showPreview=a; this.wakeUp(); }
     
     autoPlacePiece() { 
         if(this.loosePieces.length===0) return false; 
@@ -509,19 +565,31 @@ export class PuzzleEngine {
         p.currentX=p.correctX; p.currentY=p.correctY; p.isLocked=true; 
         this.updatePieceCaches(); this.needsStaticUpdate=true;
         if(this.callbacks.onSound) this.callbacks.onSound('snap'); 
-        this.checkVictory(); return true; 
+        this.checkVictory(); this.wakeUp(); return true; 
     }
 
     addEventListeners() {
-        this.canvas.addEventListener('mousedown', this.handleStart); window.addEventListener('mousemove', this.handleMove); window.addEventListener('mouseup', this.handleEnd);
-        this.canvas.addEventListener('touchstart', this.handleStart, {passive:false}); window.addEventListener('touchmove', this.handleMove, {passive:false}); window.addEventListener('touchend', this.handleEnd);
-        if(!this._resizeObserver && typeof ResizeObserver!=='undefined') { this._resizeObserver=new ResizeObserver(()=>this.handleResize()); this._resizeObserver.observe(this.canvas.parentElement); }
+        this.canvas.addEventListener('mousedown', this.handleStart); 
+        window.addEventListener('mousemove', this.handleMove); 
+        window.addEventListener('mouseup', this.handleEnd);
+        this.canvas.addEventListener('touchstart', this.handleStart, {passive:false}); 
+        window.addEventListener('touchmove', this.handleMove, {passive:false}); 
+        window.addEventListener('touchend', this.handleEnd);
+        
+        if(!this._resizeObserver && typeof ResizeObserver!=='undefined') { 
+            this._resizeObserver=new ResizeObserver(()=>this.handleResize()); 
+            this._resizeObserver.observe(this.canvas.parentElement); 
+        }
     }
     
     destroy() {
-        this.isActive=false;
-        this.canvas.removeEventListener('mousedown', this.handleStart); window.removeEventListener('mousemove', this.handleMove); window.removeEventListener('mouseup', this.handleEnd);
-        this.canvas.removeEventListener('touchstart', this.handleStart); window.removeEventListener('touchmove', this.handleMove); window.removeEventListener('touchend', this.handleEnd);
+        this.isLoopRunning = false; // Stop Loop
+        this.canvas.removeEventListener('mousedown', this.handleStart); 
+        window.removeEventListener('mousemove', this.handleMove); 
+        window.removeEventListener('mouseup', this.handleEnd);
+        this.canvas.removeEventListener('touchstart', this.handleStart); 
+        window.removeEventListener('touchmove', this.handleMove); 
+        window.removeEventListener('touchend', this.handleEnd);
         if(this._resizeObserver) this._resizeObserver.disconnect();
     }
 }
