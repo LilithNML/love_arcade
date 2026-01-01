@@ -30,26 +30,35 @@ const ASSETS_TO_CACHE = [
   ...LEVEL_ASSETS
 ];
 
-// --- INSTALACIÓN ---
+// --- INSTALACIÓN (MODO DIAGNÓSTICO) ---
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('[SW] Iniciando caché masivo...');
+    caches.open(CACHE_NAME).then(async (cache) => {
+        console.log('[SW] 🔍 Iniciando diagnóstico de archivos...');
         
-        // Intentamos cachear todo. Si falla, capturamos el error para saber por qué.
-        return cache.addAll(ASSETS_TO_CACHE).catch(err => {
-            console.error('[SW] ERROR CRÍTICO AL CACHEAR:', err);
-            // Esto te dirá en la consola si un archivo no existe (404)
-            throw err; 
-        });
-      })
-      .then(() => {
-        console.log('[SW] Instalación completada con éxito.');
+        // En lugar de addAll, vamos uno por uno para ver cuál falla
+        for (const asset of ASSETS_TO_CACHE) {
+            try {
+                // Intentamos buscar y cachear el archivo
+                const response = await fetch(asset);
+                if (!response.ok) {
+                    throw new Error(`Status ${response.status}`);
+                }
+                await cache.put(asset, response);
+                // console.log(`[OK] ${asset}`); // Descomenta si quieres ver los que sí funcionan
+            } catch (err) {
+                // ¡AQUÍ ESTÁ EL CULPABLE!
+                console.error(`[SW] ❌ ERROR CRÍTICO: No se encuentra el archivo: ${asset}`);
+                console.error(`     Causa: ${err.message}`);
+            }
+        }
+        
+        console.log('[SW] Diagnóstico finalizado. Revisa los errores rojos arriba.');
         return self.skipWaiting();
-      })
+    })
   );
 });
+
 
 // --- ACTIVACIÓN ---
 self.addEventListener('activate', (e) => {
