@@ -267,5 +267,12 @@ window.addEventListener('resize', () => {
     resizeTimeout = setTimeout(() => { if(activeGame) activeGame.handleResize(); }, 100);
 });
 
+// Registrar Service Worker para PWA
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./service-worker.js')
+        .then(() => console.log('Service Worker registrado correctamente'))
+        .catch((err) => console.log('Fallo en SW:', err));
+}
+
 window.addEventListener('DOMContentLoaded', init);
         
