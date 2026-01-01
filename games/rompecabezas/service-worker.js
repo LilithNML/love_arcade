@@ -9,7 +9,7 @@ for (let i = 1; i <= TOTAL_LEVELS; i++) {
     LEVEL_ASSETS.push(`./assets/Nivel${i}.webp`);
     
     // Miniatura (Menú) - Descomentar la siguiente línea si ya están subidos los thumbnails
-    // LEVEL_ASSETS.push(`./assets/thumbnails/Nivel${i}_thumb.webp`);
+    LEVEL_ASSETS.push(`./assets/thumbnails/Nivel${i}_thumb.webp`);
 }
 
 // 2. Lista maestra de archivos a cachear
