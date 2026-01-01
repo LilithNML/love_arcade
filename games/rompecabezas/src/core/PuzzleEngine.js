@@ -1,10 +1,10 @@
 /**
- * PuzzleEngine.js v13.0
- * * FIXES CRÍTICOS:
- * - Reset de Transform Matrix: Evita acumulación de escala en resize.
- * - SourceCanvas Optimizado: Tamaño lógico (sin DPR) para ahorro de RAM.
- * - Smart Loop: El render se detiene (Sleep Mode) si no hay actividad.
- * - Margen Eficiente: Reduce el fill-rate en piezas pequeñas.
+ * PuzzleEngine.js v13.1 - Quality & Performance Fixes
+ * * FIXES DE CALIDAD:
+ * - SourceCanvas DPI: Restaura el uso de devicePixelRatio en sourceCanvas para evitar imágenes borrosas.
+ * - Render Mapping: Ajusta la lógica de recorte para mapear correctamente la fuente de alta resolución.
+ * * OPTIMIZACIONES PREVIAS:
+ * - Smart Loop (Sleep Mode), Reset Transform en resize, Margen Eficiente.
  */
 
 export class PuzzleEngine {
@@ -18,15 +18,17 @@ export class PuzzleEngine {
         this.callbacks = callbacks || {};
         
         // --- BUFFERS (Rendimiento) ---
+        // Static: Mantiene el fondo y piezas ya colocadas
         this.staticCanvas = document.createElement('canvas');
         this.staticCtx = this.staticCanvas.getContext('2d', { alpha: true });
         
+        // Source: Mantiene una copia optimizada de la imagen original
         this.sourceCanvas = document.createElement('canvas');
         this.sourceCtx = this.sourceCanvas.getContext('2d', { alpha: false });
 
         this.needsStaticUpdate = true;
 
-        // Estado
+        // Estado del Juego
         this.pieces = [];
         this.lockedPieces = []; 
         this.loosePieces = [];  
@@ -42,17 +44,18 @@ export class PuzzleEngine {
         this.verticalEdges = []; 
         this.horizontalEdges = []; 
         
+        // DPI (Device Pixel Ratio) para nitidez en pantallas Retina/Móviles
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
         
         // --- LOOP CONTROL (Battery Saver) ---
-        this.isLoopRunning = false; // Estado del requestAnimationFrame
+        this.isLoopRunning = false;
 
         // Configuración visual dinámica
-        // Desactivar sombras en grids grandes o móviles lentos
+        // Desactivar sombras costosas en grids grandes o dispositivos lentos
         this.shadowBlur = this.gridSize >= 8 ? 0 : 5; 
         this.particleLimit = this.gridSize >= 8 ? 20 : 50;
 
-        // Binds
+        // Binding de métodos
         this.handleStart = this.handleStart.bind(this);
         this.handleMove = this.handleMove.bind(this);
         this.handleEnd = this.handleEnd.bind(this);
@@ -68,7 +71,7 @@ export class PuzzleEngine {
         this.shufflePieces(); 
         this.addEventListeners();
         
-        // Render inicial y arranque del loop
+        // Arrancar loop inicial
         this.wakeUp();
     }
 
@@ -81,14 +84,14 @@ export class PuzzleEngine {
     }
 
     animate() {
-        // Criterio de suspensión: Si no pasa nada, dormir.
+        // Criterio de suspensión: Si no hay actividad visual, detener render.
         if (!this.isDragging && 
             this.particles.length === 0 && 
             !this.needsStaticUpdate && 
             !this.showPreview) {
             
             this.isLoopRunning = false;
-            return; // STOP LOOP (Ahorro batería)
+            return; // STOP LOOP
         }
 
         this.render();
@@ -99,9 +102,9 @@ export class PuzzleEngine {
     handleResize() {
         this.resizeCanvas();
         this.createPiecesPathsOnly(); 
-        this.shufflePieces(true);
+        this.shufflePieces(true); // Reposicionar manteniendo estado
         this.needsStaticUpdate = true; 
-        this.wakeUp(); // Despertar loop al redimensionar
+        this.wakeUp(); 
     }
 
     resizeCanvas() {
@@ -110,6 +113,7 @@ export class PuzzleEngine {
         const h = parent.clientHeight;
         const imgRatio = this.img.width / this.img.height;
 
+        // Cálculo de dimensiones "Contain"
         let cssW = w;
         let cssH = w / imgRatio;
 
@@ -118,6 +122,7 @@ export class PuzzleEngine {
             cssW = cssH * imgRatio;
         }
 
+        // Factor de área de trabajo (dejar espacio para piezas sueltas)
         const workAreaScale = 0.65; 
         cssW *= workAreaScale;
         cssH *= workAreaScale;
@@ -128,7 +133,7 @@ export class PuzzleEngine {
         this.canvas.style.width = "100%";
         this.canvas.style.height = "100%";
         
-        // FIX #1: Resetear transformación antes de escalar (Evita acumulación)
+        // FIX: Reset transform para evitar acumulación de escala
         this.ctx.setTransform(1, 0, 0, 1, 0, 0);
         this.ctx.scale(this.dpr, this.dpr);
 
@@ -136,7 +141,7 @@ export class PuzzleEngine {
         this.staticCanvas.width = this.canvas.width; 
         this.staticCanvas.height = this.canvas.height;
         
-        this.staticCtx.setTransform(1, 0, 0, 1, 0, 0); // Reset también aquí
+        this.staticCtx.setTransform(1, 0, 0, 1, 0, 0);
         this.staticCtx.scale(this.dpr, this.dpr);
 
         // Métricas Lógicas
@@ -151,19 +156,19 @@ export class PuzzleEngine {
         this.logicalWidth = w;
         this.logicalHeight = h;
 
-        // 3. Configurar Source Canvas (Optimización #2)
-        // Usamos tamaño lógico (Math.round), SIN DPR.
-        // Esto ahorra RAM y la GPU escala al dibujar en el canvas principal (que sí tiene DPR).
-        this.sourceCanvas.width = Math.round(this.boardWidth);
-        this.sourceCanvas.height = Math.round(this.boardHeight);
+        // 3. Configurar Source Canvas (CORRECCIÓN DE CALIDAD v13.1)
+        // Volvemos a usar DPR para que la fuente tenga alta resolución en móviles
+        this.sourceCanvas.width = Math.ceil(this.boardWidth * this.dpr);
+        this.sourceCanvas.height = Math.ceil(this.boardHeight * this.dpr);
         
+        // Dibujamos la imagen original escalada a alta calidad
         this.sourceCtx.clearRect(0, 0, this.sourceCanvas.width, this.sourceCanvas.height);
         this.sourceCtx.drawImage(this.img, 0, 0, this.sourceCanvas.width, this.sourceCanvas.height);
         
         this.needsStaticUpdate = true;
     }
 
-    /* --- UX: ZONA DE SEGURIDAD --- */
+    /* --- UX: ZONA DE SEGURIDAD (Botones) --- */
     isInRestrictedArea(x, y) {
         const safeMarginRight = 90; 
         const safeMarginBottom = 160; 
@@ -194,12 +199,12 @@ export class PuzzleEngine {
         // 1. Fondo Estático
         this.ctx.drawImage(this.staticCanvas, 0, 0, this.logicalWidth, this.logicalHeight);
 
-        // 2. Vista Previa
+        // 2. Vista Previa (Fantasma)
         if (this.showPreview) {
             this.ctx.save();
             this.ctx.globalAlpha = 0.3;
-            // Dibujar sourceCanvas estirado al tamaño del tablero
-            this.ctx.drawImage(this.sourceCanvas, this.boardX, this.boardY, this.boardWidth, this.boardHeight);
+            // Dibujar sourceCanvas reescalado al tamaño lógico
+            this.ctx.drawImage(this.sourceCanvas, 0, 0, this.sourceCanvas.width, this.sourceCanvas.height, this.boardX, this.boardY, this.boardWidth, this.boardHeight);
             this.ctx.restore();
         }
 
@@ -209,7 +214,7 @@ export class PuzzleEngine {
             if(p !== this.selectedPiece) this.renderPieceToContext(this.ctx, p, false);
         }
 
-        // 4. Pieza Seleccionada
+        // 4. Pieza Seleccionada (Tope)
         if (this.selectedPiece) {
             this.renderPieceToContext(this.ctx, this.selectedPiece, true);
         }
@@ -243,6 +248,7 @@ export class PuzzleEngine {
         const drawY = Math.round(p.currentY);
         ctx.translate(drawX, drawY);
 
+        // Sombras
         if (!isStaticRender && !p.isLocked && this.shadowBlur > 0) {
             ctx.shadowColor = "rgba(0,0,0,0.4)";
             ctx.shadowBlur = isSelected ? 15 : this.shadowBlur;
@@ -256,29 +262,35 @@ export class PuzzleEngine {
 
         ctx.clip(p.path);
 
-        // --- OPTIMIZACIÓN MARGEN (Feedback 3) ---
-        // Evita leer demasiados píxeles innecesarios en grids grandes
+        // --- RENDERIZADO OPTIMIZADO CON SOPORTE DPI (v13.1) ---
+        
+        // Margen inteligente para evitar sobrecarga en GPU
         const margin = Math.min(
             Math.max(this.pieceWidth, this.pieceHeight),
-            this.tabSize * 3 // Límite razonable
+            this.tabSize * 3 
         );
         
         let overlapFix = isStaticRender ? 0.6 : 0; 
 
-        // Coordenadas relativas al SourceCanvas (que es 1:1 lógico)
+        // IMPORTANTE: Ahora el sourceCanvas es High-DPI (x2 o x3),
+        // por lo que debemos multiplicar las coordenadas de lectura por DPR.
+        const scaleToSource = this.dpr; 
+
+        // Cálculo de dimensiones en el SourceCanvas
+        // Nota: sourceCanvas.width ya incluye el DPR, así que dividimos por gridSize directamente.
         const srcPieceW_SC = (this.sourceCanvas.width / this.gridSize);
         const srcPieceH_SC = (this.sourceCanvas.height / this.gridSize);
+        
         const srcOriginX_SC = p.gridX * srcPieceW_SC;
         const srcOriginY_SC = p.gridY * srcPieceH_SC;
         
-        // Scale to Source es 1 porque sourceCanvas es igual al tamaño lógico del board
-        const scaleToSource = 1; 
-
+        // Coordenadas Fuente (Lectura)
         const srcX = srcOriginX_SC - (margin * scaleToSource);
         const srcY = srcOriginY_SC - (margin * scaleToSource);
         const srcW = srcPieceW_SC + (margin * 2 * scaleToSource);
         const srcH = srcPieceH_SC + (margin * 2 * scaleToSource);
 
+        // Coordenadas Destino (Dibujado en Canvas Lógico)
         const dstX = -margin - overlapFix;
         const dstY = -margin - overlapFix;
         const dstW = this.pieceWidth + (margin * 2) + (overlapFix * 2);
@@ -287,6 +299,7 @@ export class PuzzleEngine {
         ctx.drawImage(this.sourceCanvas, srcX, srcY, srcW, srcH, dstX, dstY, dstW, dstH);
         ctx.restore();
 
+        // Bordes (Solo piezas sueltas)
         if (!isStaticRender && !p.isLocked) {
             ctx.save();
             ctx.translate(drawX, drawY);
@@ -306,7 +319,7 @@ export class PuzzleEngine {
         this.loosePieces = this.pieces.filter(p => !p.isLocked);
     }
 
-    /* --- LÓGICA DE INICIALIZACIÓN --- */
+    /* --- GENERACIÓN DE PIEZAS --- */
     createPieces() {
         this.pieces = [];
         for (let y = 0; y < this.gridSize; y++) {
@@ -459,7 +472,6 @@ export class PuzzleEngine {
                 this.dragOffsetX = x - p.currentX; 
                 this.dragOffsetY = y - p.currentY;
                 
-                // Despertar loop
                 this.wakeUp();
                 
                 this.callbacks.onSound && this.callbacks.onSound('click');
@@ -509,7 +521,6 @@ export class PuzzleEngine {
     
     checkVictory() { 
         if (this.loosePieces.length === 0) { 
-            // Si el grid es muy grande, reducir partículas para evitar crash
             if (this.gridSize < 8) {
                 this.spawnParticles(this.logicalWidth/2, this.logicalHeight/2, 'confetti'); 
             }
@@ -583,7 +594,7 @@ export class PuzzleEngine {
     }
     
     destroy() {
-        this.isLoopRunning = false; // Stop Loop
+        this.isLoopRunning = false; 
         this.canvas.removeEventListener('mousedown', this.handleStart); 
         window.removeEventListener('mousemove', this.handleMove); 
         window.removeEventListener('mouseup', this.handleEnd);
