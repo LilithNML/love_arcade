@@ -1,8 +1,8 @@
 /**
- * PuzzleEngine.js v12.0 - Phase 1 Polish
- * - Feature: Partículas "Snap" (Onda expansiva de luz).
- * - Fix: Zona de seguridad UI (Evita que las piezas queden bajo los botones).
- * - Optimization: SourceCanvas y Double Buffering mantenidos.
+ * PuzzleEngine.js v13.0 - Visual Fix & Stability
+ * - Fix Crash: Corrección de nombres de métodos (createPiecesPathsOnly).
+ * - UX Visual: Fondo de tablero delimitado (Tapete) para contraste con piezas oscuras.
+ * - Stability: Renderizado inicial forzado para evitar "piezas invisibles".
  */
 
 export class PuzzleEngine {
@@ -14,9 +14,10 @@ export class PuzzleEngine {
         this.gridSize = Math.sqrt(config.pieces);
         this.callbacks = callbacks || {};
         
-        // Buffers
+        // --- BUFFERS (Rendimiento) ---
         this.staticCanvas = document.createElement('canvas');
         this.staticCtx = this.staticCanvas.getContext('2d', { alpha: true });
+        
         this.sourceCanvas = document.createElement('canvas');
         this.sourceCtx = this.sourceCanvas.getContext('2d', { alpha: false });
 
@@ -27,7 +28,7 @@ export class PuzzleEngine {
         this.lockedPieces = []; 
         this.loosePieces = [];  
         
-        this.particles = []; // Array mixto (Confetti + Ripples)
+        this.particles = []; 
         this.selectedPiece = null;
         this.isDragging = false;
         this.showPreview = false;
@@ -60,7 +61,12 @@ export class PuzzleEngine {
         this.createPieces(); 
         this.shufflePieces(); 
         this.addEventListeners();
+        
+        // Iniciar loop
         this.animate(); 
+        
+        // Render inicial forzado para asegurar visibilidad
+        setTimeout(() => this.render(), 100);
     }
 
     animate() {
@@ -73,6 +79,7 @@ export class PuzzleEngine {
 
     handleResize() {
         this.resizeCanvas();
+        // Corrección del error de tipeo anterior
         this.createPiecesPathsOnly(); 
         this.shufflePieces(true);
         this.needsStaticUpdate = true; 
@@ -97,13 +104,14 @@ export class PuzzleEngine {
         cssW *= workAreaScale;
         cssH *= workAreaScale;
 
-        // Canvas Setup
+        // Main Canvas
         this.canvas.width = w * this.dpr;
         this.canvas.height = h * this.dpr;
         this.canvas.style.width = "100%";
         this.canvas.style.height = "100%";
         this.ctx.scale(this.dpr, this.dpr);
 
+        // Static Canvas
         this.staticCanvas.width = this.canvas.width; 
         this.staticCanvas.height = this.canvas.height;
         this.staticCtx.scale(this.dpr, this.dpr);
@@ -120,118 +128,32 @@ export class PuzzleEngine {
         this.logicalWidth = w;
         this.logicalHeight = h;
 
-        // Source Canvas
+        // Source Canvas (Pre-escalado)
         this.sourceCanvas.width = Math.ceil(this.boardWidth * this.dpr);
         this.sourceCanvas.height = Math.ceil(this.boardHeight * this.dpr);
         this.sourceCtx.clearRect(0, 0, this.sourceCanvas.width, this.sourceCanvas.height);
         this.sourceCtx.drawImage(this.img, 0, 0, this.sourceCanvas.width, this.sourceCanvas.height);
+        
+        this.needsStaticUpdate = true;
     }
 
-    /* --- BUG FIX: Zona Prohibida (UI Buttons) --- */
-    // Determina si una coordenada está debajo de los botones (esquina inferior derecha)
+    /* --- UX: ZONA DE SEGURIDAD (BOTONES) --- */
     isInRestrictedArea(x, y) {
-        // Los botones ocupan aprox 80px x 150px en la esquina inferior derecha
         const safeMarginRight = 90; 
         const safeMarginBottom = 160; 
-        
         return (x > this.logicalWidth - safeMarginRight) && 
                (y > this.logicalHeight - safeMarginBottom);
     }
 
-    // Clamper inteligente que evita la zona de UI
     clampPosition(p) {
-        // 1. Clamp básico a pantalla
         let x = Math.max(0, Math.min(p.currentX, this.logicalWidth - this.pieceWidth));
         let y = Math.max(0, Math.min(p.currentY, this.logicalHeight - this.pieceHeight));
 
-        // 2. Clamp UI (Si entra en zona prohibida, empujar hacia arriba o izquierda)
         if (this.isInRestrictedArea(x + this.pieceWidth/2, y + this.pieceHeight/2)) {
-            // Empujar hacia arriba
             y = this.logicalHeight - 170 - this.pieceHeight;
         }
-        
         p.currentX = x;
         p.currentY = y;
-    }
-
-    /* --- LOGICA DE PARTICULAS (Ripple & Confetti) --- */
-    spawnParticles(x, y, type) {
-        if (type === 'ripple') {
-            // Efecto SNAP: Onda expansiva
-            this.particles.push({
-                type: 'ripple',
-                x: x, y: y,
-                radius: 10,
-                alpha: 1.0,
-                color: '#ffffff',
-                lineWidth: 4
-            });
-            // Destello secundario
-            this.particles.push({
-                type: 'ripple',
-                x: x, y: y,
-                radius: 5,
-                alpha: 1.0,
-                color: '#fbbf24', // Gold
-                lineWidth: 2,
-                speed: 1.5
-            });
-        } else {
-            // Confetti existente
-            if (this.particles.length > this.particleLimit) return;
-            const count = 30;
-            const colors = ['#f43f5e', '#3b82f6', '#10b981', '#fbbf24', '#fff'];
-            for(let i=0; i<count; i++) {
-                this.particles.push({
-                    type: 'confetti',
-                    x, y, 
-                    vx: (Math.random()-0.5)*10, 
-                    vy: (Math.random()-0.5)*10,
-                    life: 1.0, color: colors[Math.floor(Math.random()*colors.length)], 
-                    size: Math.random()*4+2
-                });
-            }
-        }
-        this.render(); // Force render start
-    }
-
-    updateParticles() {
-        if(this.particles.length===0) return;
-        
-        for(let i=this.particles.length-1; i>=0; i--) {
-            let p = this.particles[i];
-            
-            if (p.type === 'ripple') {
-                // Lógica Ripple
-                p.radius += (p.speed || 3);
-                p.alpha -= 0.04;
-                p.lineWidth *= 0.95;
-                
-                if(p.alpha <= 0) {
-                    this.particles.splice(i, 1);
-                } else {
-                    this.ctx.save();
-                    this.ctx.beginPath();
-                    this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-                    this.ctx.strokeStyle = p.color;
-                    this.ctx.lineWidth = p.lineWidth;
-                    this.ctx.globalAlpha = p.alpha;
-                    this.ctx.stroke();
-                    this.ctx.restore();
-                }
-            } else {
-                // Lógica Confetti
-                p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.03;
-                if(p.life<=0) {
-                    this.particles.splice(i, 1);
-                } else { 
-                    this.ctx.globalAlpha = p.life; 
-                    this.ctx.fillStyle = p.color; 
-                    this.ctx.fillRect(p.x, p.y, p.size, p.size); 
-                }
-            }
-        }
-        this.ctx.globalAlpha = 1;
     }
 
     /* --- RENDER --- */
@@ -242,8 +164,11 @@ export class PuzzleEngine {
         }
 
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
+        
+        // 1. Dibujar Fondo Estático (Tablero + Piezas Fijas)
         this.ctx.drawImage(this.staticCanvas, 0, 0, this.logicalWidth, this.logicalHeight);
 
+        // 2. Vista Previa
         if (this.showPreview) {
             this.ctx.save();
             this.ctx.globalAlpha = 0.3;
@@ -251,25 +176,41 @@ export class PuzzleEngine {
             this.ctx.restore();
         }
 
+        // 3. Piezas Sueltas
         for(let i=0; i<this.loosePieces.length; i++) {
             const p = this.loosePieces[i];
             if(p !== this.selectedPiece) this.renderPieceToContext(this.ctx, p, false);
         }
 
+        // 4. Pieza Seleccionada
         if (this.selectedPiece) {
             this.renderPieceToContext(this.ctx, this.selectedPiece, true);
         }
 
+        // 5. Partículas
         this.updateParticles();
     }
 
+    /**
+     * Dibuja el fondo y las piezas bloqueadas.
+     * AQUÍ AGREGAMOS LA MEJORA VISUAL DEL TABLERO.
+     */
     updateStaticLayer() {
         const ctx = this.staticCtx;
         ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
-        ctx.strokeStyle = "rgba(255,255,255,0.1)";
+
+        // --- UX MEJORA: FONDO DEL TABLERO (TAPETE) ---
+        // Dibujamos un rectángulo semitransparente donde va el puzzle.
+        // Esto ayuda a ver piezas negras sobre el fondo negro.
+        ctx.fillStyle = "rgba(255, 255, 255, 0.06)"; // Gris muy suave
+        ctx.fillRect(Math.round(this.boardX), Math.round(this.boardY), Math.round(this.boardWidth), Math.round(this.boardHeight));
+        
+        // Borde brillante del tablero
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
         ctx.lineWidth = 2;
         ctx.strokeRect(Math.round(this.boardX), Math.round(this.boardY), Math.round(this.boardWidth), Math.round(this.boardHeight));
 
+        // Dibujar piezas bloqueadas
         for(let i=0; i<this.lockedPieces.length; i++) {
             this.renderPieceToContext(ctx, this.lockedPieces[i], false, true);
         }
@@ -330,12 +271,12 @@ export class PuzzleEngine {
         }
     }
 
+    /* --- LÓGICA CORE --- */
     updatePieceCaches() {
         this.lockedPieces = this.pieces.filter(p => p.isLocked);
         this.loosePieces = this.pieces.filter(p => !p.isLocked);
     }
 
-    /* --- INIT LOGIC --- */
     createPieces() {
         this.pieces = [];
         for (let y = 0; y < this.gridSize; y++) {
@@ -360,6 +301,19 @@ export class PuzzleEngine {
         this.updatePieceCaches();
     }
 
+    // FIX: Método renombrado correctamente para evitar crash
+    createPiecesPathsOnly() {
+        for (let p of this.pieces) {
+            p.path = this.createPath(this.pieceWidth, this.pieceHeight, p.shape, p.jitter);
+            p.correctX = this.boardX + (p.gridX * this.pieceWidth);
+            p.correctY = this.boardY + (p.gridY * this.pieceHeight);
+            if(p.isLocked) {
+                p.currentX = p.correctX;
+                p.currentY = p.correctY;
+            }
+        }
+    }
+
     shufflePieces(repositionOnly = false) {
         this.updatePieceCaches();
         const loose = this.loosePieces;
@@ -375,6 +329,7 @@ export class PuzzleEngine {
         loose.forEach((p, i) => {
             if (repositionOnly && p.isLocked) return;
             p.isLocked = false;
+            
             const isLeft = i % 2 === 0;
             const indexInSide = Math.floor(i / 2);
             const columnOffset = Math.floor(indexInSide / slotsPerColumn) * (this.pieceWidth * 0.3);
@@ -393,7 +348,6 @@ export class PuzzleEngine {
             p.currentX = posX + (Math.random() * 5);
             p.currentY = posY + (Math.random() * 5);
             
-            // Asegurar que no nazcan en la zona prohibida
             this.clampPosition(p);
         });
         
@@ -402,7 +356,7 @@ export class PuzzleEngine {
         this.render();
     }
 
-    generateSharedTopology() { /* ...Misma lógica V9... */
+    generateSharedTopology() {
         const jitterStrength = this.gridSize > 6 ? 0.08 : 0.15;
         this.shapes = [];
         for (let y = 0; y < this.gridSize; y++) {
@@ -440,7 +394,8 @@ export class PuzzleEngine {
         path.closePath();
         return path;
     }
-    lineToTab(path, x1, y1, x2, y2, amp, shift) { /* ...Misma lógica Bézier... */
+    
+    lineToTab(path, x1, y1, x2, y2, amp, shift) {
         const w = x2 - x1; const h = y2 - y1;
         const cx = x1 + w * 0.5 + (w===0 ? shift : 0);
         const cy = y1 + h * 0.5 + (h===0 ? shift : 0);
@@ -467,73 +422,106 @@ export class PuzzleEngine {
             const m = this.tabSize * 2.0; 
             if (x >= p.currentX - m && x <= p.currentX + this.pieceWidth + m && 
                 y >= p.currentY - m && y <= p.currentY + this.pieceHeight + m) {
-                
-                this.selectedPiece = p; 
-                this.isDragging = true;
-                this.dragOffsetX = x - p.currentX; 
-                this.dragOffsetY = y - p.currentY;
-                
-                // Audio Click
-                this.callbacks.onSound && this.callbacks.onSound('click');
-                
-                this.loosePieces.splice(i, 1);
-                this.loosePieces.push(p);
-                this.render(); 
-                return;
+                this.selectedPiece = p; this.isDragging = true;
+                this.dragOffsetX = x - p.currentX; this.dragOffsetY = y - p.currentY;
+                if(this.callbacks.onSound) this.callbacks.onSound('click');
+                this.loosePieces.splice(i, 1); this.loosePieces.push(p);
+                this.render(); return;
             }
         }
     }
     handleMove(e) {
         if (!this.isDragging || !this.selectedPiece) return;
-        e.preventDefault(); 
-        const { x, y } = this.getPointerPos(e);
-        
-        // Mover
+        e.preventDefault(); const { x, y } = this.getPointerPos(e);
         this.selectedPiece.currentX = x - this.dragOffsetX;
         this.selectedPiece.currentY = y - this.dragOffsetY;
-        
-        // Aplicar Zona Prohibida (Clamp)
         this.clampPosition(this.selectedPiece);
     }
     handleEnd(e) {
         if (!this.isDragging || !this.selectedPiece) return;
         const dist = Math.hypot(this.selectedPiece.currentX - this.selectedPiece.correctX, this.selectedPiece.currentY - this.selectedPiece.correctY);
-        
         if (dist < this.pieceWidth * 0.3) {
             this.selectedPiece.currentX = this.selectedPiece.correctX;
             this.selectedPiece.currentY = this.selectedPiece.correctY;
             this.selectedPiece.isLocked = true;
             this.needsStaticUpdate = true; 
             this.updatePieceCaches();
-            
-            // Audio Snap & Partículas Ripple
-            this.callbacks.onSound && this.callbacks.onSound('snap');
+            if(this.callbacks.onSound) this.callbacks.onSound('snap');
             this.spawnParticles(this.selectedPiece.currentX + this.pieceWidth/2, this.selectedPiece.currentY + this.pieceHeight/2, 'ripple');
-            
             if(this.callbacks.onStateChange) this.callbacks.onStateChange();
             this.checkVictory();
         } else {
-            // Drop normal
             if(this.callbacks.onStateChange) this.callbacks.onStateChange();
         }
-        this.isDragging = false;
-        this.selectedPiece = null;
-        this.render();
+        this.isDragging = false; this.selectedPiece = null; this.render();
     }
     
-    // Boilerplate final (CheckVictory, exportState, etc.) - Igual que antes
-    checkVictory() { if (this.loosePieces.length === 0) { this.spawnParticles(this.logicalWidth/2, this.logicalHeight/2, 'confetti'); if(this.callbacks.onSound) this.callbacks.onSound('win'); if(this.callbacks.onWin) setTimeout(this.callbacks.onWin, 1500); this.canvas.removeEventListener('mousedown', this.handleStart); this.canvas.removeEventListener('touchstart', this.handleStart); } }
+    checkVictory() { 
+        if (this.loosePieces.length === 0) { 
+            this.spawnParticles(this.logicalWidth/2, this.logicalHeight/2, 'confetti'); 
+            if(this.callbacks.onSound) this.callbacks.onSound('win'); 
+            if(this.callbacks.onWin) setTimeout(this.callbacks.onWin, 1500); 
+            this.canvas.removeEventListener('mousedown', this.handleStart); 
+            this.canvas.removeEventListener('touchstart', this.handleStart); 
+        } 
+    }
+
+    spawnParticles(x, y, type) {
+        if (type === 'ripple') {
+            this.particles.push({ type: 'ripple', x: x, y: y, radius: 10, alpha: 1.0, color: '#ffffff', lineWidth: 4, speed: 3 });
+            this.particles.push({ type: 'ripple', x: x, y: y, radius: 5, alpha: 1.0, color: '#fbbf24', lineWidth: 2, speed: 1.5 });
+        } else {
+            if (this.particles.length > this.particleLimit) return;
+            const count = 30; const colors = ['#f43f5e', '#3b82f6', '#10b981', '#fbbf24', '#fff'];
+            for(let i=0; i<count; i++) this.particles.push({ type: 'confetti', x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1.0, color: colors[Math.floor(Math.random()*colors.length)], size: Math.random()*4+2 });
+        }
+        this.render();
+    }
+    updateParticles() {
+        if(this.particles.length===0) return;
+        for(let i=this.particles.length-1; i>=0; i--) {
+            let p = this.particles[i];
+            if (p.type === 'ripple') {
+                p.radius += p.speed; p.alpha -= 0.04; p.lineWidth *= 0.95;
+                if(p.alpha <= 0) this.particles.splice(i, 1);
+                else { this.ctx.save(); this.ctx.beginPath(); this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); this.ctx.strokeStyle = p.color; this.ctx.lineWidth = p.lineWidth; this.ctx.globalAlpha = p.alpha; this.ctx.stroke(); this.ctx.restore(); }
+            } else {
+                p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.03;
+                if(p.life<=0) this.particles.splice(i, 1);
+                else { this.ctx.globalAlpha = p.life; this.ctx.fillStyle = p.color; this.ctx.fillRect(p.x, p.y, p.size, p.size); }
+            }
+        }
+        this.ctx.globalAlpha = 1;
+    }
+
     exportState() { return this.pieces.map(p => ({ id: p.id, cx: p.currentX, cy: p.currentY, locked: p.isLocked })); }
-    importState(s) { if(!s) return; s.forEach(sp => { const p = this.pieces.find(x=>x.id===sp.id); if(p){ p.currentX=sp.cx; p.currentY=sp.cy; p.isLocked=sp.locked; } }); this.updatePieceCaches(); this.needsStaticUpdate=true; this.render(); }
+    importState(s) { 
+        if(!s) return; 
+        s.forEach(sp => { const p = this.pieces.find(x=>x.id===sp.id); if(p){ p.currentX=sp.cx; p.currentY=sp.cy; p.isLocked=sp.locked; } }); 
+        this.updatePieceCaches(); this.needsStaticUpdate=true; this.render(); 
+    }
     togglePreview(a) { this.showPreview=a; this.render(); }
+    
     autoPlacePiece() { 
         if(this.loosePieces.length===0) return false; 
         const p = this.loosePieces[Math.floor(Math.random()*this.loosePieces.length)]; 
         this.spawnParticles(p.correctX+this.pieceWidth/2, p.correctY+this.pieceHeight/2, 'ripple'); 
         p.currentX=p.correctX; p.currentY=p.correctY; p.isLocked=true; 
         this.updatePieceCaches(); this.needsStaticUpdate=true;
-        if(this.callbacks.onSound) this.callbacks.onSound('snap'); this.checkVictory(); return true; 
+        if(this.callbacks.onSound) this.callbacks.onSound('snap'); 
+        this.checkVictory(); return true; 
     }
-    addEventListeners() { /* ... */ this.canvas.addEventListener('mousedown', this.handleStart); window.addEventListener('mousemove', this.handleMove); window.addEventListener('mouseup', this.handleEnd); this.canvas.addEventListener('touchstart', this.handleStart, {passive:false}); window.addEventListener('touchmove', this.handleMove, {passive:false}); window.addEventListener('touchend', this.handleEnd); if(!this._resizeObserver && typeof ResizeObserver!=='undefined') { this._resizeObserver=new ResizeObserver(()=>this.handleResize()); this._resizeObserver.observe(this.canvas.parentElement); } }
-    destroy() { this.isActive=false; this.canvas.removeEventListener('mousedown', this.handleStart); window.removeEventListener('mousemove', this.handleMove); window.removeEventListener('mouseup', this.handleEnd); this.canvas.removeEventListener('touchstart', this.handleStart); window.removeEventListener('touchmove', this.handleMove); window.removeEventListener('touchend', this.handleEnd); if(this._resizeObserver) this._resizeObserver.disconnect(); }
+
+    addEventListeners() {
+        this.canvas.addEventListener('mousedown', this.handleStart); window.addEventListener('mousemove', this.handleMove); window.addEventListener('mouseup', this.handleEnd);
+        this.canvas.addEventListener('touchstart', this.handleStart, {passive:false}); window.addEventListener('touchmove', this.handleMove, {passive:false}); window.addEventListener('touchend', this.handleEnd);
+        if(!this._resizeObserver && typeof ResizeObserver!=='undefined') { this._resizeObserver=new ResizeObserver(()=>this.handleResize()); this._resizeObserver.observe(this.canvas.parentElement); }
+    }
+    
+    destroy() {
+        this.isActive=false;
+        this.canvas.removeEventListener('mousedown', this.handleStart); window.removeEventListener('mousemove', this.handleMove); window.removeEventListener('mouseup', this.handleEnd);
+        this.canvas.removeEventListener('touchstart', this.handleStart); window.removeEventListener('touchmove', this.handleMove); window.removeEventListener('touchend', this.handleEnd);
+        if(this._resizeObserver) this._resizeObserver.disconnect();
+    }
 }
