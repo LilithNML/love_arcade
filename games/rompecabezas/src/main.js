@@ -2,7 +2,7 @@
  * main.js
  * Punto de entrada principal del juego.
  * Orquesta la lógica entre el Motor (PuzzleEngine), UI, Almacenamiento y Economía.
- * Actualizado Fase 2: Lógica de Estrellas, Recompensas Dinámicas y PWA.
+ * Actualizado Fase 2: Lógica de Estrellas,  Recompensas Dinámicas y PWA.
  */
 
 import { LevelManager } from './core/LevelManager.js';
