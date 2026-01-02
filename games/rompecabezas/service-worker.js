@@ -4,7 +4,7 @@
  * CORRECCIÓN APLICADA: Ruta de levels.json actualizada a ./public/
  */
 
-const CACHE_NAME = 'puzzle-v2.8-Retro Arcade Synthwave UI'; // Versión actualizada para limpiar caché viejo
+const CACHE_NAME = 'puzzle-v2.8.1-Synthwave UI'; // Versión actualizada para limpiar caché viejo
 
 // 1. GENERACIÓN DINÁMICA DE RUTAS DE NIVELES
 // Evita escribir manualmente 40 líneas de código para imágenes y thumbnails.
