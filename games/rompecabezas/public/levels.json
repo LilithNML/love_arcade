@@ -6,7 +6,7 @@
     "pieces": 4,
     "rewardCoins": 20,
     "description": "Introducción básica",
-    "timeLimit": 30
+    "timeLimit": 0
   },
   {
     "id": "lvl_2",
