@@ -2,7 +2,8 @@
  * main.js
  * Punto de entrada principal del juego.
  * Orquesta la lógica entre el Motor (PuzzleEngine), UI, Almacenamiento y Economía.
- * Actualizado Fase 2: Lógica de Estrellas,  Recompensas Dinámicas y PWA.
+ * Actualizado Fase 2: Lógica de Estrellas, Recompensas Dinámicas y PWA.
+ * Actualizado Fase 3: Haptic Feedback.
  */
 
 import { LevelManager } from './core/LevelManager.js';
@@ -12,185 +13,186 @@ import { PuzzleEngine } from './core/PuzzleEngine.js';
 import { AudioSynth } from './systems/AudioSynth.js'; 
 import { Economy } from './systems/Economy.js';
 
-// --- INSTANCIAS Y ESTADO GLOBAL ---
+// Instancias y Variables Globales
 const levelManager = new LevelManager();
-let activeGame = null;      // Instancia del motor del juego
-let gameTimer = null;       // Referencia al setInterval del reloj
-let currentLevelId = null;  // ID del nivel actual (ej: 'lvl_1')
-let startTime = 0;          // Marca de tiempo para calcular duración y estrellas
+let activeGame = null;      // Instancia del motor actual
+let gameTimer = null;       // Intervalo del temporizador (cuenta regresiva)
+let currentLevelId = null;  // ID del nivel en juego
+let startTime = 0;          // Para medir duración y calcular estrellas
 
 /**
- * Inicialización de la aplicación (DOMContentLoaded)
+ * Inicialización de la aplicación
  */
 async function init() {
     console.log('[Main] Iniciando Rompecabezas Arcade...');
     
-    // 1. Cargar configuración de niveles desde JSON
+    // Cargar configuración de niveles (JSON)
     await levelManager.loadLevels();
     
-    // 2. Configurar interacción de UI
+    // Configurar listeners de botones
     setupNavigation();
     setupSettings();
     
-    // 3. Mostrar menú principal
+    // Mostrar menú principal
     UI.showScreen('menu');
 }
 
 /**
- * Inicia una partida de un nivel específico.
- * @param {string} levelId - ID del nivel.
- * @param {boolean} loadSaved - Si true, intenta cargar un estado previo.
+ * Inicia un nivel específico.
+ * @param {string} levelId - ID del nivel (ej: 'lvl_1')
+ * @param {boolean} loadSaved - Si true, carga el progreso guardado
  */
 function startGame(levelId, loadSaved = false) {
     const levelConfig = levelManager.getLevelById(levelId);
-    if (!levelConfig) {
-        console.error("Nivel no encontrado:", levelId);
-        return;
-    }
+    if (!levelConfig) return;
     
     currentLevelId = levelId;
 
-    // Actualizar HUD (Título del nivel)
+    // Actualizar HUD (Nivel Actual)
     const allLevels = levelManager.getAllLevelsWithStatus();
     const levelIndex = allLevels.findIndex(l => l.id === levelId);
     const lvlDisplay = document.getElementById('hud-level');
     if(lvlDisplay) lvlDisplay.textContent = `LVL ${levelIndex + 1}`;
 
-    // Limpieza de juego anterior
+    // Limpiar juego anterior si existe
     if (activeGame) { 
         activeGame.destroy(); 
         activeGame = null; 
     }
     clearInterval(gameTimer);
 
-    // Transición de pantalla
+    // Cambiar pantalla
     UI.showScreen('game');
     
-    // Fondo dinámico (Atmósfera)
+    // Fondo dinámico (Efecto visual)
     const bg = document.getElementById('dynamic-bg');
     if(bg) bg.style.backgroundImage = `url('${levelConfig.image}')`;
 
-    // Mostrar Loader
+    // Loader
     const loader = document.getElementById('game-loader');
     if(loader) loader.classList.remove('hidden');
 
     // Cargar Imagen del Puzzle
     const img = new Image();
-    img.crossOrigin = "Anonymous"; // Crucial para manipulación de píxeles
+    img.crossOrigin = "Anonymous"; // Necesario para evitar tainted canvas
     img.src = levelConfig.image;
     
     img.onload = () => {
         if(loader) loader.classList.add('hidden');
         
-        // RESET DE TIEMPO: Iniciar cronómetro para estrellas
+        // Registrar tiempo de inicio para el cálculo de estrellas
         startTime = Date.now(); 
 
         const canvas = document.getElementById('puzzle-canvas');
         
-        // Instanciar Motor Gráfico
+        // Instanciar Motor
         activeGame = new PuzzleEngine(canvas, {
             image: img, 
             pieces: levelConfig.pieces
         }, {
-            // Callbacks del Motor
+            // Callbacks del motor
             onSound: (t) => AudioSynth.play(t),
-            onWin: () => handleVictory(levelConfig), // Lógica de victoria corregida
-            onStateChange: () => saveProgress(levelId)
+            onWin: () => handleVictory(levelConfig),
+            onStateChange: () => saveProgress(levelId),
+            
+            // --- NUEVO: HAPTIC FEEDBACK (VIBRACIÓN) ---
+            onSnap: () => {
+                // Vibración leve de 20ms si el hardware lo soporta
+                if (navigator.vibrate) navigator.vibrate(20);
+            }
         });
 
-        // Cargar partida guardada (si aplica)
+        // Cargar estado guardado si se solicitó
         if (loadSaved) {
             const savedState = Storage.get(`save_${levelId}`);
             if (savedState) activeGame.importState(savedState);
         }
 
-        // Configurar Temporizador (Cuenta regresiva o Infinito)
+        // Configurar Temporizador (Si el nivel tiene límite)
         if (levelConfig.timeLimit && levelConfig.timeLimit > 0) {
             startTimer(levelConfig);
         } else {
+            // Modo infinito (mostrar ∞)
             const timerDisplay = document.getElementById('hud-timer');
             if(timerDisplay) { 
                 timerDisplay.textContent = "∞"; 
                 timerDisplay.classList.remove('low-time'); 
+                // Asegurarse de quitar clases de color metálico si vienes de un nivel con tiempo
+                timerDisplay.classList.remove('timer-gold', 'timer-silver', 'timer-bronze');
             }
         }
 
-        // Habilitar controles (Imán, Preview)
         setupGameControls();
     };
 
     img.onerror = () => {
         if(loader) loader.classList.add('hidden');
-        alert("Error cargando la imagen. Revisa tu conexión.");
+        alert("Error cargando la imagen del nivel. Verifica tu conexión.");
         UI.showScreen('levels');
     };
 }
 
 /**
- * Maneja la lógica al completar un rompecabezas.
- * Calcula estrellas y recompensa dinámica.
+ * Maneja la lógica de victoria, cálculo de estrellas y recompensas.
  */
 function handleVictory(levelConfig) {
     clearInterval(gameTimer);
     
-    // 1. CALCULAR ESTRELLAS (Basado en velocidad)
+    // 1. Calcular Estrellas (Heurística de Tiempo)
     const endTime = Date.now();
-    const durationSeconds = (endTime - startTime) / 1000;
+    const durationSeconds = (endTime - startTime) / 1000; // Segundos reales
     const pieces = levelConfig.pieces;
 
-    // Heurística: 
-    // - Rápido (< 5s por pieza) = 3 Estrellas
-    // - Normal (< 10s por pieza) = 2 Estrellas
-    // - Lento = 1 Estrella
+    // Regla: 
+    // 3 Estrellas: < 5 segundos por pieza promedio
+    // 2 Estrellas: < 10 segundos por pieza promedio
+    // 1 Estrella: Completar
     let stars = 1;
     if (durationSeconds <= pieces * 5) stars = 3;
     else if (durationSeconds <= pieces * 10) stars = 2;
 
-    // 2. CALCULAR RECOMPENSA DINÁMICA
-    // 1 Estrella = 50% | 2 Estrellas = 75% | 3 Estrellas = 100%
-    let multiplier = 0.5;
-    if (stars === 2) multiplier = 0.75;
-    if (stars === 3) multiplier = 1.0;
-
-    const actualReward = Math.ceil(levelConfig.rewardCoins * multiplier);
-
-    // 3. GUARDAR PROGRESO (Storage v2)
+    // 2. Guardar Progreso (Storage Seguro v2)
+    // Guarda el récord de estrellas si es mejor que el anterior
     Storage.saveStars(levelConfig.id, stars);
-    Storage.set(`save_${levelConfig.id}`, null); // Borrar autoguardado incompleto
+    
+    // Limpiar el autoguardado de "progreso a medias"
+    Storage.set(`save_${levelConfig.id}`, null);
     
     // Desbloquear siguiente nivel
     const nextLvlId = levelManager.getNextLevelId(levelConfig.id);
     if (nextLvlId) Storage.unlockLevel(nextLvlId);
     
-    // 4. TRANSACCIÓN ECONÓMICA
-    Economy.payout(levelConfig.id, actualReward);
+    // 3. Pagar Monedas
+    Economy.payout(levelConfig.id, levelConfig.rewardCoins);
     
-    // 5. MOSTRAR UI (Modal)
+    // 4. Mostrar Modal de Victoria
+    // Pasamos 'stars' para que UIController lo dibuje
     const timeStr = document.getElementById('hud-timer').textContent;
     
-    // Pasamos 'actualReward' para que el usuario vea lo que realmente ganó
-    UI.showVictoryModal(actualReward, timeStr, stars, 
+    UI.showVictoryModal(levelConfig.rewardCoins, timeStr, stars, 
         () => { // Callback: Siguiente Nivel
             if (nextLvlId) startGame(nextLvlId);
         },
-        () => { // Callback: Volver al Menú
+        () => { // Callback: Ir al Menú
             if(activeGame) activeGame.destroy();
             UI.showScreen('menu');
         }
     );
 }
 
-/* --- CONFIGURACIÓN DE CONTROLES --- */
+/* --- CONTROLES Y UTILIDADES --- */
 
 function setupGameControls() {
-    // Botón Preview (Ojo)
+    // Botón Ojo (Preview)
     const btnPreview = document.getElementById('btn-preview');
-    const newBtnPreview = btnPreview.cloneNode(true); // Limpiar listeners viejos
+    // Clonar para limpiar eventos viejos
+    const newBtnPreview = btnPreview.cloneNode(true);
     btnPreview.parentNode.replaceChild(newBtnPreview, btnPreview);
     
     const startP = () => activeGame && activeGame.togglePreview(true);
     const endP = () => activeGame && activeGame.togglePreview(false);
     
+    // Soporte ratón y táctil
     newBtnPreview.addEventListener('mousedown', startP);
     newBtnPreview.addEventListener('mouseup', endP);
     newBtnPreview.addEventListener('mouseleave', endP);
@@ -203,16 +205,16 @@ function setupGameControls() {
     btnMagnet.parentNode.replaceChild(newBtnMagnet, btnMagnet);
 
     newBtnMagnet.onclick = () => {
-        // Fallback si no hay sistema de economía global
+        // Modo Offline / Sin Economy Wrapper
         if (!window.GameCenter) {
-            if(confirm("Modo Offline: ¿Usar Imán gratis?")) {
+            if(confirm("Modo Pruebas: ¿Usar Imán gratis?")) {
                 const placed = activeGame.autoPlacePiece();
-                if(!placed) alert("¡No hay piezas para colocar!");
+                if(!placed) alert("¡No quedan piezas sueltas!");
             }
             return;
         }
 
-        // Lógica de Compra
+        // Modo Producción con Economía
         const balance = window.GameCenter.getBalance ? window.GameCenter.getBalance() : 0;
         const COST = 10;
         
@@ -225,7 +227,7 @@ function setupGameControls() {
             const result = window.GameCenter.buyItem({ id: 'magnet', price: COST });
             if (result && result.success) {
                 const placed = activeGame.autoPlacePiece();
-                if(!placed) alert("¡El rompecabezas ya está listo!");
+                if(!placed) alert("¡El rompecabezas ya está resuelto!");
             } else {
                 alert("Error en la transacción.");
             }
@@ -234,45 +236,45 @@ function setupGameControls() {
 }
 
 function setupNavigation() {
-    // Menú Principal
+    // Botones Menú Principal
     document.getElementById('btn-play').onclick = () => { refreshLevelsScreen(); UI.showScreen('levels'); };
     document.getElementById('btn-levels').onclick = () => { refreshLevelsScreen(); UI.showScreen('levels'); };
     document.getElementById('btn-settings').onclick = () => UI.showScreen('settings');
 
-    // Pausa
+    // Botón Pausa (In-Game)
     document.getElementById('btn-pause').onclick = () => {
         document.getElementById('modal-pause').classList.remove('hidden');
     };
 
-    // Botones Atrás
+    // Botones "Atrás" genéricos
     document.querySelectorAll('.btn-back').forEach(b => b.onclick = (e) => {
-        const target = e.currentTarget.dataset.target;
+        const t = e.currentTarget.dataset.target;
         if(activeGame) { 
             activeGame.destroy(); 
             activeGame = null; 
             clearInterval(gameTimer); 
         }
-        UI.showScreen(target);
+        UI.showScreen(t);
     });
 
-    // Control de Modales (Pausa/GameOver)
+    // Modal Pausa: Reanudar
     document.getElementById('btn-resume').onclick = () => document.getElementById('modal-pause').classList.add('hidden');
     
+    // Modal Pausa: Abandonar
     document.getElementById('btn-quit-level').onclick = () => {
         document.getElementById('modal-pause').classList.add('hidden');
-        if(activeGame) {
-            saveProgress(currentLevelId); // Guardar antes de salir
-            activeGame.destroy();
-        }
+        if(activeGame) activeGame.destroy();
         clearInterval(gameTimer);
+        // Guardar estado actual antes de salir
+        if(currentLevelId) saveProgress(currentLevelId);
         UI.showScreen('menu');
     };
 
+    // Modal Game Over: Reintentar / Salir
     document.getElementById('btn-retry').onclick = () => {
         document.getElementById('modal-gameover').classList.add('hidden');
         startGame(currentLevelId, false);
     };
-    
     document.getElementById('btn-quit-fail').onclick = () => {
         document.getElementById('modal-gameover').classList.add('hidden');
         UI.showScreen('menu');
@@ -280,49 +282,49 @@ function setupNavigation() {
 }
 
 /**
- * Refresca la pantalla de niveles verificando el estado de guardado.
+ * Refresca la pantalla de selección de niveles.
+ * Verifica si hay partidas guardadas para ofrecer "Continuar".
  */
 function refreshLevelsScreen() {
+    // Obtener niveles con su estado actualizado (Locked/Completed/Stars)
+    // El LevelManager internamente debe consultar Storage.js
     const levels = levelManager.getAllLevelsWithStatus();
     
     UI.renderLevelsGrid(levels, (id) => {
-        // Verificar si existe un autoguardado incompleto
+        // Al hacer click en un nivel:
         if(Storage.get(`save_${id}`)) {
+            // Si hay autoguardado, preguntar
             const modal = document.getElementById('modal-resume');
             modal.classList.remove('hidden');
             
             const btnYes = document.getElementById('btn-yes-resume');
             const btnNo = document.getElementById('btn-no-resume');
             
-            // Clonar botones para limpieza de eventos
+            // Clonar para limpiar eventos
             const newYes = btnYes.cloneNode(true);
             const newNo = btnNo.cloneNode(true);
             btnYes.parentNode.replaceChild(newYes, btnYes);
             btnNo.parentNode.replaceChild(newNo, btnNo);
 
-            newYes.onclick = () => { 
-                modal.classList.add('hidden'); 
-                startGame(id, true); // Cargar save
-            };
+            newYes.onclick = () => { modal.classList.add('hidden'); startGame(id, true); };
             newNo.onclick = () => { 
                 modal.classList.add('hidden'); 
-                Storage.set(`save_${id}`, null); // Descartar save
+                Storage.set(`save_${id}`, null); // Borrar save
                 startGame(id, false); 
             };
         } else {
+            // Juego nuevo
             startGame(id, false);
         }
     });
 }
 
-// Modificamos para recibir todo el objeto levelConfig, no solo los segundos
 function startTimer(levelConfig) {
     let timeLeft = levelConfig.timeLimit;
     const display = document.getElementById('hud-timer');
     if(!display) return;
     
     // Calcular los tiempos de corte (Thresholds)
-    // Nota: Usamos la misma lógica que en handleVictory
     const threeStarTime = levelConfig.pieces * 5;  // Ej: 20s
     const twoStarTime = levelConfig.pieces * 10;   // Ej: 40s
     const totalTime = levelConfig.timeLimit;       // Ej: 60s
@@ -346,7 +348,7 @@ function startTimer(levelConfig) {
         
         // Prioridad visual: Si queda poco tiempo total, poner en rojo parpadeante
         if (timeLeft <= 10) {
-            display.className = 'timer-display low-time'; 
+            display.classList.add('low-time'); 
         }
     };
 
@@ -366,15 +368,15 @@ function startTimer(levelConfig) {
     }, 1000);
 }
 
-
 function updateTimerDisplay(s) {
+    // Formato MM:SS
     const m = Math.floor(s/60).toString().padStart(2,'0');
     const sc = (s%60).toString().padStart(2,'0');
     const el = document.getElementById('hud-timer');
     if(el) el.textContent = `${m}:${sc}`;
 }
 
-// Wrapper seguro para autoguardado
+// Autoguardado silencioso
 function saveProgress(lid) { 
     if(activeGame) Storage.set(`save_${lid}`, activeGame.exportState()); 
 }
@@ -386,14 +388,17 @@ function setupSettings() {
         const s = Storage.get('settings') || {}; 
         s.sound = chk.checked; 
         Storage.set('settings', s); 
+        // Aquí podrías notificar al AudioSynth
         if(AudioSynth) AudioSynth.enabled = chk.checked;
     });
 
-    // Reset de Fábrica
+    // Reset Total (Hard Reset)
     const btnReset = document.getElementById('btn-reset-progress');
     if(btnReset) {
         btnReset.onclick = () => {
-            if(confirm("⚠ ¿ESTÁS SEGURO?\nEsto borrará todo el progreso y monedas permanentemente.")) { 
+            if(confirm("⚠ ¿ESTÁS SEGURO?\nEsto borrará todas tus monedas, estrellas y progreso.")) { 
+                // Borrar todo lo relacionado al prefijo del juego
+                // (O usar localStorage.clear() si es la única app en el dominio)
                 localStorage.clear(); 
                 location.reload(); 
             }
@@ -401,21 +406,22 @@ function setupSettings() {
     }
 }
 
-// Manejo optimizado de redimensionado (Debounce)
+// Manejo de Redimensionado de Ventana
 let resizeTimeout;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
+    // Debounce para no saturar el navegador
     resizeTimeout = setTimeout(() => { 
         if(activeGame) activeGame.handleResize(); 
     }, 100);
 });
 
-// Registro de Service Worker para PWA
+// Registrar Service Worker para PWA (Offline Mode)
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js')
         .then(() => console.log('Service Worker registrado correctamente'))
         .catch((err) => console.log('Fallo en SW:', err));
 }
 
-// Punto de entrada
+// Arrancar App
 window.addEventListener('DOMContentLoaded', init);
