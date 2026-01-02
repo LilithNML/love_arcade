@@ -1,72 +1,59 @@
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Rubik:wght@400;600&display=swap');
 
 /* =========================================
-   1. VARIABLES & TEMA (Cyber-Arcade Premium)
+   1. VARIABLES & TEMA
    ========================================= */
 :root {
-    /* Colores Principales */
-    --bg-dark: #0f172a;       /* Slate 900 - Fondo base */
-    --bg-panel: rgba(15, 23, 42, 0.85); /* Panel semitransparente */
-    --primary: #f43f5e;       /* Rose 500 - Acción principal */
-    --primary-hover: #e11d48; /* Rose 600 - Hover */
-    --accent: #3b82f6;        /* Blue 500 - Detalles */
-    
-    /* Textos */
-    --text-main: #f8fafc;     /* Slate 50 - Texto claro */
-    --text-muted: #94a3b8;    /* Slate 400 - Texto secundario */
-    
-    /* Estados */
-    --success: #10b981;       /* Emerald 500 - Victoria */
-    --warning: #f59e0b;       /* Amber 500 - Monedas/Oro */
-    
-    /* Dimensiones */
+    --bg-dark: #0f172a;
+    --bg-panel: rgba(15, 23, 42, 0.85);
+    --primary: #f43f5e;
+    --primary-hover: #e11d48;
+    --accent: #3b82f6;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --success: #10b981;
+    --warning: #f59e0b;
     --radius-lg: 16px;
     --radius-sm: 8px;
-    --header-h: 60px;         /* Altura fija del header */
+    --header-h: 60px;
 }
 
 /* =========================================
-   2. RESET & LAYOUT CRÍTICO (Mobile First)
+   2. RESET & LAYOUT CRÍTICO
    ========================================= */
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    -webkit-tap-highlight-color: transparent; /* Quitar highlight azul en tap */
-    user-select: none; /* Evitar selección de texto */
-    
-    /* CRÍTICO: Evita gestos nativos (zoom, scroll elástico) que rompen la app */
-    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    /* FIX SCROLL: Eliminamos touch-action: none global */
 }
 
 body {
     background-color: var(--bg-dark);
     color: var(--text-main);
     font-family: 'Rubik', sans-serif;
-    
-    /* CRÍTICO: Layout rígido al viewport. Soluciona el overflow. */
-    position: fixed;
-    inset: 0;       
+    position: fixed; /* Layout app-like */
+    inset: 0;
     width: 100%;
-    height: 100dvh; /* Dynamic Viewport Height para móviles */
+    height: 100dvh;
     overflow: hidden;
-    
     display: flex;
     flex-direction: column;
 }
 
 /* =========================================
-   3. FONDO & AMBIENTACIÓN
+   3. FONDO
    ========================================= */
 .dynamic-bg {
     position: absolute;
     inset: 0;
-    z-index: -2; /* Al fondo de todo */
+    z-index: -2;
     background-size: cover;
     background-position: center;
-    /* Efecto Blur pesado + Oscurecimiento para legibilidad */
     filter: blur(25px) brightness(0.4);
-    transform: scale(1.1); /* Escalar para evitar bordes blancos por el blur */
+    transform: scale(1.1);
     transition: background-image 0.5s ease-in-out;
 }
 
@@ -74,7 +61,6 @@ body {
     position: absolute;
     inset: 0;
     z-index: -1;
-    /* Patrón sutil de TV antigua */
     background: repeating-linear-gradient(
         to bottom,
         transparent 0px,
@@ -97,18 +83,15 @@ body {
 .top-bar {
     height: var(--header-h);
     background: rgba(15, 23, 42, 0.6);
-    backdrop-filter: blur(10px); /* Efecto cristal */
+    backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 20px;
-    
-    /* Z-Index alto para estar siempre sobre las pantallas */
     z-index: 50;
     box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    flex-shrink: 0; /* Evita que el header se aplaste */
+    flex-shrink: 0;
 }
 
 .brand {
@@ -144,30 +127,25 @@ body {
 }
 
 /* =========================================
-   5. SISTEMA DE PANTALLAS (SPA)
+   5. PANTALLAS (Transiciones)
    ========================================= */
 .screen {
-    /* Ocupa todo el espacio debajo del header */
     flex: 1;
     display: flex;
     flex-direction: column;
     width: 100%;
-    
-    /* Posicionamiento absoluto para superponerse en transiciones */
     position: absolute;
     top: var(--header-h);
     bottom: 0;
     left: 0;
-    
-    /* Estado por defecto: Oculto */
     opacity: 0;
-    pointer-events: none; 
+    pointer-events: none;
     transform: scale(0.98);
     transition: opacity 0.3s ease, transform 0.3s ease;
+    overflow: hidden; /* Importante para contener scroll interno */
 }
 
 .screen.active {
-    /* Estado Activo */
     opacity: 1;
     pointer-events: all;
     transform: scale(1);
@@ -175,11 +153,12 @@ body {
 }
 
 /* =========================================
-   6. PANTALLA: MENÚ PRINCIPAL
+   6. PANTALLA: MENÚ
    ========================================= */
 #screen-menu {
     justify-content: center;
     align-items: center;
+    overflow-y: auto; /* Permitir scroll si el menú es muy alto */
 }
 
 .menu-content {
@@ -201,7 +180,6 @@ body {
     line-height: 0.9;
     margin-bottom: 30px;
     text-transform: uppercase;
-    /* Gradiente en texto */
     background: linear-gradient(to bottom, #ffffff, #94a3b8);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -215,78 +193,86 @@ body {
 }
 
 /* =========================================
-   7. PANTALLA: NIVELES (Scroll Fix & Thumbnails)
+   7. PANTALLA: NIVELES (Grid & Scroll Fix)
    ========================================= */
-/* Ajuste contenedor principal para permitir scroll */
 #screen-levels {
+    /* Asegura que el contenedor ocupe el espacio correcto */
+    height: 100%; 
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - var(--header-h)); /* Altura total menos header */
-    overflow: hidden; /* Evita scroll en el padre */
-    padding-top: 10px;
 }
 
 .screen-header {
     display: flex;
     align-items: center;
     gap: 15px;
-    padding: 10px 20px;
-    flex-shrink: 0; /* Header fijo */
+    padding: 15px 20px;
+    flex-shrink: 0;
+    background: rgba(15, 23, 42, 0.8); /* Fondo semi-opaco para sticky feel */
+    z-index: 5;
 }
 .screen-header h2 { font-family: 'Rajdhani'; text-transform: uppercase; }
 
-/* Contenedor de Grilla con Scroll */
+/* CONTENEDOR DE LA CUADRÍCULA */
 #levels-container {
-    flex: 1; /* Ocupa el espacio restante */
+    flex: 1;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    /* Grid adaptable: columnas de mínimo 120px */
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    /* Filas automáticas con altura mínima */
+    grid-auto-rows: max-content;
+    align-content: start; /* FIX: Evita que se estiren/encimen si hay pocos */
+    
     gap: 20px;
     padding: 20px;
-    padding-bottom: 100px; /* Espacio extra abajo */
+    padding-bottom: 120px; /* Espacio extra al final para scroll cómodo */
     
-    overflow-y: auto; /* SCROLL VERTICAL ACTIVO */
-    -webkit-overflow-scrolling: touch; /* Suavidad iOS */
+    /* ACTIVAR SCROLL */
+    overflow-y: auto; 
+    -webkit-overflow-scrolling: touch; /* Suavidad en iOS */
+    touch-action: pan-y; /* Permitir explícitamente el gesto vertical */
     
     width: 100%;
-    max-width: 900px;
+    max-width: 1000px;
     margin: 0 auto;
-    
-    /* Permitir interacción táctil para scroll */
-    touch-action: pan-y; 
 }
 
-/* Tarjeta de Nivel */
+/* TARJETA DE NIVEL */
 .level-card {
-    aspect-ratio: 1;
+    position: relative; /* Contexto para el overlay */
+    aspect-ratio: 1 / 1;
+    min-height: 120px; /* FIX: Evita colapso */
+    
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-lg);
+    
     display: flex;
     justify-content: center;
     align-items: center;
+    
     cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-    overflow: hidden; /* Importante para el skeleton */
+    transition: transform 0.2s, box-shadow 0.2s;
+    overflow: hidden;
 }
 
 .level-card:hover { 
     background: rgba(255, 255, 255, 0.1); 
-    transform: translateY(-2px); 
+    transform: translateY(-3px); 
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
 
-/* Imagen dentro de la tarjeta */
 .level-card img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: var(--radius-lg);
-    opacity: 0; /* Fade in controlado por JS */
+    display: block; /* Elimina espacio fantasma inline */
+    opacity: 0;
     transition: opacity 0.3s ease;
 }
 .level-card img.loaded { opacity: 1; }
 
-/* Overlay (Info y Estrellas) */
+/* Overlay de Información (Estrellas/Candado) */
 .level-overlay {
     position: absolute;
     inset: 0;
@@ -294,29 +280,27 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    
+    background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.1));
+    text-shadow: 0 2px 4px rgba(0,0,0,0.9);
     color: white;
     font-size: 1.5rem;
     font-weight: bold;
     pointer-events: none;
-    background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
 }
 
 .stars-display { letter-spacing: 2px; }
 
 /* Estados */
 .level-card.locked {
-    filter: grayscale(100%);
-    opacity: 0.7;
+    filter: grayscale(100%) brightness(0.7);
     cursor: not-allowed;
-    background: rgba(0,0,0,0.2);
 }
 .level-card.completed { 
     border-color: var(--success); 
-    box-shadow: 0 0 15px rgba(16, 185, 129, 0.15); 
 }
 
-/* Limpieza de pseudo-elementos antiguos */
+/* Limpieza */
 .level-card::after, .level-card::before {
     content: none !important;
     display: none !important;
@@ -330,7 +314,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.3);
     border-bottom: 1px solid rgba(255,255,255,0.05);
     flex-shrink: 0;
     z-index: 20;
@@ -355,6 +339,9 @@ body {
     justify-content: center;
     align-items: center;
     z-index: 1;
+    
+    /* FIX SCROLL: Aquí sí bloqueamos el scroll para jugar cómodamente */
+    touch-action: none; 
 }
 
 canvas {
@@ -364,10 +351,9 @@ canvas {
     filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.5));
 }
 
-/* Controles Flotantes */
 .game-controls {
     position: absolute;
-    bottom: 20px;
+    bottom: 30px;
     right: 20px;
     display: flex;
     flex-direction: column;
@@ -376,10 +362,10 @@ canvas {
 }
 
 .btn-circle {
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    border: none;
+    border: 1px solid rgba(255,255,255,0.2);
     background: rgba(30, 41, 59, 0.9);
     color: var(--text-main);
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
@@ -387,9 +373,10 @@ canvas {
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: transform 0.1s, background 0.2s;
-    border: 1px solid rgba(255,255,255,0.1);
-    pointer-events: auto;
+    transition: transform 0.1s;
+    /* Asegura que los botones respondan */
+    pointer-events: auto; 
+    touch-action: manipulation;
 }
 .btn-circle:active { transform: scale(0.9); }
 .btn-circle.gold {
@@ -415,9 +402,9 @@ canvas {
     align-items: center;
     gap: 10px;
     transition: all 0.2s;
-    position: relative;
-    overflow: hidden;
     text-decoration: none;
+    /* Botones siempre clickeables */
+    touch-action: manipulation; 
 }
 
 .btn:active { transform: translateY(2px); }
@@ -433,7 +420,6 @@ canvas {
     color: var(--text-main);
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
-.btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
 
 .btn-danger {
     background: transparent;
@@ -441,14 +427,12 @@ canvas {
     border: 1px solid rgba(239, 68, 68, 0.3);
     margin-top: 10px;
 }
-.btn-danger:hover { background: rgba(239, 68, 68, 0.1); }
 
-/* Modales */
 .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(5px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -466,14 +450,13 @@ canvas {
     text-align: center;
     width: 90%;
     max-width: 350px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
-    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    animation: popIn 0.3s;
 }
 
 /* =========================================
-   10. UTILIDADES & ANIMACIONES
+   10. UTILIDADES
    ========================================= */
-/* Skeleton Loading (Carga visual) */
 .skeleton {
     background: #1e293b;
     position: relative;
@@ -503,7 +486,6 @@ canvas {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 20px;
 }
 .loading-overlay.hidden { display: none; }
 
@@ -516,29 +498,10 @@ canvas {
     animation: spin 1s linear infinite;
 }
 
-/* Keyframes */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes shimmer { 100% { transform: translateX(100%); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-@keyframes popIn { 
-    from { transform: scale(0.8); opacity: 0; } 
-    to { transform: scale(1); opacity: 1; } 
-}
+@keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-/* Scrollbar Personalizado */
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
-
-/* Ajustes */
-.settings-list { padding: 20px; }
-.setting-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px;
-    background: rgba(255,255,255,0.03);
-    border-radius: var(--radius-sm);
-    margin-bottom: 10px;
-    border: 1px solid rgba(255,255,255,0.05);
-}
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
