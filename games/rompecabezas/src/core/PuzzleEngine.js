@@ -1,19 +1,20 @@
 /**
- * PuzzleEngine.js v13.2 - Chaos Shuffle Update
- * * FIX: Aleatoriedad real en la dispersión (Fisher-Yates Shuffle).
- * * MEJORA: Distribución orgánica para evitar patrones predecibles.
+ * PuzzleEngine.js v13.3 - True Chaos Shuffle
+ * * FIX UX: Implementación de "Zonas Caóticas" para romper patrones visuales predecibles.
+ * * LÓGICA: Distribución aleatoria espacial con validación de colisiones (evita superposición excesiva).
  */
 
 export class PuzzleEngine {
     constructor(canvasElement, config, callbacks) {
         this.canvas = canvasElement;
+        // alpha: false mejora rendimiento (el compositor ignora lo de atrás)
         this.ctx = this.canvas.getContext('2d', { alpha: false });
         
         this.img = config.image;
         this.gridSize = Math.sqrt(config.pieces);
         this.callbacks = callbacks || {};
         
-        // Buffers
+        // --- BUFFERS (Rendimiento) ---
         this.staticCanvas = document.createElement('canvas');
         this.staticCtx = this.staticCanvas.getContext('2d', { alpha: true });
         
@@ -40,11 +41,14 @@ export class PuzzleEngine {
         
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
         
+        // --- LOOP CONTROL (Battery Saver) ---
         this.isLoopRunning = false;
 
+        // Configuración visual dinámica
         this.shadowBlur = this.gridSize >= 8 ? 0 : 5; 
         this.particleLimit = this.gridSize >= 8 ? 20 : 50;
 
+        // Binds
         this.handleStart = this.handleStart.bind(this);
         this.handleMove = this.handleMove.bind(this);
         this.handleEnd = this.handleEnd.bind(this);
@@ -59,9 +63,11 @@ export class PuzzleEngine {
         this.createPieces(); 
         this.shufflePieces(); 
         this.addEventListeners();
+        
         this.wakeUp();
     }
 
+    /* --- GESTIÓN DE LOOP INTELIGENTE --- */
     wakeUp() {
         if (!this.isLoopRunning) {
             this.isLoopRunning = true;
@@ -74,13 +80,16 @@ export class PuzzleEngine {
             this.particles.length === 0 && 
             !this.needsStaticUpdate && 
             !this.showPreview) {
+            
             this.isLoopRunning = false;
-            return;
+            return; // STOP LOOP
         }
+
         this.render();
         requestAnimationFrame(() => this.animate());
     }
 
+    /* --- SETUP & RESIZE --- */
     handleResize() {
         this.resizeCanvas();
         this.createPiecesPathsOnly(); 
@@ -107,6 +116,7 @@ export class PuzzleEngine {
         cssW *= workAreaScale;
         cssH *= workAreaScale;
 
+        // 1. Configurar Main Canvas
         this.canvas.width = w * this.dpr;
         this.canvas.height = h * this.dpr;
         this.canvas.style.width = "100%";
@@ -115,11 +125,14 @@ export class PuzzleEngine {
         this.ctx.setTransform(1, 0, 0, 1, 0, 0);
         this.ctx.scale(this.dpr, this.dpr);
 
+        // 2. Configurar Static Canvas
         this.staticCanvas.width = this.canvas.width; 
         this.staticCanvas.height = this.canvas.height;
-        this.staticCtx.setTransform(1, 0, 0, 1, 0, 0);
+        
+        this.staticCtx.setTransform(1, 0, 0, 1, 0, 0); 
         this.staticCtx.scale(this.dpr, this.dpr);
 
+        // Métricas Lógicas
         this.boardWidth = cssW;
         this.boardHeight = cssH;
         this.boardX = Math.round((w - cssW) / 2);
@@ -131,6 +144,7 @@ export class PuzzleEngine {
         this.logicalWidth = w;
         this.logicalHeight = h;
 
+        // 3. Configurar Source Canvas
         this.sourceCanvas.width = Math.ceil(this.boardWidth * this.dpr);
         this.sourceCanvas.height = Math.ceil(this.boardHeight * this.dpr);
         
@@ -140,7 +154,9 @@ export class PuzzleEngine {
         this.needsStaticUpdate = true;
     }
 
+    /* --- UX: ZONA DE SEGURIDAD --- */
     isInRestrictedArea(x, y) {
+        // Evitar botones flotantes inferiores
         const safeMarginRight = 90; 
         const safeMarginBottom = 160; 
         return (x > this.logicalWidth - safeMarginRight) && 
@@ -158,6 +174,7 @@ export class PuzzleEngine {
         p.currentY = y;
     }
 
+    /* --- RENDER --- */
     render() {
         if (this.needsStaticUpdate) {
             this.updateStaticLayer();
@@ -165,8 +182,11 @@ export class PuzzleEngine {
         }
 
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
+        
+        // 1. Fondo Estático
         this.ctx.drawImage(this.staticCanvas, 0, 0, this.logicalWidth, this.logicalHeight);
 
+        // 2. Vista Previa
         if (this.showPreview) {
             this.ctx.save();
             this.ctx.globalAlpha = 0.3;
@@ -174,15 +194,18 @@ export class PuzzleEngine {
             this.ctx.restore();
         }
 
+        // 3. Piezas Sueltas
         for(let i=0; i<this.loosePieces.length; i++) {
             const p = this.loosePieces[i];
             if(p !== this.selectedPiece) this.renderPieceToContext(this.ctx, p, false);
         }
 
+        // 4. Pieza Seleccionada
         if (this.selectedPiece) {
             this.renderPieceToContext(this.ctx, this.selectedPiece, true);
         }
 
+        // 5. Partículas
         this.updateParticles();
     }
 
@@ -190,6 +213,7 @@ export class PuzzleEngine {
         const ctx = this.staticCtx;
         ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
 
+        // Tapete del tablero
         ctx.fillStyle = "rgba(255, 255, 255, 0.06)"; 
         ctx.fillRect(Math.round(this.boardX), Math.round(this.boardY), Math.round(this.boardWidth), Math.round(this.boardHeight));
         
@@ -204,6 +228,7 @@ export class PuzzleEngine {
 
     renderPieceToContext(ctx, p, isSelected, isStaticRender = false) {
         ctx.save();
+        
         const drawX = Math.round(p.currentX);
         const drawY = Math.round(p.currentY);
         ctx.translate(drawX, drawY);
@@ -221,7 +246,11 @@ export class PuzzleEngine {
 
         ctx.clip(p.path);
 
-        const margin = Math.min(Math.max(this.pieceWidth, this.pieceHeight), this.tabSize * 3);
+        const margin = Math.min(
+            Math.max(this.pieceWidth, this.pieceHeight),
+            this.tabSize * 3 
+        );
+        
         let overlapFix = isStaticRender ? 0.6 : 0; 
         const scaleToSource = this.dpr; 
 
@@ -299,69 +328,113 @@ export class PuzzleEngine {
     }
 
     /**
-     * SHUFFLE REAL: Algoritmo Fisher-Yates + Distribución Orgánica
+     * SHUFFLE REVISADO (v13.3)
+     * Implementa "Zonas Caóticas" y "Collision Avoidance"
+     * para eliminar patrones visuales predecibles.
      */
     shufflePieces(repositionOnly = false) {
         this.updatePieceCaches();
-        let loose = this.loosePieces;
+        const loose = this.loosePieces;
 
-        // 1. Barajado Real (Fisher-Yates) para romper el orden predecible
-        // Esto evita que la pieza (0,0) siempre vaya a la esquina izquierda
+        // 1. Fisher-Yates: Romper la relación ID <-> Posición del array
         if (!repositionOnly) {
             for (let i = loose.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [loose[i], loose[j]] = [loose[j], loose[i]];
             }
         }
-        
-        // Zonas disponibles (márgenes alrededor del tablero)
-        const leftLimit = this.boardX - this.pieceWidth; 
-        const rightStart = this.boardX + this.boardWidth + 10;
-        const topMargin = 80; // Dejar espacio para el header
-        const bottomMargin = this.logicalHeight - 120; // Dejar espacio para controles
-        
-        const availHeight = bottomMargin - topMargin;
-        const overlapY = this.pieceHeight * 0.5; // Permitir que se solapen un poco (más natural)
-        
-        // Distribución en "bancos" a los lados
-        const slotsPerSide = Math.ceil(availHeight / overlapY);
-        
-        loose.forEach((p, i) => {
-            if (repositionOnly && p.isLocked) return;
-            p.isLocked = false;
-            
-            // Decidir lado aleatorio para cada pieza mezclada
-            const side = i % 2 === 0 ? 'left' : 'right';
-            const indexInSide = Math.floor(i / 2);
-            
-            // Calcular posición base con "ruido" (Jitter)
-            // Esto evita que queden alineadas como soldados
-            const jitterX = (Math.random() - 0.5) * 20; 
-            const jitterY = (Math.random() - 0.5) * 20;
 
-            let posX, posY;
+        // 2. Definir Zonas Caóticas (Basadas en el espacio libre disponible)
+        // Se definen dinámicamente para soportar resize y orientación vertical/horizontal
+        const topSafe = 80;
+        const bottomSafe = 160;
 
-            if (side === 'left') {
-                // Dispersar en el lado izquierdo
-                posX = (Math.random() * (leftLimit - 20)) + 10;
-                // Si está muy cerca del tablero, empujarla un poco
-                if (posX > leftLimit - 40) posX = leftLimit - 40 - (Math.random() * 20);
-            } else {
-                // Dispersar en el lado derecho
-                posX = rightStart + (Math.random() * (this.logicalWidth - rightStart - this.pieceWidth - 10));
+        const zones = [
+            // Zona Izquierda
+            { 
+                x: 10, 
+                y: topSafe, 
+                w: Math.max(0, this.boardX - 20), 
+                h: this.logicalHeight - topSafe - bottomSafe 
+            },
+            // Zona Derecha
+            { 
+                x: this.boardX + this.boardWidth + 10, 
+                y: topSafe, 
+                w: Math.max(0, this.logicalWidth - (this.boardX + this.boardWidth) - 20), 
+                h: this.logicalHeight - topSafe - bottomSafe 
+            },
+            // Zona Inferior (Debajo del tablero)
+            { 
+                x: 10, 
+                y: this.boardY + this.boardHeight + 10, 
+                w: this.logicalWidth - 20, 
+                h: Math.max(0, this.logicalHeight - (this.boardY + this.boardHeight) - bottomSafe) 
+            }
+        ];
+
+        // Filtrar zonas inválidas (por ejemplo, si el tablero ocupa todo el ancho)
+        const validZones = zones.filter(z => z.w > this.pieceWidth && z.h > this.pieceHeight);
+        
+        // Fallback: Si no hay espacio en los lados, usar toda la pantalla (menos márgenes UI)
+        if (validZones.length === 0) {
+            validZones.push({
+                x: 10, y: topSafe, 
+                w: this.logicalWidth - 20, 
+                h: this.logicalHeight - topSafe - bottomSafe
+            });
+        }
+
+        const placedPositions = [];
+
+        // 3. Colocación con Validación de Distancia
+        for (const p of loose) {
+            if (!repositionOnly) p.isLocked = false;
+            // Si es reposition y ya está locked, saltar
+            if (p.isLocked) continue;
+
+            let placedOK = false;
+            let tries = 0;
+            const maxTries = 50; // Intentos antes de rendirse y colocar al azar
+
+            while (!placedOK && tries < maxTries) {
+                tries++;
+
+                // A. Elegir zona
+                const z = validZones[Math.floor(Math.random() * validZones.length)];
+                
+                // B. Elegir coordenadas random dentro de la zona
+                const cx = z.x + Math.random() * (z.w - this.pieceWidth);
+                const cy = z.y + Math.random() * (z.h - this.pieceHeight);
+
+                // C. Validar colisión (Distancia mínima)
+                let collision = false;
+                for (const pos of placedPositions) {
+                    const dist = Math.hypot(pos.x - cx, pos.y - cy);
+                    // 70% del ancho de la pieza como radio de "espacio personal"
+                    if (dist < this.pieceWidth * 0.7) {
+                        collision = true;
+                        break;
+                    }
+                }
+
+                if (!collision) {
+                    p.currentX = cx;
+                    p.currentY = cy;
+                    placedPositions.push({ x: cx, y: cy });
+                    placedOK = true;
+                }
             }
 
-            // Distribuir verticalmente pero con aleatoriedad
-            // Usamos el módulo para ciclar verticalmente si hay muchas piezas
-            const rowPos = (indexInSide % slotsPerSide) * overlapY;
-            posY = topMargin + rowPos + jitterY;
+            // Fallback: Si no cabe tras 50 intentos, tirar en cualquier lugar válido
+            if (!placedOK) {
+                p.currentX = Math.random() * (this.logicalWidth - this.pieceWidth);
+                p.currentY = Math.random() * (this.logicalHeight - this.pieceHeight);
+            }
 
-            p.currentX = posX + jitterX;
-            p.currentY = posY;
-            
-            // Asegurar que no se salgan de la pantalla
+            // Seguridad Final: Clamp
             this.clampPosition(p);
-        });
+        }
         
         this.updatePieceCaches();
         this.needsStaticUpdate = true;
