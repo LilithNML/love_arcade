@@ -1,34 +1,43 @@
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=VT323&display=swap');
 
 /* =========================================
-   1. VARIABLES & PALETA NEÓN (Alto Contraste)
+   1. VARIABLES & PALETA NEÓN (Synthwave)
    ========================================= */
 :root {
-    --bg-void: #020005;       /* Negro casi puro */
+    /* Fondos */
+    --bg-void: #05000a;       /* Negro Violeta Profundo (Base) */
+    --bg-panel: rgba(20, 10, 40, 0.9); /* Paneles semitransparentes */
     
-    /* Colores Neón */
-    --neon-pink: #ff00ff;
-    --neon-blue: #00ffff;
-    --neon-purple: #bc13fe;
-    --neon-yellow: #ffdd00;
-    --neon-red: #ff3333;
-    --neon-green: #00ff66;
+    /* Colores Neón Principales */
+    --neon-pink: #ff00ff;     /* Magenta Eléctrico (Acción Principal) */
+    --neon-blue: #00ffff;     /* Cian (Bordes, Texto General) */
+    --neon-purple: #bc13fe;   /* Violeta (Detalles, Grid) */
+    --neon-yellow: #ffee00;   /* Amarillo (Oro, Estrellas) */
+    --neon-red: #ff0033;      /* Rojo (Peligro, Error) */
+    --neon-green: #00ff00;    /* Verde (Éxito matrix) */
     
-    /* Textos (Legibilidad Prioritaria) */
-    --text-main: #ffffff;     /* Blanco puro para máximo contraste */
-    --text-muted: #b0c4de;    /* LightSteelBlue */
+    /* Textos */
+    --text-main: #e0faff;     /* Blanco Cian */
+    --text-muted: #a4b0be;    /* Gris Azulado */
     
+    /* Variables de Estado (Mapeo a lógica existente) */
+    --primary: var(--neon-pink);
+    --success: var(--neon-green);
+    --warning: var(--neon-yellow);
+    
+    /* Dimensiones y Efectos */
     --header-h: 70px;
-    --radius-lg: 4px; 
+    --radius-lg: 4px; /* Bordes más rectos para estética digital */
     --radius-sm: 2px;
     
-    /* Glows optimizados */
-    --glow-pink: 0 0 8px var(--neon-pink);
-    --glow-blue: 0 0 8px var(--neon-blue);
+    /* Glows Reutilizables (Resplandor) */
+    --glow-pink: 0 0 5px var(--neon-pink), 0 0 10px var(--neon-pink);
+    --glow-blue: 0 0 5px var(--neon-blue), 0 0 10px var(--neon-blue);
+    --glow-text: 0 0 2px rgba(255,255,255,0.5);
 }
 
 /* =========================================
-   2. RESET
+   2. RESET & ESTRUCTURA BASE
    ========================================= */
 * {
     box-sizing: border-box;
@@ -36,19 +45,23 @@
     padding: 0;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
-    touch-action: none; 
+    touch-action: none; /* Previene scroll elástico global */
 }
 
 body {
     background-color: var(--bg-void);
     color: var(--text-main);
-    font-family: 'Rajdhani', sans-serif;
-    position: fixed; inset: 0;
-    width: 100%; height: 100dvh;
+    font-family: 'Rajdhani', sans-serif; /* Fuente UI por defecto */
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
     overflow: hidden;
-    display: flex; flex-direction: column;
+    display: flex;
+    flex-direction: column;
 }
 
+/* Tipografía Pixel Art para Títulos y Datos */
 h1, h2, h3, .hud-stats, .timer-display, .level-overlay {
     font-family: 'VT323', monospace;
     letter-spacing: 2px;
@@ -56,282 +69,592 @@ h1, h2, h3, .hud-stats, .timer-display, .level-overlay {
 }
 
 /* =========================================
-   3. BACKGROUND (Synthwave)
+   3. AMBIENTACIÓN & BACKGROUND (Grid + Sol)
    ========================================= */
+/* La rejilla 3D retro */
 .retro-grid {
-    position: absolute; bottom: 0; left: 0;
-    width: 100%; height: 50%;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 55%; /* Ocupa la mitad inferior */
     background-image: 
         linear-gradient(var(--neon-purple) 1px, transparent 1px),
         linear-gradient(90deg, var(--neon-purple) 1px, transparent 1px);
     background-size: 40px 40px;
     background-position: center bottom;
     transform: perspective(300px) rotateX(60deg) scale(2);
-    z-index: -3; opacity: 0.25;
+    z-index: -3; /* Detrás de todo */
+    opacity: 0.3;
+    /* Desvanecimiento hacia el horizonte */
     mask-image: linear-gradient(to top, black 20%, transparent 100%);
     -webkit-mask-image: linear-gradient(to top, black 20%, transparent 100%);
     pointer-events: none;
 }
 
+/* El sol synthwave */
 .retro-sun {
-    position: absolute; top: 12%; left: 50%;
+    position: absolute;
+    top: 15%; /* Ajustado para móviles */
+    left: 50%;
     transform: translateX(-50%);
-    width: 250px; height: 250px;
+    width: 280px;
+    height: 280px;
     background: linear-gradient(to top, var(--neon-pink), var(--neon-yellow));
     border-radius: 50%;
     z-index: -4;
-    box-shadow: 0 0 40px var(--neon-pink);
-    opacity: 0.5;
+    box-shadow: 0 0 60px var(--neon-pink);
+    opacity: 0.6;
+    /* Rayas horizontales del sol */
     mask-image: repeating-linear-gradient(black, black 10px, transparent 10px, transparent 14px);
     -webkit-mask-image: repeating-linear-gradient(black, black 10px, transparent 10px, transparent 14px);
     pointer-events: none;
 }
 
+/* Fondo dinámico (Imágenes de niveles) */
 .dynamic-bg {
-    position: absolute; inset: 0; z-index: -5;
-    background-size: cover; background-position: center;
-    filter: blur(15px) brightness(0.2) contrast(1.1); /* Muy oscuro para que el texto brille */
-    opacity: 0.6;
-    transition: background-image 0.5s ease;
+    position: absolute;
+    inset: 0;
+    z-index: -5;
+    background-size: cover;
+    background-position: center;
+    /* Oscurecer mucho para que resalte el neón */
+    filter: blur(20px) brightness(0.3) contrast(1.2);
+    opacity: 0.5;
+    transition: background-image 0.5s ease-in-out;
 }
 
 /* =========================================
-   4. EFECTOS CRT
+   4. EFECTOS CRT (Pantalla Vieja)
    ========================================= */
 .crt-overlay {
-    position: fixed; inset: 0; z-index: 999;
-    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 999; /* Por encima de TODO */
+    pointer-events: none; /* CRÍTICO: Permite hacer clic a través */
 }
+
+/* Líneas de escaneo */
 .scanlines {
-    width: 100%; height: 100%;
-    background: linear-gradient(to bottom, rgba(255,255,255,0) 50%, rgba(0,0,0,0.15) 50%);
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        to bottom,
+        rgba(255,255,255,0),
+        rgba(255,255,255,0) 50%,
+        rgba(0,0,0,0.1) 50%,
+        rgba(0,0,0,0.1)
+    );
     background-size: 100% 4px;
+    animation: scrollLines 8s linear infinite;
 }
+
+/* Viñeta (Bordes oscuros) */
 .vignette {
-    position: absolute; inset: 0;
-    background: radial-gradient(circle, transparent 55%, black 120%);
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle, transparent 60%, rgba(0,0,0,0.9) 100%);
+}
+
+@keyframes scrollLines { 
+    0% { background-position: 0 0; } 
+    100% { background-position: 0 100%; } 
 }
 
 /* =========================================
-   5. HEADER & ICONOS
+   5. HEADER & NAVEGACIÓN
    ========================================= */
-#app { width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; z-index: 10; }
+#app {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 10;
+}
 
 .top-bar {
     height: var(--header-h);
-    background: rgba(5, 0, 10, 0.95); /* Fondo sólido oscuro */
+    background: rgba(10, 5, 20, 0.95);
     border-bottom: 2px solid var(--neon-blue);
-    box-shadow: 0 2px 10px rgba(0, 255, 255, 0.2);
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0 20px; z-index: 50; flex-shrink: 0;
+    box-shadow: 0 0 15px var(--neon-blue); /* Glow en la barra */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 50;
+    backdrop-filter: blur(5px);
+    flex-shrink: 0;
 }
 
 .brand {
-    display: flex; align-items: center; gap: 12px;
-    font-family: 'VT323', monospace; font-size: 1.8rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'VT323', monospace;
+    font-size: 1.8rem;
     color: var(--neon-pink);
     text-shadow: var(--glow-pink);
 }
 
 .game-tag {
-    background: transparent; border: 1px solid var(--neon-yellow);
-    color: var(--neon-yellow); font-size: 0.8rem; padding: 2px 6px;
-    box-shadow: 0 0 5px var(--neon-yellow); font-family: 'Rajdhani';
+    background: transparent;
+    border: 1px solid var(--neon-yellow);
+    color: var(--neon-yellow);
+    font-size: 0.8rem;
+    padding: 2px 6px;
+    margin-left: 8px;
+    box-shadow: 0 0 5px var(--neon-yellow);
+    text-shadow: none;
+    font-family: 'Rajdhani', sans-serif;
+    letter-spacing: 1px;
 }
 
-/* ICONOS: Aumentar visibilidad */
 .icon { 
-    width: 26px; height: 26px; 
-    filter: drop-shadow(0 0 2px rgba(255,255,255,0.8)); 
-    stroke-width: 2.5; /* Líneas más gruesas */
+    width: 24px; 
+    height: 24px; 
+    filter: drop-shadow(0 0 2px currentColor); /* Iconos brillantes */
 }
 
 /* =========================================
-   6. PANTALLAS
+   6. SISTEMA DE PANTALLAS
    ========================================= */
 .screen {
-    flex: 1; display: flex; flex-direction: column;
-    position: absolute; top: var(--header-h); bottom: 0; left: 0; width: 100%;
-    opacity: 0; pointer-events: none;
-    transform: scale(1.02);
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: var(--header-h);
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    
+    /* Transición Retro */
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(1.05); /* Zoom sutil al entrar */
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     overflow: hidden;
 }
-.screen.active { opacity: 1; pointer-events: all; transform: scale(1); z-index: 10; }
 
-/* MENÚ */
-#screen-menu { justify-content: center; align-items: center; overflow-y: auto; }
+.screen.active {
+    opacity: 1;
+    pointer-events: all;
+    transform: scale(1);
+    z-index: 10;
+}
+
+/* =========================================
+   PANTALLA: MENÚ
+   ========================================= */
+#screen-menu { 
+    justify-content: center; 
+    align-items: center; 
+    overflow-y: auto;
+}
 
 .menu-content {
-    background: rgba(0, 0, 0, 0.85); /* Fondo oscuro alto contraste */
+    background: rgba(0, 0, 0, 0.7);
     border: 2px solid var(--neon-pink);
-    box-shadow: 0 0 25px rgba(255, 0, 255, 0.4);
-    padding: 30px; text-align: center;
-    width: 85%; max-width: 380px;
-    clip-path: polygon(0 15px, 15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
-    animation: popIn 0.4s;
+    box-shadow: 0 0 20px var(--neon-pink), inset 0 0 20px rgba(255, 0, 255, 0.1);
+    padding: 40px;
+    text-align: center;
+    width: 90%;
+    max-width: 400px;
+    /* Clip-path para esquinas recortadas estilo Sci-Fi */
+    clip-path: polygon(
+        0 15px, 15px 0, 
+        calc(100% - 15px) 0, 100% 15px, 
+        100% calc(100% - 15px), calc(100% - 15px) 100%, 
+        15px 100%, 0 calc(100% - 15px)
+    );
+    animation: popIn 0.5s;
 }
 
 .game-title {
-    font-family: 'VT323', monospace; font-size: 4rem; line-height: 0.8;
-    margin-bottom: 35px; color: #fff;
-    text-shadow: 3px 3px 0px var(--neon-blue);
+    font-family: 'VT323', monospace;
+    font-size: 4.5rem;
+    line-height: 0.85;
+    margin-bottom: 40px;
+    color: transparent;
+    /* Efecto de texto hueco con borde brillante */
+    -webkit-text-stroke: 1px var(--neon-blue);
+    background: linear-gradient(to bottom, #fff 0%, var(--neon-blue) 100%);
+    -webkit-background-clip: text;
+    filter: drop-shadow(0 0 5px var(--neon-blue));
+    animation: pulseGlow 2s infinite alternate;
 }
 
-.main-nav { display: flex; flex-direction: column; gap: 15px; }
+@keyframes pulseGlow { 
+    from { filter: drop-shadow(0 0 2px var(--neon-blue)); } 
+    to { filter: drop-shadow(0 0 15px var(--neon-blue)); } 
+}
+
+.main-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
 
 /* =========================================
-   BOTONES
+   BOTONES ESTILO ARCADE
    ========================================= */
 .btn {
     border: 2px solid var(--neon-blue);
-    background: rgba(0, 20, 40, 0.8); /* Fondo oscuro */
+    background: rgba(0, 255, 255, 0.05);
     color: var(--neon-blue);
-    padding: 16px;
-    font-family: 'VT323', monospace; font-size: 1.6rem;
-    text-transform: uppercase; cursor: pointer;
-    display: flex; justify-content: center; align-items: center; gap: 12px;
-    transition: all 0.15s;
-    box-shadow: 0 4px 0 rgba(0, 255, 255, 0.3); /* Botón 3D simple */
-    text-decoration: none; position: relative;
+    padding: 15px;
+    font-family: 'VT323', monospace;
+    font-size: 1.6rem;
+    text-transform: uppercase;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.2s;
+    
+    /* Glow effect */
+    text-shadow: 0 0 5px var(--neon-blue);
+    box-shadow: 0 0 5px var(--neon-blue), inset 0 0 5px rgba(0,255,255,0.1);
+    
+    text-decoration: none;
+    position: relative;
+    touch-action: manipulation;
 }
-.btn:active { transform: translateY(4px); box-shadow: none; background: var(--neon-blue); color: #000; }
 
+.btn:active { 
+    transform: scale(0.96); 
+    background: var(--neon-blue); 
+    color: black; 
+    text-shadow: none; 
+}
+
+/* Botón Principal (Jugar/Siguiente) */
 .btn-primary {
-    border-color: var(--neon-pink); color: var(--neon-pink);
-    box-shadow: 0 4px 0 rgba(255, 0, 255, 0.3);
+    border-color: var(--neon-pink);
+    color: var(--neon-pink);
+    box-shadow: 0 0 10px var(--neon-pink);
+    text-shadow: 0 0 5px var(--neon-pink);
+    background: rgba(255, 0, 255, 0.05);
 }
-.btn-primary:active { background: var(--neon-pink); color: #fff; }
+.btn-primary:active { background: var(--neon-pink); color: white; }
 
-.btn-danger { border-color: var(--neon-red); color: var(--neon-red); box-shadow: none; background: transparent; }
+/* Botón Secundario (Ajustes/Niveles) - Usa estilos base .btn */
+.btn-secondary:hover { background: rgba(0, 255, 255, 0.15); }
 
+/* Botón Peligro (Salir/Reset) */
+.btn-danger {
+    border-color: var(--neon-red);
+    color: var(--neon-red);
+    box-shadow: 0 0 5px var(--neon-red);
+    background: transparent;
+}
+.btn-danger:hover { background: rgba(255, 0, 51, 0.1); }
+
+/* Botones Icono (Header Back) */
 .btn-icon {
-    background: rgba(0,0,0,0.5); border: 1px solid var(--text-muted);
-    color: var(--text-main); width: 44px; height: 44px;
-    border-radius: 4px; display: flex; justify-content: center; align-items: center;
-    cursor: pointer; pointer-events: auto; z-index: 20;
+    background: transparent;
+    border: 1px solid var(--neon-blue);
+    color: var(--neon-blue);
+    width: 42px; height: 42px;
+    border-radius: 4px; /* Cuadrado con bordes suaves */
+    display: flex; justify-content: center; align-items: center;
+    cursor: pointer;
+    pointer-events: auto;
+    z-index: 20;
+    transition: all 0.2s;
 }
-.btn-icon:hover { border-color: var(--neon-blue); color: var(--neon-blue); background: black; }
+.btn-icon:hover { 
+    background: var(--neon-blue); 
+    color: black; 
+    box-shadow: 0 0 10px var(--neon-blue); 
+}
 
 /* =========================================
-   GRID NIVELES (Fix Grayscale)
+   PANTALLA: NIVELES (Grid)
    ========================================= */
 .screen-header {
-    display: flex; align-items: center; gap: 15px; padding: 15px 20px;
-    flex-shrink: 0; background: rgba(0,0,0,0.8); border-bottom: 1px solid var(--neon-purple);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 20px;
+    flex-shrink: 0;
+    background: rgba(0,0,0,0.5);
+    border-bottom: 1px solid var(--neon-purple);
+    z-index: 20;
 }
-.screen-header h2 { font-family: 'VT323'; font-size: 2.2rem; color: var(--neon-yellow); margin: 0; }
+.screen-header h2 { 
+    font-family: 'VT323', monospace; 
+    font-size: 2rem;
+    color: var(--neon-yellow);
+    text-shadow: 0 0 5px var(--neon-yellow);
+}
 
 #levels-container {
-    flex: 1; display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    grid-auto-rows: max-content; align-content: start;
-    gap: 15px; padding: 20px; padding-bottom: 120px;
-    overflow-y: auto; width: 100%; max-width: 900px; margin: 0 auto;
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    grid-auto-rows: max-content;
+    align-content: start;
+    gap: 20px;
+    padding: 20px;
+    padding-bottom: 120px;
+    overflow-y: auto;
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
     touch-action: pan-y;
 }
 
+/* Tarjeta de Nivel (Estilo Cartucho) */
 .level-card {
-    aspect-ratio: 1; background: #111; border: 2px solid #444;
-    position: relative; cursor: pointer; border-radius: 2px;
+    aspect-ratio: 1;
+    background: #000;
+    border: 2px solid #333;
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.2s, border-color 0.2s;
     overflow: hidden;
+    border-radius: 2px;
 }
-.level-card:hover { border-color: var(--neon-blue); box-shadow: 0 0 10px var(--neon-blue); transform: translateY(-2px); }
 
-/* IMÁGENES: Color por defecto, Gris solo si está locked */
+.level-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 15px var(--neon-blue);
+    z-index: 5;
+}
+
 .level-card img {
     width: 100%; height: 100%; object-fit: cover;
-    opacity: 0; transition: opacity 0.3s;
-    filter: none; /* A color siempre */
+    filter: grayscale(100%) contrast(1.2); /* Look retro apagado */
+    transition: filter 0.3s;
+    opacity: 0;
 }
 .level-card img.loaded { opacity: 1; }
+.level-card:hover img { filter: grayscale(0%) contrast(1.1); }
 
-.level-card.locked { border-color: #222; pointer-events: none; }
-.level-card.locked img { filter: grayscale(100%) contrast(1.5) brightness(0.6); } /* Efecto apagado */
-
+/* Overlay de información */
 .level-overlay {
     position: absolute; inset: 0;
     display: flex; justify-content: center; align-items: center;
-    background: rgba(0,0,0,0.4); /* Sombra suave para que el número se lea */
-    color: white; font-size: 2.2rem; text-shadow: 2px 2px 0 #000;
+    background: rgba(0,0,0,0.7); /* Más oscuro */
+    color: white; font-size: 2.5rem;
+    text-shadow: 2px 2px 0px #000;
+    z-index: 2;
     pointer-events: none;
 }
-.level-card.completed { border-color: var(--neon-green); box-shadow: 0 0 5px var(--neon-green); }
+
+.level-card.completed { 
+    border-color: var(--neon-yellow); 
+    box-shadow: 0 0 10px var(--neon-yellow); 
+}
+.level-card.locked { 
+    opacity: 0.5; 
+    border-color: #222; 
+    cursor: not-allowed; 
+}
+
+/* Estrellas en Overlay */
+.stars-display { 
+    letter-spacing: 2px; 
+    color: var(--neon-yellow); 
+    text-shadow: 0 0 5px var(--neon-yellow);
+}
 
 /* =========================================
-   HUD & JUEGO
+   PANTALLA: JUEGO (HUD & Controles)
    ========================================= */
 .hud {
-    background: rgba(0, 0, 0, 0.9); border-bottom: 2px solid var(--neon-purple);
-    padding: 8px 20px; display: flex; justify-content: space-between; align-items: center;
-    z-index: 20; box-shadow: 0 5px 10px rgba(0,0,0,0.5);
+    background: rgba(0, 0, 0, 0.85);
+    border-bottom: 2px solid var(--neon-purple);
+    padding: 10px 20px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 20;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
 }
-.hud-stats { font-size: 2.2rem; color: var(--neon-blue); display: flex; gap: 20px; }
 
-#hud-timer.timer-gold { color: var(--neon-yellow) !important; text-shadow: 0 0 10px var(--neon-yellow); }
-#hud-timer.timer-silver { color: #fff !important; }
-#hud-timer.timer-bronze { color: #cd7f32 !important; }
-.timer-display.low-time { color: var(--neon-red) !important; animation: pulse 0.5s infinite; }
+.hud-stats {
+    font-size: 2rem;
+    color: var(--neon-blue);
+    text-shadow: 0 0 8px var(--neon-blue);
+    display: flex; gap: 20px;
+}
 
-.canvas-wrapper { flex: 1; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center; z-index: 1; }
-canvas { filter: drop-shadow(0 10px 20px rgba(0,0,0,0.7)); }
+/* --- COLORES DEL TIMER (Lógica Gold/Silver/Bronze) --- */
+#hud-timer.timer-gold { 
+    color: var(--neon-yellow) !important; 
+    text-shadow: 0 0 15px var(--neon-yellow); 
+    animation: pulse 2s infinite;
+}
+#hud-timer.timer-silver { 
+    color: #00ffff !important; 
+    text-shadow: 0 0 10px #00ffff; 
+}
+#hud-timer.timer-bronze { 
+    color: #ff8800 !important; 
+    text-shadow: 0 0 10px #ff8800; 
+}
+/* Alerta Roja */
+.timer-display.low-time { 
+    color: var(--neon-red) !important; 
+    text-shadow: 0 0 15px var(--neon-red); 
+    animation: pulse 0.5s infinite; 
+}
 
-.game-controls { position: absolute; bottom: 30px; right: 20px; display: flex; flex-direction: column; gap: 20px; z-index: 60; }
+.canvas-wrapper { 
+    flex: 1; 
+    position: relative; 
+    overflow: hidden; 
+    display: flex; justify-content: center; align-items: center; 
+    z-index: 1; 
+    touch-action: none; /* Bloquear scroll para jugar */
+}
+
+/* Sombra al canvas para separarlo del fondo */
+canvas { filter: drop-shadow(0 0 20px rgba(0,0,0,0.8)); }
+
+/* Controles Circulares (Estilo Botón Máquina Arcade) */
+.game-controls { 
+    position: absolute; bottom: 30px; right: 20px; 
+    display: flex; flex-direction: column; gap: 20px; 
+    z-index: 60; 
+}
 
 .btn-circle {
-    width: 68px; height: 68px; border-radius: 50%;
-    background: #1a1a1a; border: 3px solid #555;
-    color: #fff; box-shadow: 0 6px 0 #222, 0 10px 10px rgba(0,0,0,0.5);
-    cursor: pointer; display: flex; justify-content: center; align-items: center;
-    pointer-events: auto; touch-action: manipulation;
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: #111;
+    border: 3px solid #444; /* Borde plástico */
+    color: #fff;
+    /* Efecto 3D de botón físico */
+    box-shadow: 0 6px 0 #222, 0 15px 20px rgba(0,0,0,0.5); 
+    cursor: pointer;
+    display: flex; justify-content: center; align-items: center;
+    transition: transform 0.1s, box-shadow 0.1s;
+    pointer-events: auto;
+    touch-action: manipulation;
 }
-.btn-circle:active { transform: translateY(6px); box-shadow: none; background: #333; }
-.btn-circle.gold { border-color: var(--neon-yellow); color: var(--neon-yellow); box-shadow: 0 6px 0 #887700; }
+
+.btn-circle:active {
+    transform: translateY(6px); /* Hundir botón */
+    box-shadow: 0 0 0 #222, inset 0 0 15px rgba(0,0,0,0.8);
+    background: #222;
+}
+
+/* Botón Dorado (Power Up) */
+.btn-circle.gold {
+    border-color: var(--neon-yellow);
+    color: var(--neon-yellow);
+    box-shadow: 0 6px 0 #887700, 0 0 15px var(--neon-yellow);
+}
+.btn-circle.gold:active {
+    box-shadow: 0 0 0 #887700, inset 0 0 15px var(--neon-yellow);
+}
 
 /* =========================================
-   MODALES
+   MODALES & OVERLAYS
    ========================================= */
 .modal-backdrop {
-    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95);
-    display: flex; justify-content: center; align-items: center; z-index: 100;
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.92); /* Casi negro total */
+    backdrop-filter: blur(5px);
+    display: flex; justify-content: center; align-items: center;
+    z-index: 100;
     opacity: 1; transition: opacity 0.3s;
 }
 .modal-backdrop.hidden { opacity: 0; pointer-events: none; }
 
 .modal-content {
-    background: #050505; border: 2px solid var(--neon-blue);
-    box-shadow: 0 0 40px rgba(0, 255, 255, 0.15);
-    padding: 30px; text-align: center; width: 90%; max-width: 400px;
+    background: #000;
+    border: 2px solid var(--neon-blue);
+    /* Resplandor interno y externo */
+    box-shadow: 0 0 30px var(--neon-blue), inset 0 0 20px rgba(0,255,255,0.2);
+    padding: 35px;
+    text-align: center;
+    width: 90%; max-width: 400px;
     animation: popIn 0.3s;
+    /* Esquinas cortadas */
+    clip-path: polygon(
+        20px 0, 100% 0, 
+        100% calc(100% - 20px), calc(100% - 20px) 100%, 
+        0 100%, 0 20px
+    );
 }
-.modal-content h3 { font-size: 2.8rem; margin-bottom: 20px; color: var(--neon-pink); }
-.modal-content p { font-size: 1.3rem; margin-bottom: 25px; color: var(--text-main); }
+
+.modal-content h3 {
+    font-size: 2.5rem;
+    margin-bottom: 20px;
+    color: var(--neon-pink);
+    text-shadow: var(--glow-pink);
+}
+
+/* Texto genérico en modales */
+.modal-content p {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.2rem;
+    margin-bottom: 20px;
+}
 
 /* =========================================
-   AJUSTES & UTILIDADES
+   PANTALLA: AJUSTES
    ========================================= */
 .settings-list { padding: 20px; }
 .setting-item {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 15px; background: #111; border: 1px solid #333; margin-bottom: 15px;
-    font-family: 'VT323', monospace; font-size: 1.6rem; color: var(--neon-blue);
+    padding: 15px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--neon-purple);
+    margin-bottom: 15px;
+    font-family: 'VT323', monospace;
+    font-size: 1.5rem;
+    color: var(--neon-blue);
 }
 
+/* =========================================
+   UTILIDADES & ANIMACIONES
+   ========================================= */
 .skeleton { background: #111; position: relative; overflow: hidden; }
 .skeleton::after {
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.1), transparent);
     content: ""; position: absolute; inset: 0; transform: translateX(-100%);
     animation: shimmer 1.5s infinite;
 }
 
-@keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-@keyframes shimmer { 100% { transform: translateX(100%); } }
+.loading-overlay {
+    position: absolute; inset: 0;
+    background: #000;
+    z-index: 30;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    font-family: 'VT323', monospace; color: var(--neon-green); font-size: 1.5rem;
+}
+.loading-overlay.hidden { display: none; }
 
-/* Scrollbars */
-::-webkit-scrollbar { width: 6px; }
+.spinner {
+    width: 50px; height: 50px;
+    border: 4px solid #333;
+    border-top-color: var(--neon-green);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 15px;
+    box-shadow: 0 0 15px var(--neon-green);
+}
+
+/* Keyframes */
+@keyframes popIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Scrollbars Retro */
+::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: #000; }
-::-webkit-scrollbar-thumb { background: var(--neon-purple); }
+::-webkit-scrollbar-thumb { 
+    background: var(--neon-purple); 
+    border: 1px solid #fff; 
+    box-shadow: 0 0 5px var(--neon-purple);
+}
 
 /* Clean up */
 .level-card::after, .level-card::before { content: none !important; display: none !important; }
