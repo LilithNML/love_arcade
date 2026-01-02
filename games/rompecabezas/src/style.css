@@ -505,3 +505,8 @@ canvas {
 
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+
+/* Colores de estado del temporizador */
+.timer-gold { color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.5); font-weight: 800; }
+.timer-silver { color: #94a3b8; text-shadow: 0 0 8px rgba(148, 163, 184, 0.5); }
+.timer-bronze { color: #d97706; } /* O blanco normal si prefieres */
