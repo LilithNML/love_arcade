@@ -506,7 +506,30 @@ canvas {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
 
-/* Colores de estado del temporizador */
-.timer-gold { color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.5); font-weight: 800; }
-.timer-silver { color: #94a3b8; text-shadow: 0 0 8px rgba(148, 163, 184, 0.5); }
-.timer-bronze { color: #d97706; } /* O blanco normal si prefieres */
+/* --- FIX DE COLOR DEL TIMER --- */
+/* Usa #hud-timer para ganar contra .hud-stats span */
+
+#hud-timer.timer-gold { 
+    color: #fbbf24 !important; /* El !important es un seguro extra, aunque el ID debería bastar */
+    text-shadow: 0 0 15px rgba(251, 191, 36, 0.6); 
+    font-weight: 800; 
+    transition: color 0.3s ease;
+}
+
+#hud-timer.timer-silver { 
+    color: #94a3b8 !important; 
+    text-shadow: 0 0 10px rgba(148, 163, 184, 0.5); 
+    font-weight: 700;
+}
+
+#hud-timer.timer-bronze { 
+    color: #d97706 !important; 
+    font-weight: 600;
+}
+
+/* El estado de tiempo bajo (rojo) ya tenía buena especificidad, pero lo aseguro */
+.timer-display.low-time { 
+    color: #ef4444 !important; 
+    animation: pulse 1s infinite; 
+    font-weight: 800;
+}
