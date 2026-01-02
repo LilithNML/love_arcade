@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Puzzle Arcade</title>
+    <title>Rompecabezas</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=VT323&display=swap" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Rubik:wght@400;600&display=swap" rel="stylesheet">
     
     <link rel="manifest" href="./manifest.json">
-    <meta name="theme-color" content="#020005">
+    <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,27 +20,21 @@
 </head>
 <body>
 
-    <div class="retro-grid"></div>
-    <div class="retro-sun"></div>
     <div id="dynamic-bg" class="dynamic-bg"></div>
-    
-    <div class="crt-overlay">
-        <div class="scanlines"></div>
-        <div class="vignette"></div>
-    </div>
+    <div class="scanlines"></div>
 
     <main id="app">
         <header class="top-bar">
             <div class="brand">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path d="M19.439 15.435c-1.127 0-2.046.91-2.046 2.028s.919 2.028 2.046 2.028c1.127 0 2.046-.91 2.046-2.028 0-1.118-.92-2.028-2.046-2.028zM4.561 8.565c1.127 0 2.046-.91 2.046-2.028S5.688 4.509 4.561 4.509c-1.127 0-2.046.91-2.046 2.028 0 1.118.919 2.028 2.046 2.028z"/><path d="M12 4.524c-1.127 0-2.046.91-2.046 2.028s.919 2.028 2.046 2.028c1.127 0 2.046-.91 2.046-2.028S13.127 4.524 12 4.524zM12 15.435c-1.127 0-2.046.91-2.046 2.028s.919 2.028 2.046 2.028c1.127 0 2.046-.91 2.046-2.028 0-1.118-.92-2.028-2.046-2.028z"/><path d="M12.5 9h-1v2.5H9v1h2.5V15h1v-2.5H15v-1h-2.5z"/></svg>
-                <div>NEON <span class="game-tag">PUZZLE</span></div>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.439 15.435c-1.127 0-2.046.91-2.046 2.028s.919 2.028 2.046 2.028c1.127 0 2.046-.91 2.046-2.028 0-1.118-.92-2.028-2.046-2.028zM4.561 8.565c1.127 0 2.046-.91 2.046-2.028S5.688 4.509 4.561 4.509c-1.127 0-2.046.91-2.046 2.028 0 1.118.919 2.028 2.046 2.028z"/><path d="M12 4.524c-1.127 0-2.046.91-2.046 2.028s.919 2.028 2.046 2.028c1.127 0 2.046-.91 2.046-2.028S13.127 4.524 12 4.524zM12 15.435c-1.127 0-2.046.91-2.046 2.028s.919 2.028 2.046 2.028c1.127 0 2.046-.91 2.046-2.028 0-1.118-.92-2.028-2.046-2.028z"/><path d="M12.5 9h-1v2.5H9v1h2.5V15h1v-2.5H15v-1h-2.5z"/></svg>
+                <div>Love Arcade <span class="game-tag">PUZZLE</span></div>
             </div>
             <div class="coins-display" id="global-coins-display"></div>
         </header>
 
         <section id="screen-menu" class="screen active">
             <div class="menu-content">
-                <h1 class="game-title">NEURAL<br>ARCADE</h1>
+                <h1 class="game-title">Neural<br>Puzzle</h1>
                 <nav class="main-nav">
                     <button id="btn-play" class="btn btn-primary">
                         <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -51,7 +46,7 @@
                     </button>
                     <button id="btn-settings" class="btn btn-secondary">
                         <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                        SISTEMA
+                        AJUSTES
                     </button>
                     <a href="../../index.html" class="btn btn-danger">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -59,7 +54,7 @@
                     </a>
                 </nav>
             </div>
-            <div style="position:absolute; bottom:20px; opacity:0.5; font-family:'VT323'; color:var(--neon-blue);">v2.2 NEON</div>
+            <div style="position:absolute; bottom:10px; opacity:0.3; font-size:0.8rem;">v1.0</div>
         </section>
 
         <section id="screen-levels" class="screen">
@@ -67,9 +62,9 @@
                 <button class="btn-icon btn-back" data-target="screen-menu">
                     <svg class="icon" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                 </button>
-                <h2>MISIONES</h2>
+                <h2>Misiones</h2>
             </div>
-            <div id="levels-container"></div>
+            <div class="levels-grid" id="levels-container"></div>
         </section>
 
         <section id="screen-game" class="screen">
@@ -78,7 +73,7 @@
                     <svg class="icon" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
                 </button>
                 <div class="hud-stats">
-                    <span id="hud-level">NIVEL 01</span>
+                    <span id="hud-level">LVL 1</span>
                     <span id="hud-timer" class="timer-display">00:00</span>
                 </div>
             </div>
@@ -86,16 +81,16 @@
             <div class="canvas-wrapper" id="game-container">
                 <div id="game-loader" class="loading-overlay hidden">
                     <div class="spinner"></div>
-                    <p>CARGANDO...</p>
+                    <p>Cargando Assets...</p>
                 </div>
 
                 <canvas id="puzzle-canvas"></canvas>
                 
                 <div class="game-controls">
-                    <button id="btn-preview" class="btn-circle" title="Ver imagen">
+                    <button id="btn-preview" class="btn-circle" title="Vista Previa (Mantener)">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                     </button>
-                    <button id="btn-magnet" class="btn-circle gold" title="Auto-Completar (10 Monedas)">
+                    <button id="btn-magnet" class="btn-circle gold" title="Imán Automático (10 Monedas)">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M19 12h-2a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2H5a2 2 0 0 0-2 2v7h18v-7a2 2 0 0 0-2-2z"></path><path d="M8 12V7a4 4 0 0 1 8 0v5"></path></svg>
                     </button>
                 </div>
@@ -107,16 +102,16 @@
                 <button class="btn-icon btn-back" data-target="screen-menu">
                     <svg class="icon" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                 </button>
-                <h2>CONFIGURACIÓN</h2>
+                <h2>Sistema</h2>
             </div>
             <div class="settings-list">
                 <div class="setting-item">
-                    <label>SONIDO FX</label>
+                    <label>Sonido FX</label>
                     <input type="checkbox" id="setting-sound" checked>
                 </div>
                 <button id="btn-reset-progress" class="btn btn-danger" style="width:100%">
                     <svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    BORRAR PROGRESO
+                    Resetear Progreso
                 </button>
             </div>
         </section>
@@ -124,10 +119,10 @@
         <div id="modal-resume" class="modal-backdrop hidden">
             <div class="modal-content">
                 <h3>PARTIDA GUARDADA</h3>
-                <p>¿CONTINUAR SESIÓN ANTERIOR?</p>
-                <div style="display:flex; flex-direction:column; gap:10px;">
-                    <button id="btn-yes-resume" class="btn btn-primary">SÍ, CONTINUAR</button>
-                    <button id="btn-no-resume" class="btn btn-secondary">NO, REINICIAR</button>
+                <p>¿Quieres continuar donde lo dejaste?</p>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
+                    <button id="btn-yes-resume" class="btn btn-primary">CONTINUAR</button>
+                    <button id="btn-no-resume" class="btn btn-secondary">REINICIAR</button>
                 </div>
             </div>
         </div>
@@ -135,38 +130,38 @@
         <div id="modal-pause" class="modal-backdrop hidden">
             <div class="modal-content">
                 <h3>PAUSA</h3>
-                <div style="display:flex; flex-direction:column; gap:10px;">
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
                     <button id="btn-resume" class="btn btn-primary">REANUDAR</button>
-                    <button id="btn-quit-level" class="btn btn-danger">ABORTAR MISIÓN</button>
+                    <button id="btn-quit-level" class="btn btn-danger">ABANDONAR</button>
                 </div>
             </div>
         </div>
 
         <div id="modal-gameover" class="modal-backdrop hidden">
             <div class="modal-content">
-                <h3 style="color:var(--neon-red)">TIEMPO AGOTADO</h3>
-                <p>MISIÓN FALLIDA</p>
-                <div style="display:flex; flex-direction:column; gap:10px;">
+                <h3 style="color:#ef4444">TIEMPO AGOTADO</h3>
+                <p>No lograste completar la misión a tiempo.</p>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
                     <button id="btn-retry" class="btn btn-primary">REINTENTAR</button>
-                    <button id="btn-quit-fail" class="btn btn-secondary">SALIR</button>
+                    <button id="btn-quit-fail" class="btn btn-secondary">MENÚ</button>
                 </div>
             </div>
         </div>
 
         <div id="modal-victory" class="modal-backdrop hidden">
             <div class="modal-content">
-                <h3 style="color:var(--neon-green)">MISIÓN CUMPLIDA</h3>
+                <h3 style="color:var(--success)">¡MISIÓN CUMPLIDA!</h3>
                 
-                <div id="victory-stars" style="font-size: 3rem; color: #ffee00; text-align: center; margin: 10px 0; text-shadow: 0 0 10px #ffee00;"></div>
+                <div id="victory-stars" style="font-size: 3rem; color: #fbbf24; text-align: center; margin: 15px 0; text-shadow: 0 4px 10px rgba(251, 191, 36, 0.5);"></div>
 
-                <p>TIEMPO: <span id="victory-time">--:--</span></p>
+                <p>Tiempo: <span id="victory-time">--:--</span></p>
                 
-                <div class="coin-animation" style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom: 20px; font-size: 1.5rem;">
+                <div class="coin-animation" style="display:flex; align-items:center; justify-content:center; gap:8px;">
                     +<span id="victory-coins">0</span> 
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px; height:28px; color:var(--warning);"><circle cx="12" cy="12" r="10"></circle><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path><line x1="12" y1="18" x2="12" y2="22"></line><line x1="12" y1="2" x2="12" y2="6"></line></svg>
                 </div>
                 
-                <div style="display:flex; flex-direction:column; gap:10px;">
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
                     <button id="btn-next-level" class="btn btn-primary">SIGUIENTE</button>
                     <button id="btn-victory-menu" class="btn btn-secondary">MENÚ</button>
                 </div>
