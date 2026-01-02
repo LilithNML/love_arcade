@@ -1,7 +1,8 @@
 /**
- * PuzzleEngine.js v13.3 - True Chaos Shuffle
- * * FIX UX: Implementación de "Zonas Caóticas" para romper patrones visuales predecibles.
- * * LÓGICA: Distribución aleatoria espacial con validación de colisiones (evita superposición excesiva).
+ * PuzzleEngine.js v13.4 - Haptics & Visual Assist
+ * * FEATURE: Snap Assist Visual (Ghost) al acercar la pieza a su destino.
+ * * FEATURE: Callback 'onSnap' para vibración háptica.
+ * * CORE: Mantiene lógica de Zonas Caóticas y optimizaciones previas.
  */
 
 export class PuzzleEngine {
@@ -200,8 +201,29 @@ export class PuzzleEngine {
             if(p !== this.selectedPiece) this.renderPieceToContext(this.ctx, p, false);
         }
 
-        // 4. Pieza Seleccionada
+        // 4. Pieza Seleccionada & SNAP ASSIST
         if (this.selectedPiece) {
+            // --- NUEVO: SNAP ASSIST VISUAL (GHOST) ---
+            const p = this.selectedPiece;
+            const dist = Math.hypot(p.currentX - p.correctX, p.currentY - p.correctY);
+            // Umbral visual (0.4) un poco mayor al lógico (0.3) para dar feedback anticipado
+            const snapThreshold = this.pieceWidth * 0.4; 
+
+            if (dist < snapThreshold) {
+                this.ctx.save();
+                this.ctx.translate(p.correctX, p.correctY); // Dibujar en la posición correcta
+                
+                // Estilo del Ghost
+                this.ctx.fillStyle = "rgba(255, 255, 255, 0.3)"; 
+                this.ctx.fill(p.path); 
+                this.ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke(p.path);
+                
+                this.ctx.restore();
+            }
+            // ----------------------------------------
+
             this.renderPieceToContext(this.ctx, this.selectedPiece, true);
         }
 
@@ -330,13 +352,11 @@ export class PuzzleEngine {
     /**
      * SHUFFLE REVISADO (v13.3)
      * Implementa "Zonas Caóticas" y "Collision Avoidance"
-     * para eliminar patrones visuales predecibles.
      */
     shufflePieces(repositionOnly = false) {
         this.updatePieceCaches();
         const loose = this.loosePieces;
 
-        // 1. Fisher-Yates: Romper la relación ID <-> Posición del array
         if (!repositionOnly) {
             for (let i = loose.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
@@ -344,27 +364,22 @@ export class PuzzleEngine {
             }
         }
 
-        // 2. Definir Zonas Caóticas (Basadas en el espacio libre disponible)
-        // Se definen dinámicamente para soportar resize y orientación vertical/horizontal
         const topSafe = 80;
         const bottomSafe = 160;
 
         const zones = [
-            // Zona Izquierda
             { 
                 x: 10, 
                 y: topSafe, 
                 w: Math.max(0, this.boardX - 20), 
                 h: this.logicalHeight - topSafe - bottomSafe 
             },
-            // Zona Derecha
             { 
                 x: this.boardX + this.boardWidth + 10, 
                 y: topSafe, 
                 w: Math.max(0, this.logicalWidth - (this.boardX + this.boardWidth) - 20), 
                 h: this.logicalHeight - topSafe - bottomSafe 
             },
-            // Zona Inferior (Debajo del tablero)
             { 
                 x: 10, 
                 y: this.boardY + this.boardHeight + 10, 
@@ -373,10 +388,8 @@ export class PuzzleEngine {
             }
         ];
 
-        // Filtrar zonas inválidas (por ejemplo, si el tablero ocupa todo el ancho)
         const validZones = zones.filter(z => z.w > this.pieceWidth && z.h > this.pieceHeight);
         
-        // Fallback: Si no hay espacio en los lados, usar toda la pantalla (menos márgenes UI)
         if (validZones.length === 0) {
             validZones.push({
                 x: 10, y: topSafe, 
@@ -387,31 +400,23 @@ export class PuzzleEngine {
 
         const placedPositions = [];
 
-        // 3. Colocación con Validación de Distancia
         for (const p of loose) {
             if (!repositionOnly) p.isLocked = false;
-            // Si es reposition y ya está locked, saltar
             if (p.isLocked) continue;
 
             let placedOK = false;
             let tries = 0;
-            const maxTries = 50; // Intentos antes de rendirse y colocar al azar
+            const maxTries = 50; 
 
             while (!placedOK && tries < maxTries) {
                 tries++;
-
-                // A. Elegir zona
                 const z = validZones[Math.floor(Math.random() * validZones.length)];
-                
-                // B. Elegir coordenadas random dentro de la zona
                 const cx = z.x + Math.random() * (z.w - this.pieceWidth);
                 const cy = z.y + Math.random() * (z.h - this.pieceHeight);
 
-                // C. Validar colisión (Distancia mínima)
                 let collision = false;
                 for (const pos of placedPositions) {
                     const dist = Math.hypot(pos.x - cx, pos.y - cy);
-                    // 70% del ancho de la pieza como radio de "espacio personal"
                     if (dist < this.pieceWidth * 0.7) {
                         collision = true;
                         break;
@@ -426,13 +431,11 @@ export class PuzzleEngine {
                 }
             }
 
-            // Fallback: Si no cabe tras 50 intentos, tirar en cualquier lugar válido
             if (!placedOK) {
                 p.currentX = Math.random() * (this.logicalWidth - this.pieceWidth);
                 p.currentY = Math.random() * (this.logicalHeight - this.pieceHeight);
             }
 
-            // Seguridad Final: Clamp
             this.clampPosition(p);
         }
         
@@ -549,6 +552,10 @@ export class PuzzleEngine {
             this.updatePieceCaches();
             
             this.callbacks.onSound && this.callbacks.onSound('snap');
+            // --- NUEVO: TRIGGER DE VIBRACIÓN ---
+            this.callbacks.onSnap && this.callbacks.onSnap(); 
+            // -----------------------------------
+            
             this.spawnParticles(this.selectedPiece.currentX + this.pieceWidth/2, this.selectedPiece.currentY + this.pieceHeight/2, 'ripple');
             
             if(this.callbacks.onStateChange) this.callbacks.onStateChange();
