@@ -106,7 +106,7 @@ function startGame(levelId, loadSaved = false) {
 
         // Configurar Temporizador (Cuenta regresiva o Infinito)
         if (levelConfig.timeLimit && levelConfig.timeLimit > 0) {
-            startTimer(levelConfig.timeLimit);
+            startTimer(levelConfig);
         } else {
             const timerDisplay = document.getElementById('hud-timer');
             if(timerDisplay) { 
@@ -315,20 +315,49 @@ function refreshLevelsScreen() {
     });
 }
 
-function startTimer(seconds) {
-    let timeLeft = seconds;
+// Modificamos para recibir todo el objeto levelConfig, no solo los segundos
+function startTimer(levelConfig) {
+    let timeLeft = levelConfig.timeLimit;
     const display = document.getElementById('hud-timer');
     if(!display) return;
     
-    display.classList.remove('low-time');
+    // Calcular los tiempos de corte (Thresholds)
+    // Nota: Usamos la misma lógica que en handleVictory
+    const threeStarTime = levelConfig.pieces * 5;  // Ej: 20s
+    const twoStarTime = levelConfig.pieces * 10;   // Ej: 40s
+    const totalTime = levelConfig.timeLimit;       // Ej: 60s
+
+    display.className = 'timer-display'; // Limpiar clases viejas
     updateTimerDisplay(timeLeft);
+    
+    // Función auxiliar para actualizar color
+    const updateColor = () => {
+        const elapsed = totalTime - timeLeft;
+        
+        display.classList.remove('timer-gold', 'timer-silver', 'timer-bronze', 'low-time');
+        
+        if (elapsed <= threeStarTime) {
+            display.classList.add('timer-gold'); // 3 Estrellas posibles
+        } else if (elapsed <= twoStarTime) {
+            display.classList.add('timer-silver'); // 2 Estrellas posibles
+        } else {
+            display.classList.add('timer-bronze'); // 1 Estrella posible
+        }
+        
+        // Prioridad visual: Si queda poco tiempo total, poner en rojo parpadeante
+        if (timeLeft <= 10) {
+            display.className = 'timer-display low-time'; 
+        }
+    };
+
+    updateColor(); // Color inicial
     
     gameTimer = setInterval(() => {
         timeLeft--;
         updateTimerDisplay(timeLeft);
+        updateColor(); // Actualizar color cada segundo
         
-        if (timeLeft <= 10) display.classList.add('low-time');
-        
+        // Game Over
         if (timeLeft <= 0) {
             clearInterval(gameTimer);
             if(activeGame) activeGame.destroy();
@@ -336,6 +365,7 @@ function startTimer(seconds) {
         }
     }, 1000);
 }
+
 
 function updateTimerDisplay(s) {
     const m = Math.floor(s/60).toString().padStart(2,'0');
