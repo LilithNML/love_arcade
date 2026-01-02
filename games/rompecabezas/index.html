@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Neon Puzzle Arcade</title>
+    <title>Puzzle Arcade</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
-    
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Rubik:wght@400;600&family=VT323&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=VT323&display=swap" rel="stylesheet">
     
     <link rel="manifest" href="./manifest.json">
-    <meta name="theme-color" content="#090014">
+    <meta name="theme-color" content="#020005">
     <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -44,23 +43,23 @@
                 <nav class="main-nav">
                     <button id="btn-play" class="btn btn-primary">
                         <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                        INSERT COIN
+                        JUGAR
                     </button>
                     <button id="btn-levels" class="btn btn-secondary">
                         <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                        MISSIONS
+                        NIVELES
                     </button>
                     <button id="btn-settings" class="btn btn-secondary">
                         <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                        SYSTEM
+                        SISTEMA
                     </button>
                     <a href="../../index.html" class="btn btn-danger">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                        EJECT
+                        SALIR
                     </a>
                 </nav>
             </div>
-            <div style="position:absolute; bottom:20px; opacity:0.5; font-family:'VT323'; color:var(--neon-blue);">v2.1 NEON_EDITION</div>
+            <div style="position:absolute; bottom:20px; opacity:0.5; font-family:'VT323'; color:var(--neon-blue);">v2.2 NEON</div>
         </section>
 
         <section id="screen-levels" class="screen">
@@ -68,7 +67,7 @@
                 <button class="btn-icon btn-back" data-target="screen-menu">
                     <svg class="icon" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                 </button>
-                <h2>SELECT MISSION</h2>
+                <h2>MISIONES</h2>
             </div>
             <div id="levels-container"></div>
         </section>
@@ -79,7 +78,7 @@
                     <svg class="icon" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
                 </button>
                 <div class="hud-stats">
-                    <span id="hud-level">LVL 01</span>
+                    <span id="hud-level">NIVEL 01</span>
                     <span id="hud-timer" class="timer-display">00:00</span>
                 </div>
             </div>
@@ -87,16 +86,16 @@
             <div class="canvas-wrapper" id="game-container">
                 <div id="game-loader" class="loading-overlay hidden">
                     <div class="spinner"></div>
-                    <p>LOADING ASSETS...</p>
+                    <p>CARGANDO...</p>
                 </div>
 
                 <canvas id="puzzle-canvas"></canvas>
                 
                 <div class="game-controls">
-                    <button id="btn-preview" class="btn-circle" title="Preview">
+                    <button id="btn-preview" class="btn-circle" title="Ver imagen">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                     </button>
-                    <button id="btn-magnet" class="btn-circle gold" title="Auto-Snap (10 Coins)">
+                    <button id="btn-magnet" class="btn-circle gold" title="Auto-Completar (10 Monedas)">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M19 12h-2a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2H5a2 2 0 0 0-2 2v7h18v-7a2 2 0 0 0-2-2z"></path><path d="M8 12V7a4 4 0 0 1 8 0v5"></path></svg>
                     </button>
                 </div>
@@ -108,72 +107,68 @@
                 <button class="btn-icon btn-back" data-target="screen-menu">
                     <svg class="icon" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                 </button>
-                <h2>SYSTEM CONFIG</h2>
+                <h2>CONFIGURACIÓN</h2>
             </div>
             <div class="settings-list">
                 <div class="setting-item">
-                    <label>SFX AUDIO</label>
+                    <label>SONIDO FX</label>
                     <input type="checkbox" id="setting-sound" checked>
-                </div>
-                <div class="setting-item">
-                    <label>VOLUME</label>
-                    <input type="range" id="setting-volume" min="0" max="1" step="0.1">
                 </div>
                 <button id="btn-reset-progress" class="btn btn-danger" style="width:100%">
                     <svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    FACTORY RESET
+                    BORRAR PROGRESO
                 </button>
             </div>
         </section>
 
         <div id="modal-resume" class="modal-backdrop hidden">
             <div class="modal-content">
-                <h3>GAME SAVED</h3>
-                <p>RESUME PREVIOUS SESSION?</p>
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
-                    <button id="btn-yes-resume" class="btn btn-primary">YES, RESUME</button>
-                    <button id="btn-no-resume" class="btn btn-secondary">NO, RESTART</button>
+                <h3>PARTIDA GUARDADA</h3>
+                <p>¿CONTINUAR SESIÓN ANTERIOR?</p>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button id="btn-yes-resume" class="btn btn-primary">SÍ, CONTINUAR</button>
+                    <button id="btn-no-resume" class="btn btn-secondary">NO, REINICIAR</button>
                 </div>
             </div>
         </div>
 
         <div id="modal-pause" class="modal-backdrop hidden">
             <div class="modal-content">
-                <h3>PAUSED</h3>
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
-                    <button id="btn-resume" class="btn btn-primary">RESUME</button>
-                    <button id="btn-quit-level" class="btn btn-danger">ABORT MISSION</button>
+                <h3>PAUSA</h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button id="btn-resume" class="btn btn-primary">REANUDAR</button>
+                    <button id="btn-quit-level" class="btn btn-danger">ABORTAR MISIÓN</button>
                 </div>
             </div>
         </div>
 
         <div id="modal-gameover" class="modal-backdrop hidden">
             <div class="modal-content">
-                <h3 style="color:#ff0033">TIME CRITICAL</h3>
-                <p>MISSION FAILED</p>
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
-                    <button id="btn-retry" class="btn btn-primary">RETRY</button>
-                    <button id="btn-quit-fail" class="btn btn-secondary">EXIT</button>
+                <h3 style="color:var(--neon-red)">TIEMPO AGOTADO</h3>
+                <p>MISIÓN FALLIDA</p>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button id="btn-retry" class="btn btn-primary">REINTENTAR</button>
+                    <button id="btn-quit-fail" class="btn btn-secondary">SALIR</button>
                 </div>
             </div>
         </div>
 
         <div id="modal-victory" class="modal-backdrop hidden">
             <div class="modal-content">
-                <h3 style="color:var(--success)">MISSION COMPLETE</h3>
+                <h3 style="color:var(--neon-green)">MISIÓN CUMPLIDA</h3>
                 
-                <div id="victory-stars" style="font-size: 3rem; color: #ffee00; text-align: center; margin: 15px 0; text-shadow: 0 0 10px #ffee00;"></div>
+                <div id="victory-stars" style="font-size: 3rem; color: #ffee00; text-align: center; margin: 10px 0; text-shadow: 0 0 10px #ffee00;"></div>
 
-                <p>TIME: <span id="victory-time">--:--</span></p>
+                <p>TIEMPO: <span id="victory-time">--:--</span></p>
                 
-                <div class="coin-animation" style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom: 20px;">
+                <div class="coin-animation" style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom: 20px; font-size: 1.5rem;">
                     +<span id="victory-coins">0</span> 
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px; height:28px; color:var(--warning);"><circle cx="12" cy="12" r="10"></circle><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path><line x1="12" y1="18" x2="12" y2="22"></line><line x1="12" y1="2" x2="12" y2="6"></line></svg>
                 </div>
                 
                 <div style="display:flex; flex-direction:column; gap:10px;">
-                    <button id="btn-next-level" class="btn btn-primary">NEXT MISSION</button>
-                    <button id="btn-victory-menu" class="btn btn-secondary">MENU</button>
+                    <button id="btn-next-level" class="btn btn-primary">SIGUIENTE</button>
+                    <button id="btn-victory-menu" class="btn btn-secondary">MENÚ</button>
                 </div>
             </div>
         </div>
