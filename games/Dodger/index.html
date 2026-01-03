@@ -17,15 +17,14 @@
             background-color: var(--bg-dark);
             color: white;
             font-family: 'Courier New', Courier, monospace;
-            touch-action: none; /* Prevenir zoom en móviles */
+            touch-action: none;
         }
         #gameCanvas {
             display: block;
             width: 100vw;
             height: 100vh;
-            image-rendering: pixelated; /* Look retro nítido */
+            image-rendering: pixelated;
         }
-        /* UI OVERLAY */
         #ui-layer {
             position: absolute;
             top: 0; left: 0;
@@ -47,8 +46,8 @@
             padding: 40px;
             border: 2px solid var(--neon-blue);
             text-align: center;
-            pointer-events: auto; /* Permitir clics */
-            display: none; /* Controlado por JS */
+            pointer-events: auto;
+            display: none;
             box-shadow: 0 0 20px var(--neon-blue);
         }
         .menu-screen.active { display: block; }
@@ -72,7 +71,6 @@
         button.exit-btn { border-color: var(--neon-red); color: var(--neon-red); }
         button.exit-btn:hover { background: var(--neon-red); color: white; box-shadow: 0 0 15px var(--neon-red); }
         
-        /* Scanline effect simple */
         .scanlines {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
@@ -85,7 +83,6 @@
 <body>
 
     <div class="scanlines"></div>
-
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
@@ -96,7 +93,6 @@
         <div id="mainMenu" class="menu-screen active">
             <h1 id="menuTitle">DODGER</h1>
             <p id="menuSubtitle">Esquiva los obstáculos. Sobrevive.</p>
-            
             <button id="btnPlay">JUGAR</button>
             <br>
             <button id="btnExit" class="exit-btn">SALIR</button>
@@ -108,8 +104,6 @@
     <script type="module" src="src/main.js"></script>
 
     <script>
-        // Lógica simple para el botón SALIR (fuera del módulo para acceso rápido al DOM)
-        [span_0](start_span)//[span_0](end_span) Navegación al salir debe llevar a la página principal
         document.getElementById('btnExit').addEventListener('click', () => {
             window.location.href = '../../index.html';
         });
