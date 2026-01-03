@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dodger - Love Arcade</title>
+    
+    <style>
+        :root {
+            --neon-blue: #0ff;
+            --neon-red: #f0f;
+            --bg-dark: #050505;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-dark);
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            touch-action: none; /* Prevenir zoom en móviles */
+        }
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            image-rendering: pixelated; /* Look retro nítido */
+        }
+        /* UI OVERLAY */
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .hud-panel {
+            position: absolute;
+            top: 20px; left: 20px;
+            font-size: 24px;
+            text-shadow: 0 0 5px var(--neon-blue);
+        }
+        .menu-screen {
+            background: rgba(0, 0, 0, 0.85);
+            padding: 40px;
+            border: 2px solid var(--neon-blue);
+            text-align: center;
+            pointer-events: auto; /* Permitir clics */
+            display: none; /* Controlado por JS */
+            box-shadow: 0 0 20px var(--neon-blue);
+        }
+        .menu-screen.active { display: block; }
+        
+        h1 { margin: 0 0 20px 0; font-size: 48px; text-transform: uppercase; letter-spacing: 4px; }
+        p { margin-bottom: 30px; font-size: 18px; color: #ccc; }
+        
+        button {
+            background: transparent;
+            color: var(--neon-blue);
+            border: 2px solid var(--neon-blue);
+            padding: 15px 40px;
+            font-size: 24px;
+            font-family: inherit;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s;
+            margin: 10px;
+        }
+        button:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 15px var(--neon-blue); }
+        button.exit-btn { border-color: var(--neon-red); color: var(--neon-red); }
+        button.exit-btn:hover { background: var(--neon-red); color: white; box-shadow: 0 0 15px var(--neon-red); }
+        
+        /* Scanline effect simple */
+        .scanlines {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="scanlines"></div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <div id="hud" class="hud-panel" style="display: none;">
+            TIME: <span id="scoreDisplay">0</span>
+        </div>
+
+        <div id="mainMenu" class="menu-screen active">
+            <h1 id="menuTitle">DODGER</h1>
+            <p id="menuSubtitle">Esquiva los obstáculos. Sobrevive.</p>
+            
+            <button id="btnPlay">JUGAR</button>
+            <br>
+            <button id="btnExit" class="exit-btn">SALIR</button>
+        </div>
+    </div>
+
+    <script src="../../js/app.js"></script>
+
+    <script type="module" src="src/main.js"></script>
+
+    <script>
+        // Lógica simple para el botón SALIR (fuera del módulo para acceso rápido al DOM)
+        [span_0](start_span)//[span_0](end_span) Navegación al salir debe llevar a la página principal
+        document.getElementById('btnExit').addEventListener('click', () => {
+            window.location.href = '../../index.html';
+        });
+    </script>
+</body>
+</html>
