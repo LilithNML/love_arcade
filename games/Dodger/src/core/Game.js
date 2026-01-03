@@ -4,19 +4,18 @@ export default class Game {
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
+        // Aquí es donde fallaba antes debido al error en Economy.js
         this.economy = new EconomyManager();
         
-        // Ajuste de resolución (DPI)
         this.resize();
         window.addEventListener('resize', () => this.resize());
 
-        // Estado
-        this.state = 'MENU'; // MENU, PLAY, GAMEOVER
-        this.score = 0; // Tiempo en segundos
+        this.state = 'MENU'; 
+        this.score = 0; 
         this.lastTime = 0;
-        this.accumulator = 0;
+        this.startTime = 0;
         
-        // UI References
+        // Referencias UI
         this.uiMenu = document.getElementById('mainMenu');
         this.uiScore = document.getElementById('scoreDisplay');
         this.uiHud = document.getElementById('hud');
@@ -24,10 +23,14 @@ export default class Game {
         this.menuTitle = document.getElementById('menuTitle');
         this.menuSubtitle = document.getElementById('menuSubtitle');
 
-        // Event Listeners UI
-        this.btnPlay.addEventListener('click', () => this.startRun());
+        // Event Listeners
+        if (this.btnPlay) {
+            this.btnPlay.addEventListener('click', () => this.startRun());
+        } else {
+            console.error("No se encontró el botón JUGAR en el HTML");
+        }
         
-        // Loop
+        // Iniciar Loop
         requestAnimationFrame((t) => this.loop(t));
     }
 
@@ -43,22 +46,16 @@ export default class Game {
         this.score = 0;
         this.startTime = Date.now();
         
-        // UI Updates
         this.uiMenu.classList.remove('active');
         this.uiHud.style.display = 'block';
-        
-        // TODO: Reset Player & Spawner here
     }
 
     gameOver() {
         this.state = 'GAMEOVER';
         const finalTime = Math.floor((Date.now() - this.startTime) / 1000);
         
-        // --- INTEGRACIÓN ECONOMÍA ---
-        // Llamamos al pago una sola vez al morir
         const result = this.economy.payout(finalTime);
         
-        // Feedback Visual
         this.uiHud.style.display = 'none';
         this.uiMenu.classList.add('active');
         this.menuTitle.innerText = "CRASHED";
@@ -73,26 +70,15 @@ export default class Game {
 
     update(dt) {
         if (this.state !== 'PLAY') return;
-
-        // Actualizar Score UI
         const currentSeconds = Math.floor((Date.now() - this.startTime) / 1000);
-        this.uiScore.innerText = currentSeconds;
-
-        // Simulación de muerte para testing (click en canvas mata)
-        // TODO: Reemplazar con lógica real de colisiones
-        /* if (input.clicked) {
-             this.gameOver();
-        } 
-        */
+        if (this.uiScore) this.uiScore.innerText = currentSeconds;
     }
 
     draw() {
-        // Limpiar pantalla
         this.ctx.fillStyle = '#050505';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
         if (this.state === 'PLAY') {
-            // Dibujar Player (Placeholder)
             this.ctx.fillStyle = '#0ff';
             this.ctx.beginPath();
             this.ctx.moveTo(this.width/2, this.height - 50);
