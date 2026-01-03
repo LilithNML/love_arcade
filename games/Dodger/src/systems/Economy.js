@@ -1,3 +1,5 @@
+/* Economy.js */
+
 export default class EconomyManager {
     constructor() {
         this.gameId = 'dodger';
