@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Love Breaker - Beta</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a0b2e;
+            color: #fff;
+            font-family: 'Press Start 2P', cursive;
+            touch-action: none; /* Previene scroll en móvil */
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            box-shadow: 0 0 20px rgba(255, 105, 180, 0.5);
+            background: linear-gradient(to bottom, #2d1b4e, #1a0b2e);
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            text-shadow: 2px 2px 0 #000;
+            font-size: 12px;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        #menu-overlay, #game-over-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 10;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        h1 {
+            color: #ff7eb3;
+            text-shadow: 4px 4px 0 #bd33a4;
+            margin-bottom: 20px;
+            font-size: 24px;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .btn {
+            background: #ff7eb3;
+            border: 4px solid #fff;
+            color: #1a0b2e;
+            padding: 15px 30px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.1s;
+            margin-top: 20px;
+            text-transform: uppercase;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .stats-box {
+            background: #2d1b4e;
+            border: 2px solid #ff7eb3;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            line-height: 2;
+            font-size: 12px;
+        }
+
+        .coin-text {
+            color: #ffd700;
+        }
+        
+        .highlight {
+            color: #7efff5;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div>PUNTOS: <span id="score">0</span></div>
+            <div>HIGH SCORE: <span id="high-score">0</span></div>
+        </div>
+    </div>
+
+    <!-- START MENU -->
+    <div id="menu-overlay">
+        <h1>LOVE<br>BREAKER</h1>
+        <div class="stats-box">
+            <p>Mueve el mouse o desliza</p>
+            <p>No pierdas el corazón</p>
+        </div>
+        <button class="btn" id="start-btn">JUGAR</button>
+    </div>
+
+    <!-- GAME OVER -->
+    <div id="game-over-overlay" class="hidden">
+        <h1>GAME OVER</h1>
+        <div class="stats-box">
+            <p>Puntuación: <span id="final-score" class="highlight">0</span></p>
+            <p>Bloques: <span id="final-blocks" class="highlight">0</span></p>
+            <p>Ganaste: <span id="coins-earned" class="coin-text">0</span> Monedas</p>
+            <p id="new-record-msg" class="hidden" style="color: #ff7eb3; margin-top:10px;">¡NUEVO RÉCORD!</p>
+        </div>
+        <button class="btn" id="restart-btn">JUGAR OTRA VEZ</button>
+    </div>
+</div>
+
+<script>
+/**
+ * SISTEMA DE AUDIO (Sintetizador simple para evitar carga de archivos)
+ */
+const AudioSys = {
+    ctx: null,
+    init: function() {
+        window.AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+    },
+    playTone: function(freq, type, duration, vol = 0.1) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    },
+    playHit: function() { this.playTone(400 + Math.random() * 200, 'square', 0.1); },
+    playPaddle: function() { this.playTone(200, 'sine', 0.15, 0.2); },
+    playCoin: function() { 
+        this.playTone(1200, 'sine', 0.1); 
+        setTimeout(() => this.playTone(1800, 'square', 0.2), 100);
+    },
+    playLoss: function() {
+        this.playTone(150, 'sawtooth', 0.5, 0.3);
+        setTimeout(() => this.playTone(100, 'sawtooth', 0.5, 0.3), 200);
+    }
+};
+
+/**
+ * CONFIGURACIÓN DEL JUEGO
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const highScoreEl = document.getElementById('high-score');
+const menuOverlay = document.getElementById('menu-overlay');
+const gameOverOverlay = document.getElementById('game-over-overlay');
+
+// Estado del juego
+let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER
+let animationId;
+let lastTime = 0;
+let score = 0;
+let blocksDestroyed = 0;
+let highScore = localStorage.getItem('lovebreaker_highscore') || 0;
+highScoreEl.innerText = highScore;
+
+// Dimensiones lógicas (para escalar en pantallas grandes)
+const GAME_WIDTH = 800;
+const GAME_HEIGHT = 600;
+let scale = 1;
+
+/**
+ * OBJETOS DEL JUEGO
+ */
+const paddle = {
+    w: 100,
+    h: 20,
+    x: GAME_WIDTH / 2 - 50,
+    y: GAME_HEIGHT - 50,
+    speed: 0,
+    color: '#ff7eb3',
+    
+    draw: function() {
+        ctx.fillStyle = this.color;
+        // Dibujamos un paddle estilo "Carta de amor" o rectángulo redondeado
+        ctx.beginPath();
+        ctx.roundRect(this.x, this.y, this.w, this.h, 10);
+        ctx.fill();
+        
+        // Detalle de corazón en el centro
+        ctx.fillStyle = '#bd33a4';
+        const cx = this.x + this.w / 2;
+        const cy = this.y + this.h / 2 + 2;
+        ctx.font = "20px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("♥", cx, cy);
+    },
+    
+    reset: function() {
+        this.x = GAME_WIDTH / 2 - this.w / 2;
+    }
+};
+
+const ball = {
+    x: GAME_WIDTH / 2,
+    y: GAME_HEIGHT / 2,
+    r: 8,
+    dx: 0,
+    dy: 0,
+    speed: 7, // Velocidad base
+    active: false,
+    
+    draw: function() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#fff';
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    },
+    
+    reset: function() {
+        this.x = paddle.x + paddle.w / 2;
+        this.y = paddle.y - 20;
+        this.dx = 0;
+        this.dy = 0;
+        this.active = false;
+    },
+    
+    launch: function() {
+        if (!this.active) {
+            this.active = true;
+            this.dy = -this.speed;
+            this.dx = (Math.random() * 2 - 1) * this.speed;
+        }
+    }
+};
+
+// Sistema de partículas
+let particles = [];
+function createParticles(x, y, color) {
+    for(let i=0; i<8; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            dx: (Math.random() - 0.5) * 8,
+            dy: (Math.random() - 0.5) * 8,
+            life: 1.0,
+            color: color
+        });
+    }
+}
+
+// Bloques
+let bricks = [];
+const brickRowCount = 5;
+const brickColumnCount = 8;
+const brickPadding = 10;
+const brickOffsetTop = 60;
+const brickOffsetLeft = 35;
+// Ancho calculado dinámicamente
+const brickWidth = (GAME_WIDTH - (brickOffsetLeft * 2) - (brickPadding * (brickColumnCount - 1))) / brickColumnCount;
+const brickHeight = 25;
+
+const colors = ['#ff7eb3', '#ff758c', '#ff8fa3', '#a29bfe', '#74b9ff'];
+
+function initBricks() {
+    bricks = [];
+    for(let c=0; c<brickColumnCount; c++) {
+        for(let r=0; r<brickRowCount; r++) {
+            let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
+            let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+            bricks.push({ 
+                x: brickX, 
+                y: brickY, 
+                status: 1, 
+                color: colors[r % colors.length] 
+            });
+        }
+    }
+}
+
+/**
+ * LÓGICA PRINCIPAL
+ */
+
+// Manejo de Input
+let inputX = GAME_WIDTH / 2;
+
+function handleInput(clientX) {
+    // Convertir coordenada de pantalla a coordenada de juego
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    
+    // Ajustar por el escalado interno del canvas
+    const realX = (clientX - rect.left) * (GAME_WIDTH / rect.width);
+    
+    inputX = Math.max(0, Math.min(GAME_WIDTH, realX));
+    
+    // Movimiento directo del paddle
+    let targetX = inputX - paddle.w / 2;
+    
+    // Clamp
+    if (targetX < 0) targetX = 0;
+    if (targetX + paddle.w > GAME_WIDTH) targetX = GAME_WIDTH - paddle.w;
+    
+    paddle.x = targetX;
+    
+    // Si la bola no está activa, sigue al paddle
+    if (!ball.active && gameState === 'PLAYING') {
+        ball.x = paddle.x + paddle.w / 2;
+    }
+}
+
+// Event Listeners
+window.addEventListener('mousemove', e => handleInput(e.clientX));
+window.addEventListener('touchmove', e => {
+    e.preventDefault(); // Evitar scroll
+    handleInput(e.touches[0].clientX);
+}, { passive: false });
+
+// Click para lanzar
+window.addEventListener('mousedown', () => {
+    if(gameState === 'PLAYING' && !ball.active) ball.launch();
+});
+window.addEventListener('touchstart', () => {
+    if(gameState === 'PLAYING' && !ball.active) ball.launch();
+});
+
+// Resize
+function resize() {
+    // Mantener aspect ratio 4:3
+    let aspect = GAME_WIDTH / GAME_HEIGHT;
+    let windowAspect = window.innerWidth / window.innerHeight;
+    
+    let displayWidth, displayHeight;
+    
+    if (windowAspect < aspect) {
+        displayWidth = window.innerWidth;
+        displayHeight = window.innerWidth / aspect;
+    } else {
+        displayHeight = window.innerHeight;
+        displayWidth = window.innerHeight * aspect;
+    }
+    
+    canvas.style.width = `${displayWidth}px`;
+    canvas.style.height = `${displayHeight}px`;
+    
+    // Resolución interna fija para lógica consistente
+    canvas.width = GAME_WIDTH;
+    canvas.height = GAME_HEIGHT;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function update() {
+    if (gameState !== 'PLAYING') return;
+
+    // Actualizar bola
+    if (ball.active) {
+        ball.x += ball.dx;
+        ball.y += ball.dy;
+
+        // Rebote Paredes
+        if(ball.x + ball.r > GAME_WIDTH || ball.x - ball.r < 0) {
+            ball.dx = -ball.dx;
+        }
+        if(ball.y - ball.r < 0) {
+            ball.dy = -ball.dy;
+        }
+        
+        // Game Over
+        if(ball.y - ball.r > GAME_HEIGHT) {
+            endGame();
+        }
+
+        // Colisión Paddle
+        if(ball.y + ball.r > paddle.y && 
+           ball.y - ball.r < paddle.y + paddle.h &&
+           ball.x > paddle.x && 
+           ball.x < paddle.x + paddle.w) {
+            
+            // Lógica de rebote arcade: cambia ángulo según dónde golpee
+            let hitPoint = ball.x - (paddle.x + paddle.w/2);
+            // Normalizar entre -1 y 1
+            hitPoint = hitPoint / (paddle.w/2);
+            
+            let angle = hitPoint * (Math.PI/3); // Max 60 grados
+            
+            ball.dx = ball.speed * Math.sin(angle);
+            ball.dy = -ball.speed * Math.cos(angle);
+            
+            AudioSys.playPaddle();
+            
+            // Subir la bola un poco para evitar atascos
+            ball.y = paddle.y - ball.r - 1;
+        }
+
+        // Colisión Bloques
+        let activeBricks = 0;
+        bricks.forEach(b => {
+            if(b.status === 1) {
+                activeBricks++;
+                if(ball.x > b.x && ball.x < b.x + brickWidth && ball.y > b.y && ball.y < b.y + brickHeight) {
+                    ball.dy = -ball.dy;
+                    b.status = 0;
+                    score += 10;
+                    blocksDestroyed++;
+                    scoreEl.innerText = score;
+                    createParticles(b.x + brickWidth/2, b.y + brickHeight/2, b.color);
+                    AudioSys.playHit();
+                }
+            }
+        });
+
+        // Nivel completado (Endless: respawn)
+        if(activeBricks === 0) {
+            AudioSys.playCoin();
+            ball.speed += 0.5; // Hacerlo un poco más difícil
+            ball.reset();
+            initBricks();
+            // Bonus por limpiar pantalla
+            score += 100;
+            scoreEl.innerText = score;
+        }
+    }
+
+    // Actualizar partículas
+    for(let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.dx;
+        p.y += p.dy;
+        p.life -= 0.05;
+        if(p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+function draw() {
+    // Fondo limpio
+    ctx.fillStyle = '#1a0b2e';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    // Dibujar Bloques
+    bricks.forEach(b => {
+        if(b.status === 1) {
+            ctx.fillStyle = b.color;
+            ctx.shadowColor = b.color;
+            ctx.shadowBlur = 10;
+            ctx.fillRect(b.x, b.y, brickWidth, brickHeight);
+            
+            // Brillo interior
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.fillRect(b.x, b.y, brickWidth, brickHeight/2);
+            ctx.shadowBlur = 0;
+        }
+    });
+
+    paddle.draw();
+    ball.draw();
+
+    // Dibujar partículas
+    particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    });
+
+    requestAnimationFrame(loop);
+}
+
+function loop() {
+    update();
+    draw();
+}
+
+/**
+ * GESTIÓN DE ESTADOS
+ */
+function startGame() {
+    AudioSys.init();
+    gameState = 'PLAYING';
+    menuOverlay.classList.add('hidden');
+    gameOverOverlay.classList.add('hidden');
+    
+    score = 0;
+    blocksDestroyed = 0;
+    scoreEl.innerText = '0';
+    
+    paddle.reset();
+    ball.reset();
+    ball.speed = 7; // Reset speed
+    initBricks();
+}
+
+function endGame() {
+    gameState = 'GAMEOVER';
+    AudioSys.playLoss();
+    
+    // Calcular economía
+    let coins = Math.floor(score / 10);
+    let isNewRecord = false;
+    
+    if(score > highScore) {
+        highScore = score;
+        localStorage.setItem('lovebreaker_highscore', highScore);
+        highScoreEl.innerText = highScore;
+        coins += 50; // Bonus record
+        isNewRecord = true;
+    }
+
+    // Actualizar UI
+    document.getElementById('final-score').innerText = score;
+    document.getElementById('final-blocks').innerText = blocksDestroyed;
+    document.getElementById('coins-earned').innerText = coins;
+    
+    const recordMsg = document.getElementById('new-record-msg');
+    if(isNewRecord) {
+        recordMsg.classList.remove('hidden');
+        AudioSys.playCoin(); // Sonido extra de felicidad
+    } else {
+        recordMsg.classList.add('hidden');
+    }
+
+    gameOverOverlay.classList.remove('hidden');
+}
+
+// Botones UI
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', startGame);
+
+// Iniciar Loop
+resize();
+loop();
+
+</script>
+</body>
+</html>
+
