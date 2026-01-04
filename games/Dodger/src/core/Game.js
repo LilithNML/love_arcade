@@ -20,6 +20,7 @@ export default class Game {
         this.uiStart = document.getElementById('startScreen');
         this.uiHUD = document.getElementById('hud');
         this.uiGameOver = document.getElementById('gameOverScreen');
+        this.uiPause = document.getElementById('pauseScreen');
         
         // Elementos de Texto
         this.elScore = document.getElementById('scoreDisplay');
@@ -27,31 +28,64 @@ export default class Game {
         this.elFinalScore = document.getElementById('finalScore');
         this.elCoinsEarned = document.getElementById('coinsEarned');
 
-        // --- FIX BOTONES ---
+        // Botones Principales
         this.btnStart = document.getElementById('startBtn');
         this.btnRestart = document.getElementById('restartBtn');
-
-        // Vinculación segura de eventos
-        if(this.btnStart) {
-            this.btnStart.onclick = () => { // Usamos onclick directo para evitar duplicados
-                this.startGame();
-            };
-        }
         
-        if(this.btnRestart) {
-            this.btnRestart.onclick = () => {
-                console.log("[Dodger] Botón Reiniciar presionado");
-                this.startGame();
-            };
-        }
+        // Botones HUD/Pausa
+        this.btnPause = document.getElementById('btnPause');
+        this.btnMute = document.getElementById('btnMute');
+        this.btnResume = document.getElementById('btnResume');
+        this.btnQuit = document.getElementById('btnQuit');
+
+        this.bindEvents();
 
         // Estado inicial
-        this.state = 'MENU';
+        this.state = 'MENU'; // MENU, PLAY, PAUSE, GAMEOVER
         this.particles = [];
         this.lastTime = 0;
         
-        // Loop principal
+        // Detección de cambio de pestaña (Auto-Pause)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && this.state === 'PLAY') {
+                this.togglePause();
+            }
+        });
+        
+        // Iniciar loop
         requestAnimationFrame((t) => this.loop(t));
+    }
+
+    bindEvents() {
+        if(this.btnStart) this.btnStart.onclick = () => this.startGame();
+        if(this.btnRestart) this.btnRestart.onclick = () => this.startGame();
+        
+        // Pausa
+        if(this.btnPause) this.btnPause.onclick = () => this.togglePause();
+        if(this.btnResume) this.btnResume.onclick = () => this.togglePause();
+        if(this.btnQuit) this.btnQuit.onclick = () => this.quitGame();
+
+        // Mute
+        if(this.btnMute) {
+            // Set icono inicial
+            this.btnMute.innerText = this.audio.isMuted ? '🔇' : '🔊';
+            
+            this.btnMute.onclick = () => {
+                const isMuted = this.audio.toggleMute();
+                this.btnMute.innerText = isMuted ? '🔇' : '🔊';
+                // Quitar foco para que espacio/enter no lo vuelva a activar
+                this.btnMute.blur();
+            };
+        }
+
+        // Tecla P para pausa
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+                if (this.state === 'PLAY' || this.state === 'PAUSE') {
+                    this.togglePause();
+                }
+            }
+        });
     }
 
     resize() {
@@ -65,8 +99,34 @@ export default class Game {
         }
     }
 
+    togglePause() {
+        if (this.state === 'PLAY') {
+            this.state = 'PAUSE';
+            this.uiPause.classList.remove('hidden');
+            this.uiPause.classList.add('flex');
+            this.btnPause.innerText = '▶'; // Icono Play
+        } else if (this.state === 'PAUSE') {
+            this.state = 'PLAY';
+            this.uiPause.classList.add('hidden');
+            this.uiPause.classList.remove('flex');
+            this.btnPause.innerText = '⏸'; // Icono Pausa
+            
+            // CRÍTICO: Resetear lastTime para evitar saltos de tiempo (teletransporte)
+            this.lastTime = performance.now();
+        }
+    }
+
+    quitGame() {
+        this.state = 'MENU';
+        this.uiPause.classList.add('hidden');
+        this.uiHUD.classList.add('hidden');
+        this.uiStart.classList.remove('hidden');
+        
+        // Reset botones
+        this.btnPause.innerText = '⏸';
+    }
+
     startGame() {
-        console.log("[Dodger] Iniciando partida...");
         this.audio.init();
         this.audio.play('start');
         
@@ -79,12 +139,11 @@ export default class Game {
         this.player = new Player(this.width, this.height);
         this.spawner = new Spawner(this.width, this.height);
         
-        // --- UI TOGGLE FIX ---
-        // Usamos solo clases de Tailwind, sin tocar style.display inline
+        // UI reset
         this.uiStart.classList.add('hidden');
         this.uiGameOver.classList.add('hidden'); 
         this.uiHUD.classList.remove('hidden');
-        this.uiHUD.classList.add('flex'); // Asegurar flex layout
+        this.uiHUD.classList.add('flex');
         
         this.elScore.innerText = "0";
         this.elLevel.innerText = "1";
@@ -95,7 +154,6 @@ export default class Game {
     triggerGameOver() {
         if(this.state === 'GAMEOVER') return;
 
-        console.log("[Dodger] Game Over Triggered");
         this.state = 'GAMEOVER';
         this.audio.play('crash');
         
@@ -104,15 +162,12 @@ export default class Game {
 
         const result = this.economy.payout(this.score);
 
-        // --- UI TOGGLE FIX ---
+        // UI Toggle
         this.uiHUD.classList.add('hidden');
         this.uiHUD.classList.remove('flex');
 
         this.uiGameOver.classList.remove('hidden');
-        this.uiGameOver.classList.add('flex'); // Restaurar flex layout
-        
-        // Aseguramos que la pantalla sea interactiva
-        this.uiGameOver.style.pointerEvents = 'auto'; 
+        this.uiGameOver.classList.add('flex');
         
         this.elFinalScore.innerText = this.score;
         this.elCoinsEarned.innerText = `+${result.coins}`;
@@ -151,6 +206,9 @@ export default class Game {
     }
 
     draw() {
+        // En pausa, no borramos pantalla para que se vea el "congelado" detrás del menú
+        if (this.state === 'PAUSE') return;
+
         this.ctx.clearRect(0, 0, this.width, this.height);
 
         // Partículas
@@ -178,7 +236,14 @@ export default class Game {
 
     loop(timestamp) {
         if (!this.lastTime) this.lastTime = timestamp;
-        // Cap del delta time para evitar saltos gigantes tras pausa/reinicio
+        
+        // Si estamos en pausa, actualizamos lastTime para que el dt no se dispare al volver
+        if (this.state === 'PAUSE') {
+            this.lastTime = timestamp;
+            requestAnimationFrame((t) => this.loop(t));
+            return;
+        }
+
         const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1); 
         this.lastTime = timestamp;
 
