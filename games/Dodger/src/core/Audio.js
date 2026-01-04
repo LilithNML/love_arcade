@@ -1,6 +1,8 @@
 export default class AudioController {
     constructor() {
         this.ctx = null;
+        // Cargar preferencia guardada o por defecto activado (false)
+        this.isMuted = localStorage.getItem('dodger_muted') === 'true';
     }
 
     init() {
@@ -12,8 +14,14 @@ export default class AudioController {
         }
     }
 
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        localStorage.setItem('dodger_muted', this.isMuted);
+        return this.isMuted;
+    }
+
     play(type) {
-        if (!this.ctx) return;
+        if (this.isMuted || !this.ctx) return;
         
         const osc = this.ctx.createOscillator();
         const gainNode = this.ctx.createGain();
