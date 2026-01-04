@@ -2,7 +2,13 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIkRvZGdlciIsCiAgInNob3J0X25hbWUiOiAiRG9kZ2VyIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwZjE3MmEiLAogICJ0aGVtZV9jb2xvciI6ICIjMGYxNzJhIgp9">
+    
     <title>Dodger - Love Arcade</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -10,18 +16,39 @@
             margin: 0;
             overflow: hidden;
             background-color: #0f172a;
-            touch-action: none;
+            touch-action: none; /* Bloquea gestos del navegador */
             font-family: 'Courier New', Courier, monospace;
             user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            /* Altura dinámica para móviles */
+            height: 100dvh; 
+            width: 100vw;
         }
+        canvas { display: block; }
+        
         /* Capas */
         #game-bg { position: absolute; top:0; left:0; width:100%; height:100%; z-index: 0; 
                    background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
-        canvas { display: block; position: relative; z-index: 1; }
+        
+        /* UI Layers */
         .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; }
         .interactive { pointer-events: auto; }
         
-        /* Animaciones CSS extraídas de la beta */
+        /* Botones HUD (Pausa/Mute) */
+        .hud-btn {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 20px; cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: transform 0.1s;
+        }
+        .hud-btn:active { transform: scale(0.9); background: rgba(255,255,255,0.1); }
+
+        /* Animaciones */
         .animate-blink { animation: blink 1s infinite; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         
@@ -39,14 +66,31 @@
     <div id="game-bg"></div>
     <canvas id="gameCanvas"></canvas>
 
-    <div id="hud" class="ui-layer hidden flex-col justify-start p-5 items-start">
-        <div class="flex justify-between w-full max-w-md mx-auto text-white font-bold text-xl drop-shadow-md">
-            <div class="text-green-400">SCORE: <span id="scoreDisplay">0</span></div>
-            <div class="text-yellow-400">LVL: <span id="levelDisplay">1</span></div>
+    <div id="hud" class="ui-layer hidden flex-col justify-between p-4 pb-8">
+        <div class="flex justify-between items-start w-full interactive">
+            <div class="text-white font-bold text-xl drop-shadow-md select-none pointer-events-none">
+                <div class="text-green-400">SCORE: <span id="scoreDisplay">0</span></div>
+                <div class="text-yellow-400 text-sm">LVL: <span id="levelDisplay">1</span></div>
+            </div>
+            
+            <div class="flex gap-2">
+                <button id="btnMute" class="hud-btn">🔊</button>
+                <button id="btnPause" class="hud-btn">⏸</button>
+            </div>
         </div>
     </div>
 
-    <div id="startScreen" class="ui-layer interactive flex flex-col justify-center items-center bg-black/80 backdrop-blur-sm">
+    <div id="pauseScreen" class="ui-layer hidden interactive flex flex-col justify-center items-center bg-black/60 backdrop-blur-md z-[60]">
+        <h2 class="text-4xl font-black text-white tracking-widest mb-8">PAUSA</h2>
+        <button id="btnResume" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-10 rounded-full shadow-lg text-xl mb-4">
+            CONTINUAR
+        </button>
+        <button id="btnQuit" class="text-red-400 hover:text-red-300 border border-red-500/30 px-6 py-2 rounded text-sm">
+            SALIR AL MENÚ
+        </button>
+    </div>
+
+    <div id="startScreen" class="ui-layer interactive flex flex-col justify-center items-center bg-black/80 backdrop-blur-sm z-[70]">
         <h1 class="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-4 tracking-tighter" style="filter: drop-shadow(0 0 10px rgba(59,130,246,0.5));">DODGER</h1>
         <p class="text-gray-300 mb-8 text-sm uppercase tracking-widest">Esquiva. Sobrevive. Repite.</p>
         
@@ -60,7 +104,7 @@
         </button>
     </div>
 
-    <div id="gameOverScreen" class="ui-layer hidden interactive flex flex-col justify-center items-center bg-red-900/90 backdrop-blur-md">
+    <div id="gameOverScreen" class="ui-layer hidden interactive flex flex-col justify-center items-center bg-red-900/90 backdrop-blur-md z-[70]">
         <h2 class="text-5xl font-black text-white mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">GAME OVER</h2>
         
         <div class="bg-black/40 p-6 rounded-xl border border-white/10 mb-6 text-center w-64">
@@ -80,13 +124,12 @@
         </button>
     </div>
 
-    <div id="touchControls" class="absolute top-0 left-0 w-full h-full flex z-20 hidden">
+    <div id="touchControls" class="absolute top-0 left-0 w-full h-full flex z-10 hidden">
         <div id="touchLeft" class="w-1/2 h-full"></div>
         <div id="touchRight" class="w-1/2 h-full"></div>
     </div>
 
     <script src="../../js/app.js"></script>
-
     <script type="module" src="src/main.js"></script>
 
     <script>
