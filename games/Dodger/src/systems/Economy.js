@@ -1,41 +1,51 @@
 export default class EconomyManager {
     constructor() {
         this.gameId = 'dodger';
-        this.baseReward = 2; // Monedas fijas por participar
+        // AJUSTE 1: Se bajo la base para reducir inflación temprana.
+        // Antes 2, ahora 1.
+        this.baseReward = 1; 
     }
 
     calculateCoins(score) {
-        if (score <= 50) return 0; // Mínimo esfuerzo requerido
+        // AJUSTE 3: Umbral más permisivo para no frustrar en partidas cortas.
+        // Antes 50, ahora 30.
+        if (score <= 30) return 0; 
         
-        // --- REBALANCEO V2 ---
-        // Fórmula anterior: Math.sqrt(score) * 1.5 (Muy agresiva al inicio)
-        // Fórmula nueva: Math.sqrt(score) * 0.6 (Crecimiento más controlado)
+        // AJUSTE 2: Factor 0.45 para una curva más lenta y "arcade".
+        // Ejemplo: 266 pts -> sqrt(16.3) * 0.45 = 7.3 (+1 base) = 8 monedas. (Antes 11)
+        const raw = Math.sqrt(score) * 0.45;
         
-        // Ejemplo: 800 pts -> sqrt(800)=28. 28 * 0.6 = 16.8 (+2 base) = ~19 monedas.
-        // Ejemplo: 5000 pts -> sqrt(5000)=70. 70 * 0.6 = 42 (+2 base) = ~44 monedas.
-        // Ejemplo: 10000 pts -> sqrt(10000)=100. 100 * 0.6 = 60 (+2 base) = ~62 monedas.
+        // AJUSTE 4: Soft Cap de rendimiento puro.
+        // Limito lo que el score puro puede dar a 60 monedas.
+        // Esto obliga a que, para llegar al Cap Global (100), se dependa de futuros bonos (Récords, etc).
+        const performanceCoins = Math.min(raw, 60);
 
-        const performanceCoins = Math.sqrt(score) * 0.6; 
         let total = this.baseReward + Math.floor(performanceCoins);
         
-        // Aumentamos el Cap máximo a 100 para motivar récords altos
+        // Cap Global de Seguridad (Anti-Exploit / God Mode)
+        // Mantenemos 100 como límite absoluto de la transacción.
         return Math.min(total, 100); 
     }
 
     payout(score) {
         const coins = this.calculateCoins(score);
 
-        // Validación de sistema
+        // --- VALIDACIONES DEL SISTEMA UNIVERSAL ---
+        
+        [span_0](start_span)// 1. Verificar existencia del GameCenter
         if (!window.GameCenter) {
             console.warn('[Dodger] Love Arcade no detectado (Modo Offline). Monedas calculadas: ' + coins);
             return { sent: false, coins: coins };
         }
 
+        [span_1](start_span)// 2. No enviar transacciones de 0 o negativas
         if (coins <= 0) return { sent: false, coins: 0 };
 
+        [span_2](start_span)// 3. Generar ID único por sesión (Idempotencia)
         const levelId = `session_${Date.now()}`;
 
         try {
+            [span_3](start_span)// 4. Ejecutar transacción
             window.GameCenter.completeLevel(this.gameId, levelId, coins);
             console.log(`[Dodger] Payout exitoso: ${coins} monedas.`);
             return { sent: true, coins: coins };
