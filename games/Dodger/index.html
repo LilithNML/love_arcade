@@ -4,99 +4,85 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Dodger - Love Arcade</title>
-    
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root {
-            --neon-blue: #0ff;
-            --neon-red: #f0f;
-            --bg-dark: #050505;
-        }
         body {
             margin: 0;
             overflow: hidden;
-            background-color: var(--bg-dark);
-            color: white;
-            font-family: 'Courier New', Courier, monospace;
+            background-color: #0f172a;
             touch-action: none;
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
         }
-        #gameCanvas {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-            image-rendering: pixelated;
-        }
-        #ui-layer {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-        }
-        .hud-panel {
-            position: absolute;
-            top: 20px; left: 20px;
-            font-size: 24px;
-            text-shadow: 0 0 5px var(--neon-blue);
-        }
-        .menu-screen {
-            background: rgba(0, 0, 0, 0.85);
-            padding: 40px;
-            border: 2px solid var(--neon-blue);
-            text-align: center;
-            pointer-events: auto;
-            display: none;
-            box-shadow: 0 0 20px var(--neon-blue);
-        }
-        .menu-screen.active { display: block; }
+        /* Capas */
+        #game-bg { position: absolute; top:0; left:0; width:100%; height:100%; z-index: 0; 
+                   background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
+        canvas { display: block; position: relative; z-index: 1; }
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; }
+        .interactive { pointer-events: auto; }
         
-        h1 { margin: 0 0 20px 0; font-size: 48px; text-transform: uppercase; letter-spacing: 4px; }
-        p { margin-bottom: 30px; font-size: 18px; color: #ccc; }
+        /* Animaciones CSS extraídas de la beta */
+        .animate-blink { animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         
-        button {
-            background: transparent;
-            color: var(--neon-blue);
-            border: 2px solid var(--neon-blue);
-            padding: 15px 40px;
-            font-size: 24px;
-            font-family: inherit;
-            cursor: pointer;
-            text-transform: uppercase;
-            transition: all 0.2s;
-            margin: 10px;
-        }
-        button:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 15px var(--neon-blue); }
-        button.exit-btn { border-color: var(--neon-red); color: var(--neon-red); }
-        button.exit-btn:hover { background: var(--neon-red); color: white; box-shadow: 0 0 15px var(--neon-red); }
-        
-        .scanlines {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            background-size: 100% 4px, 6px 100%;
-            pointer-events: none;
-            z-index: 10;
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-4px, 0, 0); }
+            20%, 80% { transform: translate3d(6px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
+            40%, 60% { transform: translate3d(8px, 0, 0); }
         }
     </style>
 </head>
 <body>
 
-    <div class="scanlines"></div>
+    <div id="game-bg"></div>
     <canvas id="gameCanvas"></canvas>
 
-    <div id="ui-layer">
-        <div id="hud" class="hud-panel" style="display: none;">
-            TIME: <span id="scoreDisplay">0</span>
+    <div id="hud" class="ui-layer hidden flex-col justify-start p-5 items-start">
+        <div class="flex justify-between w-full max-w-md mx-auto text-white font-bold text-xl drop-shadow-md">
+            <div class="text-green-400">SCORE: <span id="scoreDisplay">0</span></div>
+            <div class="text-yellow-400">LVL: <span id="levelDisplay">1</span></div>
+        </div>
+    </div>
+
+    <div id="startScreen" class="ui-layer interactive flex flex-col justify-center items-center bg-black/80 backdrop-blur-sm">
+        <h1 class="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-4 tracking-tighter" style="filter: drop-shadow(0 0 10px rgba(59,130,246,0.5));">DODGER</h1>
+        <p class="text-gray-300 mb-8 text-sm uppercase tracking-widest">Esquiva. Sobrevive. Repite.</p>
+        
+        <button id="startBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-12 rounded-full shadow-[0_0_20px_rgba(37,99,235,0.6)] transform transition hover:scale-105 active:scale-95 animate-blink">
+            JUGAR AHORA
+        </button>
+        <p class="mt-6 text-gray-500 text-xs">← Flechas / Touch →</p>
+        
+        <button id="exitBtn" class="mt-8 text-red-500 border border-red-500/30 px-6 py-2 rounded hover:bg-red-500/10 text-sm">
+            SALIR AL ARCADE
+        </button>
+    </div>
+
+    <div id="gameOverScreen" class="ui-layer hidden interactive flex flex-col justify-center items-center bg-red-900/90 backdrop-blur-md">
+        <h2 class="text-5xl font-black text-white mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">GAME OVER</h2>
+        
+        <div class="bg-black/40 p-6 rounded-xl border border-white/10 mb-6 text-center w-64">
+            <div class="mb-2">
+                <span class="text-gray-400 text-sm block">Puntuación Final</span>
+                <span class="text-3xl text-white font-bold" id="finalScore">0</span>
+            </div>
+            
+            <div class="mt-4 pt-4 border-t border-white/10">
+                <span class="text-gray-400 text-sm block">Monedas Ganadas</span>
+                <span class="text-4xl text-yellow-400 font-bold" id="coinsEarned">+0</span>
+            </div>
         </div>
 
-        <div id="mainMenu" class="menu-screen active">
-            <h1 id="menuTitle">DODGER</h1>
-            <p id="menuSubtitle">Esquiva los obstáculos. Sobrevive.</p>
-            <button id="btnPlay">JUGAR</button>
-            <br>
-            <button id="btnExit" class="exit-btn">SALIR</button>
-        </div>
+        <button id="restartBtn" class="bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-12 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95">
+            JUGAR OTRA VEZ
+        </button>
+    </div>
+
+    <div id="touchControls" class="absolute top-0 left-0 w-full h-full flex z-20 hidden">
+        <div id="touchLeft" class="w-1/2 h-full"></div>
+        <div id="touchRight" class="w-1/2 h-full"></div>
     </div>
 
     <script src="../../js/app.js"></script>
@@ -104,7 +90,7 @@
     <script type="module" src="src/main.js"></script>
 
     <script>
-        document.getElementById('btnExit').addEventListener('click', () => {
+        document.getElementById('exitBtn').addEventListener('click', () => {
             window.location.href = '../../index.html';
         });
     </script>
