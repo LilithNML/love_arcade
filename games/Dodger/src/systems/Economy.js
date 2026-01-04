@@ -1,51 +1,44 @@
 export default class EconomyManager {
     constructor() {
         this.gameId = 'dodger';
-        // AJUSTE 1: Se bajo la base para reducir inflación temprana.
-        // Antes 2, ahora 1.
+        // AJUSTE 1: Base reward baja para evitar inflación en partidas cortas
         this.baseReward = 1; 
     }
 
     calculateCoins(score) {
-        // AJUSTE 3: Umbral más permisivo para no frustrar en partidas cortas.
-        // Antes 50, ahora 30.
+        // AJUSTE 3: Umbral mínimo (30 puntos) para empezar a ganar
         if (score <= 30) return 0; 
         
-        // AJUSTE 2: Factor 0.45 para una curva más lenta y "arcade".
-        // Ejemplo: 266 pts -> sqrt(16.3) * 0.45 = 7.3 (+1 base) = 8 monedas. (Antes 11)
+        // AJUSTE 2: Curva suavizada (Factor 0.45)
+        // Ejemplo: 266 pts -> ~8 monedas
         const raw = Math.sqrt(score) * 0.45;
         
-        // AJUSTE 4: Soft Cap de rendimiento puro.
-        // Limito lo que el score puro puede dar a 60 monedas.
-        // Esto obliga a que, para llegar al Cap Global (100), se dependa de futuros bonos (Récords, etc).
+        // AJUSTE 4: Soft Cap de rendimiento (máx 60 por habilidad pura)
         const performanceCoins = Math.min(raw, 60);
 
         let total = this.baseReward + Math.floor(performanceCoins);
         
-        // Cap Global de Seguridad (Anti-Exploit / God Mode)
-        // Mantenemos 100 como límite absoluto de la transacción.
+        // Cap Global de Seguridad (100 monedas máx por transacción)
         return Math.min(total, 100); 
     }
 
     payout(score) {
         const coins = this.calculateCoins(score);
 
-        // --- VALIDACIONES DEL SISTEMA UNIVERSAL ---
-        
-        [span_0](start_span)// 1. Verificar existencia del GameCenter
+        // 1. Verificación de entorno (Love Arcade)
         if (!window.GameCenter) {
-            console.warn('[Dodger] Love Arcade no detectado (Modo Offline). Monedas calculadas: ' + coins);
+            console.warn('[Dodger] Offline Mode. Monedas calculadas: ' + coins);
             return { sent: false, coins: coins };
         }
 
-        [span_1](start_span)// 2. No enviar transacciones de 0 o negativas
+        // 2. Validación básica
         if (coins <= 0) return { sent: false, coins: 0 };
 
-        [span_2](start_span)// 3. Generar ID único por sesión (Idempotencia)
+        // 3. ID único para idempotencia
         const levelId = `session_${Date.now()}`;
 
         try {
-            [span_3](start_span)// 4. Ejecutar transacción
+            [span_0](start_span)// 4. Ejecución de la transacción[span_0](end_span)
             window.GameCenter.completeLevel(this.gameId, levelId, coins);
             console.log(`[Dodger] Payout exitoso: ${coins} monedas.`);
             return { sent: true, coins: coins };
