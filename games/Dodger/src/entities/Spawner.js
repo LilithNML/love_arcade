@@ -4,17 +4,20 @@ export default class Spawner {
         this.gameHeight = gameHeight;
         this.obstacles = [];
         this.spawnTimer = 0;
-        this.currentSpawnRate = 60; // Frames (aprox 1s)
+        
+        // Configuración igual a la Beta
         this.baseSpeed = 3;
     }
 
     update(dt, score) {
-        // Aumentar dificultad
         this.spawnTimer++;
         
-        // Dificultad basada en score (igual que beta)
+        // Cálculo de dificultad idéntico a la Beta
+        // Cada 500 puntos sube el nivel
         const difficultyLevel = Math.floor(score / 500) + 1;
+        
         const speed = this.baseSpeed + (difficultyLevel * 0.5);
+        // Rate: frames entre obstáculos. Mínimo 10 frames, empieza en 60.
         const rate = Math.max(10, 60 - (difficultyLevel * 5));
 
         if (this.spawnTimer > rate) {
@@ -22,7 +25,7 @@ export default class Spawner {
             this.spawnTimer = 0;
         }
 
-        // Mover y limpiar
+        // Mover obstáculos
         for (let i = this.obstacles.length - 1; i >= 0; i--) {
             let obs = this.obstacles[i];
             obs.y += obs.speedY;
@@ -32,7 +35,8 @@ export default class Spawner {
             }
         }
         
-        return difficultyLevel; // Retornamos para actualizar UI si es necesario
+        // Retornamos el nivel para que Game.js sepa si cambió
+        return difficultyLevel; 
     }
 
     spawn(speedBase) {
@@ -42,7 +46,7 @@ export default class Spawner {
             y: -size,
             w: size,
             h: size,
-            speedY: speedBase + (Math.random() * 2),
+            speedY: speedBase + (Math.random() * 2), // Variación aleatoria
             color: '#ef4444'
         });
     }
@@ -55,7 +59,7 @@ export default class Spawner {
     }
 
     checkCollision(player) {
-        const margin = 2; // Margen indulgente de la beta
+        const margin = 2; 
         for (let obs of this.obstacles) {
             if (
                 player.x + margin < obs.x + obs.w &&
