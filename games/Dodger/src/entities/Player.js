@@ -2,42 +2,46 @@ export default class Player {
     constructor(gameWidth, gameHeight) {
         this.gameWidth = gameWidth;
         this.gameHeight = gameHeight;
-        this.width = 30;
-        this.height = 30;
+        this.size = 20;
+        this.color = '#3b82f6'; // Azul Tailwind
         
-        // Posición inicial (centro abajo)
-        this.x = gameWidth / 2 - this.width / 2;
-        this.y = gameHeight - 100;
-        
-        this.speed = 400; // Píxeles por segundo
+        // Físicas de la beta
+        this.x = gameWidth / 2 - this.size / 2;
+        this.y = gameHeight - this.size - 50;
+        this.speed = 0;
+        this.maxSpeed = 8;
+        this.acceleration = 0.8;
+        this.friction = 0.85;
     }
 
     update(dt, input) {
-        // Movimiento
-        if (input.keys.left) {
-            this.x -= this.speed * dt;
-        }
-        if (input.keys.right) {
-            this.x += this.speed * dt;
-        }
+        // Aceleración
+        if (input.keys.left) this.speed -= this.acceleration;
+        if (input.keys.right) this.speed += this.acceleration;
 
-        // Límites de pantalla
-        if (this.x < 0) this.x = 0;
-        if (this.x > this.gameWidth - this.width) this.x = this.gameWidth - this.width;
+        // Fricción
+        this.speed *= this.friction;
+
+        // Aplicar movimiento
+        this.x += this.speed;
+
+        // Límites y rebote suave
+        if (this.x < 0) { 
+            this.x = 0; 
+            this.speed *= -0.5; 
+        }
+        if (this.x + this.size > this.gameWidth) { 
+            this.x = this.gameWidth - this.size; 
+            this.speed *= -0.5; 
+        }
     }
 
     draw(ctx) {
-        // Dibujamos una nave simple (Triángulo)
-        ctx.fillStyle = '#0ff'; // Cian Neón
-        ctx.beginPath();
-        ctx.moveTo(this.x + this.width / 2, this.y); // Punta
-        ctx.lineTo(this.x, this.y + this.height); // Izq
-        ctx.lineTo(this.x + this.width, this.y + this.height); // Der
-        ctx.closePath();
-        ctx.fill();
-
-        // Efecto simple de motor
-        ctx.fillStyle = '#f0f';
-        ctx.fillRect(this.x + 10, this.y + this.height, 10, 5);
+        ctx.save();
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = this.color;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+        ctx.restore();
     }
 }
