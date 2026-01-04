@@ -21,26 +21,36 @@ export default class Game {
         this.uiHUD = document.getElementById('hud');
         this.uiGameOver = document.getElementById('gameOverScreen');
         
-        // Elementos UI Dinámicos
+        // Elementos de Texto
         this.elScore = document.getElementById('scoreDisplay');
         this.elLevel = document.getElementById('levelDisplay');
         this.elFinalScore = document.getElementById('finalScore');
         this.elCoinsEarned = document.getElementById('coinsEarned');
 
-        // Botones
+        // --- FIX BOTONES ---
         this.btnStart = document.getElementById('startBtn');
         this.btnRestart = document.getElementById('restartBtn');
 
-        // Event Listeners seguros
-        if(this.btnStart) this.btnStart.addEventListener('click', () => this.startGame());
-        if(this.btnRestart) this.btnRestart.addEventListener('click', () => this.startGame());
+        // Vinculación segura de eventos
+        if(this.btnStart) {
+            this.btnStart.onclick = () => { // Usamos onclick directo para evitar duplicados
+                this.startGame();
+            };
+        }
+        
+        if(this.btnRestart) {
+            this.btnRestart.onclick = () => {
+                console.log("[Dodger] Botón Reiniciar presionado");
+                this.startGame();
+            };
+        }
 
         // Estado inicial
         this.state = 'MENU';
         this.particles = [];
         this.lastTime = 0;
         
-        // Iniciar el loop una sola vez
+        // Loop principal
         requestAnimationFrame((t) => this.loop(t));
     }
 
@@ -56,28 +66,26 @@ export default class Game {
     }
 
     startGame() {
-        // Inicializar Audio Context (requerido por navegador)
+        console.log("[Dodger] Iniciando partida...");
         this.audio.init();
         this.audio.play('start');
         
-        // Reset de Estado Lógico
         this.state = 'PLAY';
         this.score = 0;
-        this.level = 1; // Nivel inicial
+        this.level = 1;
         this.particles = [];
-        this.lastTime = performance.now(); // Resetear reloj para evitar saltos de tiempo
+        this.lastTime = performance.now();
         
-        // Reset de Entidades
         this.player = new Player(this.width, this.height);
         this.spawner = new Spawner(this.width, this.height);
         
-        // Reset UI (Forzar ocultar pantallas)
+        // --- UI TOGGLE FIX ---
+        // Usamos solo clases de Tailwind, sin tocar style.display inline
         this.uiStart.classList.add('hidden');
-        this.uiGameOver.classList.add('hidden'); // CRÍTICO: Asegurar que se oculte
+        this.uiGameOver.classList.add('hidden'); 
         this.uiHUD.classList.remove('hidden');
-        this.uiHUD.style.display = 'flex'; 
+        this.uiHUD.classList.add('flex'); // Asegurar flex layout
         
-        // Actualizar textos UI iniciales
         this.elScore.innerText = "0";
         this.elLevel.innerText = "1";
         
@@ -85,21 +93,26 @@ export default class Game {
     }
 
     triggerGameOver() {
-        if(this.state === 'GAMEOVER') return; // Evitar dispararlo múltiples veces
+        if(this.state === 'GAMEOVER') return;
 
+        console.log("[Dodger] Game Over Triggered");
         this.state = 'GAMEOVER';
         this.audio.play('crash');
         
         document.body.classList.add('shake');
         this.createExplosion(this.player.x, this.player.y, this.player.color);
 
-        // Transacción económica
         const result = this.economy.payout(this.score);
 
-        // Mostrar UI Game Over
+        // --- UI TOGGLE FIX ---
         this.uiHUD.classList.add('hidden');
+        this.uiHUD.classList.remove('flex');
+
         this.uiGameOver.classList.remove('hidden');
-        this.uiGameOver.style.display = 'flex';
+        this.uiGameOver.classList.add('flex'); // Restaurar flex layout
+        
+        // Aseguramos que la pantalla sea interactiva
+        this.uiGameOver.style.pointerEvents = 'auto'; 
         
         this.elFinalScore.innerText = this.score;
         this.elCoinsEarned.innerText = `+${result.coins}`;
@@ -119,34 +132,28 @@ export default class Game {
     update(dt) {
         if (this.state !== 'PLAY') return;
         
-        // Score sube con el tiempo (frames)
         this.score++;
         this.elScore.innerText = this.score;
 
-        // Entidades
         this.player.update(dt, this.input);
         
-        // Lógica de Spawner y Nivel
         const currentLevel = this.spawner.update(dt, this.score);
         
-        // DETECCIÓN DE SUBIDA DE NIVEL
         if (currentLevel > this.level) {
             this.level = currentLevel;
-            this.audio.play('levelUp'); // ¡Sonido añadido!
+            this.audio.play('levelUp');
             this.elLevel.innerText = this.level;
         }
 
-        // Colisiones
         if (this.spawner.checkCollision(this.player)) {
             this.triggerGameOver();
         }
     }
 
     draw() {
-        // Limpiar
         this.ctx.clearRect(0, 0, this.width, this.height);
 
-        // Dibujar Partículas
+        // Partículas
         for (let i = this.particles.length - 1; i >= 0; i--) {
             let p = this.particles[i];
             p.x += p.vx; p.y += p.vy;
@@ -163,7 +170,6 @@ export default class Game {
             if (p.life <= 0) this.particles.splice(i, 1);
         }
 
-        // Dibujar Juego
         if (this.state === 'PLAY' || (this.state === 'GAMEOVER' && this.particles.length > 0)) {
             if(this.state === 'PLAY' && this.player) this.player.draw(this.ctx);
             if(this.spawner) this.spawner.draw(this.ctx);
@@ -171,9 +177,9 @@ export default class Game {
     }
 
     loop(timestamp) {
-        // Cálculo de Delta Time seguro
         if (!this.lastTime) this.lastTime = timestamp;
-        const dt = (timestamp - this.lastTime) / 1000;
+        // Cap del delta time para evitar saltos gigantes tras pausa/reinicio
+        const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1); 
         this.lastTime = timestamp;
 
         this.update(dt);
