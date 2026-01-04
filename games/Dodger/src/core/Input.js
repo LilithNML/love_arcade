@@ -1,49 +1,35 @@
 export default class InputHandler {
     constructor() {
-        this.keys = {
-            left: false,
-            right: false,
-            escape: false
-        };
-        
-        // Zonas de toque para móviles (0 = izquierda, 1 = derecha)
-        this.touchX = null;
+        this.keys = { left: false, right: false };
 
-        window.addEventListener('keydown', (e) => this.onKeyDown(e));
-        window.addEventListener('keyup', (e) => this.onKeyUp(e));
-        
-        // Touch events básicos
-        window.addEventListener('touchstart', (e) => this.onTouchStart(e));
-        window.addEventListener('touchend', () => this.onTouchEnd());
-    }
+        // Teclado
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') this.keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd') this.keys.right = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') this.keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd') this.keys.right = false;
+        });
 
-    onKeyDown(e) {
-        if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = true;
-        if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = true;
-        if (e.code === 'Escape') this.keys.escape = true;
-    }
+        // Touch Areas (Extraídos del HTML por ID)
+        const leftZone = document.getElementById('touchLeft');
+        const rightZone = document.getElementById('touchRight');
+        const touchControls = document.getElementById('touchControls');
 
-    onKeyUp(e) {
-        if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = false;
-        if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = false;
-        if (e.code === 'Escape') this.keys.escape = false;
-    }
-
-    onTouchStart(e) {
-        const touch = e.touches[0];
-        const width = window.innerWidth;
-        // Si toca la mitad izquierda -> Izquierda, si no -> Derecha
-        if (touch.clientX < width / 2) {
-            this.keys.left = true;
-            this.keys.right = false;
-        } else {
-            this.keys.right = true;
-            this.keys.left = false;
+        // Mostrar controles si es móvil
+        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+            touchControls.classList.remove('hidden');
+            touchControls.style.display = 'flex'; // Tailwind fix
         }
-    }
 
-    onTouchEnd() {
-        this.keys.left = false;
-        this.keys.right = false;
+        const handleStart = (dir) => (e) => { e.preventDefault(); this.keys[dir] = true; };
+        const handleEnd = (dir) => (e) => { e.preventDefault(); this.keys[dir] = false; };
+
+        leftZone.addEventListener('touchstart', handleStart('left'), {passive: false});
+        leftZone.addEventListener('touchend', handleEnd('left'), {passive: false});
+        
+        rightZone.addEventListener('touchstart', handleStart('right'), {passive: false});
+        rightZone.addEventListener('touchend', handleEnd('right'), {passive: false});
     }
 }
