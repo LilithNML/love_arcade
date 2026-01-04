@@ -28,13 +28,20 @@ export default class Game {
         this.elCoinsEarned = document.getElementById('coinsEarned');
 
         // Botones
-        document.getElementById('startBtn').addEventListener('click', () => this.startGame());
-        document.getElementById('restartBtn').addEventListener('click', () => this.startGame());
+        this.btnStart = document.getElementById('startBtn');
+        this.btnRestart = document.getElementById('restartBtn');
 
-        // Estado
+        // Event Listeners seguros
+        if(this.btnStart) this.btnStart.addEventListener('click', () => this.startGame());
+        if(this.btnRestart) this.btnRestart.addEventListener('click', () => this.startGame());
+
+        // Estado inicial
         this.state = 'MENU';
         this.particles = [];
-        this.loop(0);
+        this.lastTime = 0;
+        
+        // Iniciar el loop una sola vez
+        requestAnimationFrame((t) => this.loop(t));
     }
 
     resize() {
@@ -49,43 +56,50 @@ export default class Game {
     }
 
     startGame() {
+        // Inicializar Audio Context (requerido por navegador)
         this.audio.init();
         this.audio.play('start');
         
+        // Reset de Estado Lógico
         this.state = 'PLAY';
         this.score = 0;
+        this.level = 1; // Nivel inicial
         this.particles = [];
+        this.lastTime = performance.now(); // Resetear reloj para evitar saltos de tiempo
         
-        // Reiniciar Entidades
+        // Reset de Entidades
         this.player = new Player(this.width, this.height);
         this.spawner = new Spawner(this.width, this.height);
         
-        // UI
+        // Reset UI (Forzar ocultar pantallas)
         this.uiStart.classList.add('hidden');
-        this.uiGameOver.classList.add('hidden');
+        this.uiGameOver.classList.add('hidden'); // CRÍTICO: Asegurar que se oculte
         this.uiHUD.classList.remove('hidden');
-        this.uiHUD.style.display = 'flex'; // Tailwind fix
+        this.uiHUD.style.display = 'flex'; 
+        
+        // Actualizar textos UI iniciales
+        this.elScore.innerText = "0";
+        this.elLevel.innerText = "1";
         
         document.body.classList.remove('shake');
     }
 
     triggerGameOver() {
+        if(this.state === 'GAMEOVER') return; // Evitar dispararlo múltiples veces
+
         this.state = 'GAMEOVER';
         this.audio.play('crash');
         
-        // Efecto Shake
         document.body.classList.add('shake');
-        
-        // Explosión de partículas
         this.createExplosion(this.player.x, this.player.y, this.player.color);
 
-        // Economía
+        // Transacción económica
         const result = this.economy.payout(this.score);
 
-        // UI Updates
+        // Mostrar UI Game Over
         this.uiHUD.classList.add('hidden');
         this.uiGameOver.classList.remove('hidden');
-        this.uiGameOver.style.display = 'flex'; // Tailwind fix
+        this.uiGameOver.style.display = 'flex';
         
         this.elFinalScore.innerText = this.score;
         this.elCoinsEarned.innerText = `+${result.coins}`;
@@ -102,16 +116,25 @@ export default class Game {
         }
     }
 
-    update() {
+    update(dt) {
         if (this.state !== 'PLAY') return;
         
+        // Score sube con el tiempo (frames)
         this.score++;
         this.elScore.innerText = this.score;
 
         // Entidades
-        this.player.update(1/60, this.input);
-        const currentLevel = this.spawner.update(1/60, this.score);
-        this.elLevel.innerText = currentLevel;
+        this.player.update(dt, this.input);
+        
+        // Lógica de Spawner y Nivel
+        const currentLevel = this.spawner.update(dt, this.score);
+        
+        // DETECCIÓN DE SUBIDA DE NIVEL
+        if (currentLevel > this.level) {
+            this.level = currentLevel;
+            this.audio.play('levelUp'); // ¡Sonido añadido!
+            this.elLevel.innerText = this.level;
+        }
 
         // Colisiones
         if (this.spawner.checkCollision(this.player)) {
@@ -120,9 +143,10 @@ export default class Game {
     }
 
     draw() {
+        // Limpiar
         this.ctx.clearRect(0, 0, this.width, this.height);
 
-        // Dibujar Partículas (siempre, incluso en game over para ver la explosión)
+        // Dibujar Partículas
         for (let i = this.particles.length - 1; i >= 0; i--) {
             let p = this.particles[i];
             p.x += p.vx; p.y += p.vy;
@@ -139,17 +163,22 @@ export default class Game {
             if (p.life <= 0) this.particles.splice(i, 1);
         }
 
+        // Dibujar Juego
         if (this.state === 'PLAY' || (this.state === 'GAMEOVER' && this.particles.length > 0)) {
-            if(this.state === 'PLAY') this.player.draw(this.ctx);
-            this.spawner.draw(this.ctx);
+            if(this.state === 'PLAY' && this.player) this.player.draw(this.ctx);
+            if(this.spawner) this.spawner.draw(this.ctx);
         }
     }
 
-    loop() {
-        if (this.state === 'PLAY' || this.state === 'GAMEOVER') {
-            this.update();
-            this.draw();
-        }
-        requestAnimationFrame(() => this.loop());
+    loop(timestamp) {
+        // Cálculo de Delta Time seguro
+        if (!this.lastTime) this.lastTime = timestamp;
+        const dt = (timestamp - this.lastTime) / 1000;
+        this.lastTime = timestamp;
+
+        this.update(dt);
+        this.draw();
+
+        requestAnimationFrame((t) => this.loop(t));
     }
 }
