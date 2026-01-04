@@ -4,78 +4,68 @@ export default class Spawner {
         this.gameHeight = gameHeight;
         this.obstacles = [];
         this.spawnTimer = 0;
-        this.spawnInterval = 1.0; // Segundos entre obstáculos
-        this.obstacleSpeed = 250;
+        this.currentSpawnRate = 60; // Frames (aprox 1s)
+        this.baseSpeed = 3;
     }
 
-    update(dt, difficultyMultiplier) {
-        // Generar obstáculo
-        this.spawnTimer += dt;
-        // A mayor dificultad, menor intervalo (spawn más rápido)
-        const currentInterval = Math.max(0.2, this.spawnInterval - (difficultyMultiplier * 0.1));
+    update(dt, score) {
+        // Aumentar dificultad
+        this.spawnTimer++;
         
-        if (this.spawnTimer > currentInterval) {
-            this.spawn();
+        // Dificultad basada en score (igual que beta)
+        const difficultyLevel = Math.floor(score / 500) + 1;
+        const speed = this.baseSpeed + (difficultyLevel * 0.5);
+        const rate = Math.max(10, 60 - (difficultyLevel * 5));
+
+        if (this.spawnTimer > rate) {
+            this.spawn(speed);
             this.spawnTimer = 0;
         }
 
-        // Mover obstáculos
-        // Aumentamos velocidad ligeramente con el tiempo
-        const currentSpeed = this.obstacleSpeed + (difficultyMultiplier * 10);
-
+        // Mover y limpiar
         for (let i = this.obstacles.length - 1; i >= 0; i--) {
-            const obs = this.obstacles[i];
-            obs.y += currentSpeed * dt;
+            let obs = this.obstacles[i];
+            obs.y += obs.speedY;
 
-            // Eliminar si salen de pantalla
             if (obs.y > this.gameHeight) {
                 this.obstacles.splice(i, 1);
             }
         }
+        
+        return difficultyLevel; // Retornamos para actualizar UI si es necesario
     }
 
-    spawn() {
-        const size = Math.random() * 30 + 20; // Tamaño variable
-        const x = Math.random() * (this.gameWidth - size);
-        
+    spawn(speedBase) {
+        const size = Math.random() * 30 + 20;
         this.obstacles.push({
-            x: x,
-            y: -50,
-            width: size,
-            height: size,
-            type: 'asteroid'
+            x: Math.random() * (this.gameWidth - size),
+            y: -size,
+            w: size,
+            h: size,
+            speedY: speedBase + (Math.random() * 2),
+            color: '#ef4444'
         });
     }
 
     draw(ctx) {
-        ctx.fillStyle = '#ff4444'; // Rojo peligro
-        this.obstacles.forEach(obs => {
-            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-            
-            // Detalle visual simple
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
-        });
+        ctx.fillStyle = '#ef4444';
+        for (let obs of this.obstacles) {
+            ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+        }
     }
-    
-    // Método para detectar colisiones con el jugador
+
     checkCollision(player) {
+        const margin = 2; // Margen indulgente de la beta
         for (let obs of this.obstacles) {
             if (
-                player.x < obs.x + obs.width &&
-                player.x + player.width > obs.x &&
-                player.y < obs.y + obs.height &&
-                player.y + player.height > obs.y
+                player.x + margin < obs.x + obs.w &&
+                player.x + player.size - margin > obs.x &&
+                player.y + margin < obs.y + obs.h &&
+                player.y + player.size - margin > obs.y
             ) {
-                return true; // ¡Choque!
+                return true;
             }
         }
         return false;
-    }
-    
-    reset() {
-        this.obstacles = [];
-        this.spawnTimer = 0;
     }
 }
