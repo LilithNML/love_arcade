@@ -2,16 +2,19 @@ export default class Player {
     constructor(gameWidth, gameHeight, texture) {
         this.gameWidth = gameWidth;
         this.gameHeight = gameHeight;
-        this.size = 40; // Un poco más grande para ver el sprite
+        this.size = 40; 
         this.sprite = texture;
         
         this.x = gameWidth / 2 - this.size / 2;
         this.y = gameHeight - this.size - 80;
         
         this.speed = 0;
+        
+        // --- VALORES FÍSICOS ORIGINALES (BETA) ---
+        // Restauramos los valores bajos para recuperar la precisión
         this.maxSpeed = 8;
-        this.acceleration = 1200; // Ajustado para dt
-        this.friction = 0.92;
+        this.acceleration = 0.8; // Antes 1200 (demasiado rápido)
+        this.friction = 0.85;    // Fricción fuerte para frenado preciso
         
         // PowerUp States
         this.hasShield = false;
@@ -22,14 +25,24 @@ export default class Player {
     }
 
     update(dt, input) {
-        // Movimiento basado en tiempo (dt) para consistencia con SlowMo
-        if (input.keys.left) this.speed -= this.acceleration * dt;
-        if (input.keys.right) this.speed += this.acceleration * dt;
+        // --- LÓGICA DE MOVIMIENTO TIPO BETA ---
+        // Nota: Ignoramos 'dt' intencionalmente en la aceleración para replicar 
+        // la sensación exacta "frame-perfect" de la Beta original.
+        
+        if (input.keys.left) this.speed -= this.acceleration;
+        if (input.keys.right) this.speed += this.acceleration;
 
+        // Fricción
         this.speed *= this.friction;
+
+        // Aplicar movimiento
         this.x += this.speed;
 
-        if (this.x < 0) { this.x = 0; this.speed *= -0.5; }
+        // Límites y rebote (Idéntico a Beta)
+        if (this.x < 0) { 
+            this.x = 0; 
+            this.speed *= -0.5; 
+        }
         if (this.x + this.size > this.gameWidth) { 
             this.x = this.gameWidth - this.size; 
             this.speed *= -0.5; 
