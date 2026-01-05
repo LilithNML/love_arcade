@@ -26,7 +26,7 @@
             width: 100vw;
         }
 
-        /* CAPAS (Z-INDEX) CORREGIDAS */
+        /* CAPAS (Z-INDEX) */
         
         /* Nivel 0: Fondo */
         #game-bg { 
@@ -37,14 +37,14 @@
             background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); 
         }
 
-        /* Nivel 1: Juego (Nave/Enemigos) */
+        /* Nivel 1: Juego (Nave/Enemigos/Estrellas) */
         canvas { 
             display: block; 
             position: relative; /* Importante para z-index */
             z-index: 1; 
         }
         
-        /* Nivel 50: UI (HUD, Menús) */
+        /* Nivel 50+: UI (HUD, Menús) */
         .ui-layer { 
             position: absolute; 
             top: 0; left: 0; 
@@ -105,10 +105,10 @@
 
     <div id="pauseScreen" class="ui-layer hidden interactive flex flex-col justify-center items-center bg-black/60 backdrop-blur-md z-[60]">
         <h2 class="text-4xl font-black text-white tracking-widest mb-8">PAUSA</h2>
-        <button id="btnResume" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-10 rounded-full shadow-lg text-xl mb-4 transform transition active:scale-95">
+        <button id="btnResume" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-10 rounded-full shadow-lg text-xl mb-4 transform transition active:scale-95 cursor-pointer">
             CONTINUAR
         </button>
-        <button id="btnQuit" class="text-red-400 hover:text-red-300 border border-red-500/30 px-6 py-2 rounded text-sm mt-4">
+        <button id="btnQuit" class="text-red-400 hover:text-red-300 border border-red-500/30 px-6 py-2 rounded text-sm mt-4 cursor-pointer">
             SALIR AL MENÚ
         </button>
     </div>
@@ -122,8 +122,26 @@
         </button>
         <p class="mt-6 text-gray-500 text-xs">← Flechas / Touch →</p>
         
-        <button id="exitBtn" class="mt-8 text-red-500 border border-red-500/30 px-6 py-2 rounded hover:bg-red-500/10 text-sm cursor-pointer z-50">
-            SALIR AL ARCADE
+        <div class="flex gap-4 mt-8">
+            <button id="btnSkins" class="text-blue-400 border border-blue-500/30 px-6 py-2 rounded hover:bg-blue-500/10 text-sm cursor-pointer z-50 transition">
+                NAVES (SKINS)
+            </button>
+            <button id="exitBtn" class="text-red-500 border border-red-500/30 px-6 py-2 rounded hover:bg-red-500/10 text-sm cursor-pointer z-50 transition">
+                SALIR
+            </button>
+        </div>
+    </div>
+
+    <div id="skinMenu" class="ui-layer hidden interactive flex flex-col justify-center items-center bg-black/90 backdrop-blur-md z-[80]">
+        <h2 class="text-3xl font-black text-white mb-6 uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
+            Selecciona tu Nave
+        </h2>
+        
+        <div id="skinsGrid" class="grid grid-cols-2 gap-4 w-full max-w-md px-4 mb-8 max-h-[60vh] overflow-y-auto">
+            </div>
+
+        <button id="btnBackSkins" class="text-gray-400 hover:text-white border border-gray-600 px-8 py-2 rounded-full cursor-pointer hover:bg-gray-800 transition">
+            VOLVER
         </button>
     </div>
 
