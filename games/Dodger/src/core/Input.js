@@ -5,9 +5,6 @@ export default class InputHandler {
             right: false
         };
 
-        // Referencia al canvas para distinguir toques de juego vs toques de UI
-        const canvas = document.getElementById('gameCanvas');
-
         // --- TECLADO (PC) ---
         window.addEventListener('keydown', (e) => {
             if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = true;
@@ -21,53 +18,43 @@ export default class InputHandler {
             if (e.code === 'Escape') this.keys.escape = false;
         });
 
-        // --- TÁCTIL (MÓVIL) ---
-        
-        const handleTouch = (e) => {
-            // CRÍTICO: Si lo que tocamos NO es el canvas (es un botón, menú, texto...),
-            // salimos inmediatamente para dejar que el navegador procese el clic.
-            if (e.target !== canvas) {
-                return;
-            }
+        // --- TÁCTIL (MÓVIL - ZONAS INDEPENDIENTES) ---
+        // Recuperamos la lógica de la Beta: Zonas físicas invisibles.
+        // Esto permite Multi-touch (frenado al pulsar ambos) y evita saltos.
 
-            // Si tocamos el canvas, prevenimos comportamientos nativos (scroll/zoom)
-            // y procesamos la dirección de la nave.
-            if(e.cancelable) e.preventDefault();
+        const leftZone = document.getElementById('touchLeft');
+        const rightZone = document.getElementById('touchRight');
+        const touchControls = document.getElementById('touchControls');
 
-            this.keys.left = false;
-            this.keys.right = false;
+        // Activamos las zonas (quitamos el hidden del HTML)
+        if (touchControls && leftZone && rightZone) {
+            touchControls.classList.remove('hidden');
+            touchControls.style.display = 'flex'; // Asegurar layout
 
-            // Lógica de "Mitad Izquierda / Mitad Derecha"
-            if (e.touches.length > 0) {
-                const touchX = e.touches[0].clientX;
-                const halfWidth = window.innerWidth / 2;
+            // Helper para asignar eventos y prevenir scroll
+            const bindTouch = (zone, key) => {
+                // Inicio del toque
+                zone.addEventListener('touchstart', (e) => {
+                    if (e.cancelable) e.preventDefault(); // Evita scroll y zoom
+                    this.keys[key] = true;
+                }, { passive: false });
 
-                if (touchX < halfWidth) {
-                    this.keys.left = true;
-                } else {
-                    this.keys.right = true;
-                }
-            }
-        };
+                // Fin del toque
+                zone.addEventListener('touchend', (e) => {
+                    if (e.cancelable) e.preventDefault();
+                    this.keys[key] = false;
+                });
 
-        const handleTouchEnd = (e) => {
-            // Misma regla: solo intervenimos si se soltó el dedo del canvas
-            if (e.target !== canvas) return;
+                // Si el dedo sale de la zona o se cancela (ej: llamada entrante)
+                zone.addEventListener('touchcancel', (e) => {
+                    this.keys[key] = false;
+                });
+            };
+
+            bindTouch(leftZone, 'left');
+            bindTouch(rightZone, 'right');
             
-            if(e.cancelable) e.preventDefault();
-            
-            // Si no quedan dedos en el juego, detenemos el movimiento
-            if (e.touches.length === 0) {
-                this.keys.left = false;
-                this.keys.right = false;
-            }
-        };
-
-        // Escuchamos globalmente pero filtramos por 'e.target' dentro de la función
-        // Usamos { passive: false } para poder usar preventDefault()
-        window.addEventListener('touchstart', handleTouch, { passive: false });
-        window.addEventListener('touchmove', handleTouch, { passive: false });
-        window.addEventListener('touchend', handleTouchEnd, { passive: false });
-        window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+            console.log("[Input] Controles táctiles de zona activados.");
+        }
     }
 }
