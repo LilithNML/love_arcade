@@ -5,7 +5,10 @@ export default class InputHandler {
             right: false
         };
 
-        // --- CONTROLES DE TECLADO (PC) ---
+        // Referencia al canvas para distinguir toques de juego vs toques de UI
+        const canvas = document.getElementById('gameCanvas');
+
+        // --- TECLADO (PC) ---
         window.addEventListener('keydown', (e) => {
             if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = true;
             if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = true;
@@ -18,18 +21,23 @@ export default class InputHandler {
             if (e.code === 'Escape') this.keys.escape = false;
         });
 
-        // --- CONTROLES TÁCTILES (MÓVIL - CORREGIDO) ---
-        // Usamos una lógica global: Si el dedo está en la mitad izquierda, mueve a izquierda.
-        // Esto evita que el movimiento se corte si deslizas el dedo un poco.
+        // --- TÁCTIL (MÓVIL) ---
         
         const handleTouch = (e) => {
-            // Evitamos comportamientos del navegador (scroll, zoom, refresh)
+            // CRÍTICO: Si lo que tocamos NO es el canvas (es un botón, menú, texto...),
+            // salimos inmediatamente para dejar que el navegador procese el clic.
+            if (e.target !== canvas) {
+                return;
+            }
+
+            // Si tocamos el canvas, prevenimos comportamientos nativos (scroll/zoom)
+            // y procesamos la dirección de la nave.
             if(e.cancelable) e.preventDefault();
 
             this.keys.left = false;
             this.keys.right = false;
 
-            // Si hay al menos un dedo en la pantalla
+            // Lógica de "Mitad Izquierda / Mitad Derecha"
             if (e.touches.length > 0) {
                 const touchX = e.touches[0].clientX;
                 const halfWidth = window.innerWidth / 2;
@@ -43,17 +51,20 @@ export default class InputHandler {
         };
 
         const handleTouchEnd = (e) => {
+            // Misma regla: solo intervenimos si se soltó el dedo del canvas
+            if (e.target !== canvas) return;
+            
             if(e.cancelable) e.preventDefault();
             
-            // Si ya no quedan dedos tocando, detenemos todo
+            // Si no quedan dedos en el juego, detenemos el movimiento
             if (e.touches.length === 0) {
                 this.keys.left = false;
                 this.keys.right = false;
             }
         };
 
-        // Escuchamos en 'window' con { passive: false } para poder bloquear el scroll
-        // 'touchmove' es vital: asegura que si deslizas el dedo, la nave te siga obedeciendo
+        // Escuchamos globalmente pero filtramos por 'e.target' dentro de la función
+        // Usamos { passive: false } para poder usar preventDefault()
         window.addEventListener('touchstart', handleTouch, { passive: false });
         window.addEventListener('touchmove', handleTouch, { passive: false });
         window.addEventListener('touchend', handleTouchEnd, { passive: false });
