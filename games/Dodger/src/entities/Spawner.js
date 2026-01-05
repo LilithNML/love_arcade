@@ -4,20 +4,24 @@ export default class Spawner {
         this.gameHeight = gameHeight;
         this.obstacles = [];
         this.spawnTimer = 0;
-        
-        // Configuración igual a la Beta
         this.baseSpeed = 3;
+        
+        // Tema actual
+        this.enemyColor = '#ef4444'; // Rojo default
+        this.needsStroke = false; // Para temas oscuros
+    }
+
+    setColor(palette) {
+        this.enemyColor = palette.enemy;
+        // Si el enemigo es negro, necesita borde
+        this.needsStroke = (palette.enemy === '#000000');
     }
 
     update(dt, score) {
         this.spawnTimer++;
         
-        // Cálculo de dificultad idéntico a la Beta
-        // Cada 500 puntos sube el nivel
         const difficultyLevel = Math.floor(score / 500) + 1;
-        
         const speed = this.baseSpeed + (difficultyLevel * 0.5);
-        // Rate: frames entre obstáculos. Mínimo 10 frames, empieza en 60.
         const rate = Math.max(10, 60 - (difficultyLevel * 5));
 
         if (this.spawnTimer > rate) {
@@ -25,7 +29,6 @@ export default class Spawner {
             this.spawnTimer = 0;
         }
 
-        // Mover obstáculos
         for (let i = this.obstacles.length - 1; i >= 0; i--) {
             let obs = this.obstacles[i];
             obs.y += obs.speedY;
@@ -35,7 +38,6 @@ export default class Spawner {
             }
         }
         
-        // Retornamos el nivel para que Game.js sepa si cambió
         return difficultyLevel; 
     }
 
@@ -46,15 +48,23 @@ export default class Spawner {
             y: -size,
             w: size,
             h: size,
-            speedY: speedBase + (Math.random() * 2), // Variación aleatoria
-            color: '#ef4444'
+            speedY: speedBase + (Math.random() * 2),
+            color: this.enemyColor, // Usar color actual
+            stroke: this.needsStroke
         });
     }
 
     draw(ctx) {
-        ctx.fillStyle = '#ef4444';
         for (let obs of this.obstacles) {
+            ctx.fillStyle = obs.color || this.enemyColor;
             ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+            
+            // Borde si es necesario (modo Void)
+            if (obs.stroke) {
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+            }
         }
     }
 
