@@ -2,19 +2,19 @@ import EconomyManager from '../systems/Economy.js';
 import InputHandler from './Input.js';
 import AudioController from './Audio.js';
 import ThemeManager from './Theme.js';
-import ResourceManager from './ResourceManager.js'; // NUEVO
-import SkinManager from './SkinManager.js';       // NUEVO
+import ResourceManager from './ResourceManager.js';
+import SkinManager from './SkinManager.js';
 import Player from '../entities/Player.js';
 import Spawner from '../entities/Spawner.js';
 import Starfield from '../entities/Starfield.js';
-import PowerUp from '../entities/PowerUp.js';     // NUEVO
+import PowerUp from '../entities/PowerUp.js';
 
 export default class Game {
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         
-        // Sistemas Principales
+        // --- SISTEMAS ---
         this.economy = new EconomyManager();
         this.input = new InputHandler();
         this.audio = new AudioController();
@@ -22,31 +22,46 @@ export default class Game {
         this.resources = new ResourceManager();
         this.skinManager = new SkinManager();
         
-        // Estado de Juego
-        this.state = 'LOADING'; // Iniciamos cargando
+        // --- ESTADO ---
+        this.state = 'LOADING'; 
+        this.score = 0;
+        this.level = 1;
+        this.particles = [];
         this.powerups = [];
+        this.lastTime = 0;
+        
+        // Temporizadores de efectos
         this.powerupTimer = 0;
         this.activeEffects = {
-            magnet: 0, // Tiempo restante
+            magnet: 0, 
             slow: 0
         };
 
-        // UI Refs
+        // --- UI REFS ---
         this.uiStart = document.getElementById('startScreen');
         this.uiHUD = document.getElementById('hud');
         this.uiGameOver = document.getElementById('gameOverScreen');
         this.uiPause = document.getElementById('pauseScreen');
-        this.uiSkins = document.getElementById('skinMenu'); // NUEVO UI
+        this.uiSkins = document.getElementById('skinMenu');
         
-        // Bindings UI
+        this.elScore = document.getElementById('scoreDisplay');
+        this.elLevel = document.getElementById('levelDisplay');
+        this.elFinalScore = document.getElementById('finalScore');
+        this.elCoinsEarned = document.getElementById('coinsEarned');
+
+        // Botones HUD
+        this.btnPause = document.getElementById('btnPause');
+        this.btnMute = document.getElementById('btnMute');
+
         this.bindEvents();
         
-        // Iniciar Carga de Assets
+        // --- INICIO ASÍNCRONO ---
+        // Esperamos a que carguen las imágenes antes de iniciar el loop
         this.resources.loadAll().then(() => {
             this.state = 'MENU';
             this.resize();
+            // Creamos el fondo inicial
             this.starfield = new Starfield(this.width, this.height);
-            // Render inicial del menú
             this.loop(0);
         });
 
@@ -54,43 +69,51 @@ export default class Game {
     }
 
     bindEvents() {
-        // Botones existentes
+        // Botones de Pantalla
         document.getElementById('startBtn').onclick = () => this.startGame();
         document.getElementById('restartBtn').onclick = () => this.startGame();
-        document.getElementById('btnPause').onclick = () => this.togglePause();
         document.getElementById('btnResume').onclick = () => this.togglePause();
         document.getElementById('btnQuit').onclick = () => this.quitGame();
         
-        // Botón Skins
+        // Botones de Menú Skins
         document.getElementById('btnSkins').onclick = () => this.openSkinMenu();
         document.getElementById('btnBackSkins').onclick = () => this.closeSkinMenu();
 
-        // Mute
-        const btnMute = document.getElementById('btnMute');
-        btnMute.innerText = this.audio.isMuted ? '🔇' : '🔊';
-        btnMute.onclick = () => {
-            const isMuted = this.audio.toggleMute();
-            btnMute.innerText = isMuted ? '🔇' : '🔊';
-            btnMute.blur();
-        };
+        // Botón Pausa (HUD)
+        if(this.btnPause) this.btnPause.onclick = () => this.togglePause();
 
-        // Teclado
+        // Botón Mute (HUD)
+        if(this.btnMute) {
+            this.btnMute.innerText = this.audio.isMuted ? '🔇' : '🔊';
+            this.btnMute.onclick = () => {
+                const isMuted = this.audio.toggleMute();
+                this.btnMute.innerText = isMuted ? '🔇' : '🔊';
+                this.btnMute.blur();
+            };
+        }
+
+        // Teclado (Pausa)
         window.addEventListener('keydown', (e) => {
             if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
                 if (this.state === 'PLAY' || this.state === 'PAUSE') this.togglePause();
             }
         });
+        
+        // Auto-Pausa al cambiar de pestaña
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && this.state === 'PLAY') this.togglePause();
+        });
     }
 
-    // --- LOGICA DE SKINS ---
+    // --- MENÚ DE SKINS ---
     openSkinMenu() {
         this.uiStart.classList.add('hidden');
         this.uiSkins.classList.remove('hidden');
         this.uiSkins.classList.add('flex');
         
-        // Generar grid de skins
         const container = document.getElementById('skinsGrid');
         container.innerHTML = '';
+        
         const highScore = parseInt(localStorage.getItem('dodger_highscore') || 0);
         const skins = this.skinManager.getUnlockedSkins(highScore);
         const currentId = this.skinManager.getCurrentSkin();
@@ -102,7 +125,7 @@ export default class Game {
                 skin.id === currentId ? 'border-blue-500 bg-blue-900/40' : 'border-gray-500 hover:bg-gray-800'
             }`;
             
-            // Imagen del sprite
+            // Preview de la nave
             const img = this.resources.get(skin.id);
             if(img) {
                 const preview = img.cloneNode();
@@ -123,7 +146,7 @@ export default class Game {
             if (!skin.locked) {
                 div.onclick = () => {
                     this.skinManager.selectSkin(skin.id, highScore);
-                    this.openSkinMenu(); // Refrescar UI
+                    this.openSkinMenu(); // Refrescar para actualizar borde azul
                 };
             }
             container.appendChild(div);
@@ -136,7 +159,7 @@ export default class Game {
         this.uiStart.classList.remove('hidden');
     }
 
-    // --- CORE GAME ---
+    // --- LÓGICA CORE ---
     resize() {
         this.width = window.innerWidth;
         this.height = window.innerHeight;
@@ -144,7 +167,7 @@ export default class Game {
         this.canvas.height = this.height;
         if(this.player) {
             this.player.gameWidth = this.width;
-            this.player.y = this.height - this.player.size - 50;
+            this.player.y = this.height - this.player.size - 80;
         }
     }
 
@@ -157,85 +180,112 @@ export default class Game {
         this.level = 1;
         this.lastTime = performance.now();
         this.activeEffects = { magnet: 0, slow: 0 };
-        this.powerups = []; // Limpiar powerups
+        this.powerups = [];
+        this.particles = [];
+        this.powerupTimer = 0;
         
-        // Obtener skin seleccionada
+        // 1. Obtener Skin
         const skinKey = this.skinManager.getCurrentSkin();
         const skinImg = this.resources.get(skinKey);
         
+        // 2. Inicializar Entidades
         this.player = new Player(this.width, this.height, skinImg);
-        // Spawner ahora necesita los recursos para dibujar asteroides
         this.spawner = new Spawner(this.width, this.height, this.resources);
         
+        // 3. Reset Tema
         this.theme = new ThemeManager();
         this.applyTheme(this.theme.get());
 
-        // UI Reset
+        // 4. UI
         this.uiStart.classList.add('hidden');
         this.uiGameOver.classList.add('hidden'); 
         this.uiHUD.classList.remove('hidden');
         this.uiHUD.classList.add('flex');
         
-        document.getElementById('scoreDisplay').innerText = "0";
+        this.elScore.innerText = "0";
+        this.elLevel.innerText = "1";
         document.body.classList.remove('shake');
     }
 
+    applyTheme(palette) {
+        this.spawner.setColor(palette);
+        this.starfield.setColor(palette.star);
+    }
+
+    activatePowerUp(type) {
+        this.audio.play('levelUp'); // Sonido feedback
+        switch(type) {
+            case 'shield': this.player.hasShield = true; break;
+            case 'time': this.activeEffects.slow = 5.0; break; // 5 seg slow-mo
+            case 'magnet': this.activeEffects.magnet = 8.0; break; // 8 seg imán
+            case 'orb': this.score += 100; break; // Puntos extra
+        }
+    }
+
     update(dt) {
+        // Fondo animado incluso en menú (lento)
         if (this.state !== 'PLAY') {
-            this.starfield.update(dt * 0.5); // Fondo lento en menús
+            this.starfield.update(dt * 0.5); 
             return;
         }
 
-        // 1. Gestión de Efectos de Tiempo (Slow Mo Powerup)
+        // --- 1. LÓGICA DE TIEMPO (SLOW MO) ---
         let timeScale = 1.0;
+        
+        // Sincronizar efectos visuales del jugador con el estado del juego
+        this.player.isMagnetActive = (this.activeEffects.magnet > 0);
+        this.player.isSlowActive = (this.activeEffects.slow > 0);
+
         if (this.activeEffects.slow > 0) {
             this.activeEffects.slow -= dt;
-            timeScale = 0.5; // 50% velocidad
+            timeScale = 0.5; // El juego corre al 50% de velocidad
         }
         if (this.activeEffects.magnet > 0) {
             this.activeEffects.magnet -= dt;
         }
 
-        const gameDt = dt * timeScale; // Delta time afectado por slow mo
+        const gameDt = dt * timeScale;
 
-        // 2. Actualizar Entidades
-        this.score++; // Score por tiempo
-        document.getElementById('scoreDisplay').innerText = this.score;
+        // --- 2. ACTUALIZACIÓN BÁSICA ---
+        this.score++;
+        this.elScore.innerText = this.score;
 
-        // Tema
+        // Tema Dinámico
         if (this.theme.update(this.score)) {
             this.applyTheme(this.theme.get());
             this.audio.play('levelUp');
         }
         
+        // Entidades
         this.starfield.update(gameDt);
-        this.player.update(gameDt, this.input);
+        this.player.update(gameDt, this.input); // Player usa su propia física, pero recibe input
         
-        // Spawner y Dificultad
+        // Enemigos
         const currentLevel = this.spawner.update(gameDt, this.score);
         if (currentLevel > this.level) {
             this.level = currentLevel;
-            document.getElementById('levelDisplay').innerText = this.level;
+            this.elLevel.innerText = this.level;
         }
 
-        // 3. Generación de PowerUps (Aleatorio)
+        // --- 3. POWER-UPS ---
         this.powerupTimer += gameDt;
-        if (this.powerupTimer > 5) { // Intentar cada 5 segundos de juego
+        // Cada 6 segundos intenta crear un powerup
+        if (this.powerupTimer > 6) { 
             this.powerupTimer = 0;
-            if (Math.random() < 0.4) { // 40% chance
-                const types = ['shield', 'time', 'magnet', 'orb', 'orb', 'orb']; // Orbs son más comunes
+            // 40% de probabilidad de spawn
+            if (Math.random() < 0.4) { 
+                const types = ['shield', 'time', 'magnet', 'orb', 'orb', 'orb'];
                 const type = types[Math.floor(Math.random() * types.length)];
                 this.powerups.push(new PowerUp(this.width, type, this.resources));
             }
         }
 
-        // 4. Actualizar Powerups (con lógica de Imán)
         const isMagnet = this.activeEffects.magnet > 0;
         for (let i = this.powerups.length - 1; i >= 0; i--) {
             let p = this.powerups[i];
             p.update(gameDt, this.player, isMagnet);
             
-            // Colisión con PowerUp
+            // Recoger Powerup
             if (p.checkCollision(this.player)) {
                 this.activatePowerUp(p.type);
                 this.powerups.splice(i, 1);
@@ -244,28 +294,56 @@ export default class Game {
             }
         }
 
-        // 5. Colisiones con Enemigos
+        // --- 4. COLISIONES ---
         if (this.spawner.checkCollision(this.player)) {
             if (this.player.hasShield) {
-                // Consumir escudo
+                // Escudo salva el golpe
                 this.player.hasShield = false;
-                this.audio.play('levelUp'); // Sonido positivo reciclado
-                // Limpiar enemigos cercanos para dar respiro
+                this.audio.play('levelUp'); 
+                // Limpiar pantalla de enemigos cercanos para dar oportunidad
                 this.spawner.obstacles = []; 
+                this.createExplosion(this.player.x, this.player.y, '#06b6d4'); // Explosión cian
             } else {
                 this.triggerGameOver();
             }
         }
     }
 
-    activatePowerUp(type) {
-        this.audio.play('levelUp'); // Sonido de recolección
-        switch(type) {
-            case 'shield': this.player.hasShield = true; break;
-            case 'time': this.activeEffects.slow = 5.0; break; // 5 segudos
-            case 'magnet': this.activeEffects.magnet = 8.0; break;
-            case 'orb': this.score += 100; break; // Puntos extra
+    createExplosion(x, y, color) {
+        for (let i = 0; i < 20; i++) {
+            this.particles.push({
+                x: x + 20, y: y + 20,
+                vx: (Math.random() - 0.5) * 15,
+                vy: (Math.random() - 0.5) * 15,
+                life: 1.0, 
+                color: color
+            });
         }
+    }
+
+    triggerGameOver() {
+        this.state = 'GAMEOVER';
+        this.audio.play('crash');
+        document.body.classList.add('shake');
+        this.createExplosion(this.player.x, this.player.y, this.player.color || '#fff');
+
+        // Guardar High Score Local (para skins)
+        const currentHigh = parseInt(localStorage.getItem('dodger_highscore') || 0);
+        if (this.score > currentHigh) {
+            localStorage.setItem('dodger_highscore', this.score);
+        }
+
+        // Payout Universal
+        const result = this.economy.payout(this.score);
+
+        // UI
+        this.uiHUD.classList.add('hidden');
+        this.uiHUD.classList.remove('flex');
+        this.uiGameOver.classList.remove('hidden');
+        this.uiGameOver.classList.add('flex');
+        
+        this.elFinalScore.innerText = this.score;
+        this.elCoinsEarned.innerText = `+${result.coins}`;
     }
 
     draw() {
@@ -273,71 +351,76 @@ export default class Game {
 
         this.ctx.clearRect(0, 0, this.width, this.height);
         
+        // 1. Fondo
         this.starfield.draw(this.ctx);
         
-        if (this.state === 'PLAY' || this.state === 'PAUSE') {
+        if (this.state === 'PLAY' || this.state === 'PAUSE' || this.state === 'GAMEOVER') {
+            // 2. Enemigos
             this.spawner.draw(this.ctx);
-            // Dibujar Powerups
+            
+            // 3. Powerups
             this.powerups.forEach(p => p.draw(this.ctx));
-            this.player.draw(this.ctx);
+            
+            // 4. Jugador (Si es Game Over, solo dibujamos si hay partículas vivas para ver explosión)
+            if (this.state !== 'GAMEOVER') {
+                this.player.draw(this.ctx);
+            }
+        }
+
+        // 5. Partículas (Siempre encima)
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx; p.y += p.vy;
+            p.life -= 0.05;
+            
+            this.ctx.save();
+            this.ctx.globalAlpha = p.life;
+            this.ctx.fillStyle = p.color;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, Math.random() * 3 + 1, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.restore();
+
+            if (p.life <= 0) this.particles.splice(i, 1);
         }
     }
 
-    // ... Métodos togglePause, quitGame, triggerGameOver, applyTheme iguales a Fase 2 ...
-    // Solo asegúrate de incluir el método applyTheme que faltaba en este snippet:
-    applyTheme(palette) {
-        // La nave ya tiene su skin propia, solo aplicamos glow o efectos si queremos
-        this.spawner.setColor(palette);
-        this.starfield.setColor(palette.star);
-    }
-    
-    // Métodos estándar (copiar de Fase 2 si faltan aquí, pero arriba está lo vital)
-    togglePause() { /* Igual Fase 2 */ 
+    togglePause() {
         if (this.state === 'PLAY') {
             this.state = 'PAUSE';
             this.uiPause.classList.remove('hidden'); this.uiPause.classList.add('flex');
-            document.getElementById('btnPause').innerText = '▶';
+            if(this.btnPause) this.btnPause.innerText = '▶';
         } else if (this.state === 'PAUSE') {
             this.state = 'PLAY';
             this.uiPause.classList.add('hidden'); this.uiPause.classList.remove('flex');
-            document.getElementById('btnPause').innerText = '⏸';
+            if(this.btnPause) this.btnPause.innerText = '⏸';
             this.lastTime = performance.now();
         }
     }
 
-    quitGame() { /* Igual Fase 2 */ 
+    quitGame() {
         this.state = 'MENU';
         this.uiPause.classList.add('hidden');
         this.uiHUD.classList.add('hidden');
         this.uiStart.classList.remove('hidden');
+        if(this.btnPause) this.btnPause.innerText = '⏸';
     }
 
-    triggerGameOver() { /* Igual Fase 2 */
-        this.state = 'GAMEOVER';
-        this.audio.play('crash');
-        document.body.classList.add('shake');
-        
-        // Guardar High Score localmente para desbloquear skins
-        const currentHigh = parseInt(localStorage.getItem('dodger_highscore') || 0);
-        if (this.score > currentHigh) {
-            localStorage.setItem('dodger_highscore', this.score);
+    loop(timestamp) {
+        if (!this.lastTime) this.lastTime = timestamp;
+
+        if (this.state === 'PAUSE') {
+            this.lastTime = timestamp;
+            requestAnimationFrame((t) => this.loop(t));
+            return;
         }
 
-        const result = this.economy.payout(this.score);
-        this.uiHUD.classList.add('hidden'); this.uiHUD.classList.remove('flex');
-        this.uiGameOver.classList.remove('hidden'); this.uiGameOver.classList.add('flex');
-        
-        document.getElementById('finalScore').innerText = this.score;
-        document.getElementById('coinsEarned').innerText = `+${result.coins}`;
-    }
-
-    loop(timestamp) { /* Igual Fase 2 */ 
-        if (!this.lastTime) this.lastTime = timestamp;
-        if (this.state === 'PAUSE') { this.lastTime = timestamp; requestAnimationFrame((t)=>this.loop(t)); return; }
         const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1); 
         this.lastTime = timestamp;
+
         this.update(dt);
         this.draw();
+
         requestAnimationFrame((t) => this.loop(t));
     }
 }
