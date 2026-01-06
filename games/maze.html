@@ -417,13 +417,6 @@
                 }
             }
 
-            useHint() {
-                if(!this.state.active) return;
-                initAudio();
-                if(window.GameCenter && !window.GameCenter.spendCoins(50)) { alert("Necesitas 50 monedas"); return; }
-                this.hintPath = this.solveAStar(this.state.p, this.state.g);
-                setTimeout(() => this.hintPath = null, 5000);
-            }
 
             win() {
                 this.state.active = false;
