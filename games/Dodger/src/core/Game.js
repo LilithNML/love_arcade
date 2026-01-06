@@ -74,7 +74,7 @@ export default class Game {
         document.getElementById('restartBtn').onclick = () => this.startGame();
         document.getElementById('btnResume').onclick = () => this.togglePause();
         
-        // CORRECCIÓN: QuitGame ahora sirve tanto para Pausa como para Game Over
+        // Salir (Funciona tanto para Pausa como para Game Over)
         document.getElementById('btnQuit').onclick = () => this.quitGame();
         document.getElementById('btnGoHome').onclick = () => this.quitGame();
         
@@ -122,10 +122,9 @@ export default class Game {
 
         skins.forEach(skin => {
             const div = document.createElement('div');
-            div.className = `p-4 rounded-lg border-2 flex flex-col items-center cursor-pointer transition ${
-                skin.locked ? 'border-gray-700 bg-gray-900 opacity-50' : 
-                skin.id === currentId ? 'border-blue-500 bg-blue-900/40' : 'border-gray-500 hover:bg-gray-800'
-            }`;
+            // Usamos clases CSS estándar definidas en index.html
+            div.className = `skin-card ${skin.locked ? 'locked' : ''} ${skin.id === currentId ? 'selected' : ''}`;
+            div.style.cursor = 'pointer'; // Refuerzo visual
             
             const img = this.resources.get(skin.id);
             if(img) {
@@ -135,12 +134,15 @@ export default class Game {
             }
 
             const name = document.createElement('div');
-            name.className = 'text-white font-bold mt-2';
+            name.style.fontWeight = 'bold';
+            name.style.marginTop = '10px';
+            name.style.color = 'white';
             name.innerText = skin.locked ? '???' : skin.name;
             div.appendChild(name);
 
             const desc = document.createElement('div');
-            desc.className = 'text-xs text-gray-400 text-center mt-1';
+            desc.style.fontSize = '0.8rem';
+            desc.style.color = '#9ca3af';
             desc.innerText = skin.locked ? `Req: ${skin.req} pts` : 'Desbloqueado';
             div.appendChild(desc);
 
@@ -174,6 +176,7 @@ export default class Game {
 
     startGame() {
         this.audio.init();
+        this.audio.startMusic(); // <--- MÚSICA PROCEDURAL
         this.audio.play('start');
         
         this.state = 'PLAY';
@@ -196,10 +199,10 @@ export default class Game {
         this.theme = new ThemeManager();
         this.applyTheme(this.theme.get());
 
-        // Ocultar todas las pantallas excepto HUD
+        // UI Reset
         this.uiStart.classList.add('hidden');
         this.uiGameOver.classList.add('hidden'); 
-        this.uiGameOver.classList.remove('flex'); // Asegurar quitar flex
+        this.uiGameOver.classList.remove('flex'); 
         this.uiHUD.classList.remove('hidden');
         this.uiHUD.classList.add('flex');
         
@@ -214,7 +217,11 @@ export default class Game {
     }
 
     activatePowerUp(type) {
-        this.audio.play('levelUp'); 
+        // Sonidos diferenciados
+        if (type === 'orb') this.audio.play('coin');
+        else if (type === 'shield') this.audio.play('shield');
+        else this.audio.play('levelUp');
+
         let text = "";
         let color = "#fff";
 
@@ -283,6 +290,9 @@ export default class Game {
         this.score++;
         this.elScore.innerText = this.score;
 
+        // --- ACTUALIZAR MÚSICA DINÁMICA ---
+        this.audio.updateMusic(this.score);
+
         if (this.theme.update(this.score)) {
             this.applyTheme(this.theme.get());
             this.audio.play('levelUp');
@@ -322,7 +332,7 @@ export default class Game {
         if (this.spawner.checkCollision(this.player)) {
             if (this.player.hasShield) {
                 this.player.hasShield = false;
-                this.audio.play('levelUp'); 
+                this.audio.play('shield'); // Sonido específico
                 this.spawner.obstacles = []; 
                 this.createExplosion(this.player.x, this.player.y, '#06b6d4');
                 this.floatingTexts.push({
@@ -348,14 +358,16 @@ export default class Game {
 
     triggerGameOver() {
         this.state = 'GAMEOVER';
+        this.audio.stopMusic(); // <--- SILENCIO DRAMÁTICO
         this.audio.play('crash');
         document.body.classList.add('shake');
+        
         this.createExplosion(this.player.x, this.player.y, this.player.color || '#fff');
         const currentHigh = parseInt(localStorage.getItem('dodger_highscore') || 0);
         if (this.score > currentHigh) { localStorage.setItem('dodger_highscore', this.score); }
+        
         const result = this.economy.payout(this.score);
         
-        // Mostrar UI Game Over
         this.uiHUD.classList.add('hidden'); 
         this.uiHUD.classList.remove('flex');
         this.uiGameOver.classList.remove('hidden'); 
@@ -400,7 +412,7 @@ export default class Game {
             this.ctx.fillStyle = t.color;
             this.ctx.shadowColor = t.color;
             this.ctx.shadowBlur = 5;
-            this.ctx.font = "bold 20px 'Courier New'";
+            this.ctx.font = "bold 20px 'Rajdhani'"; // Fuente actualizada
             this.ctx.textAlign = "center";
             this.ctx.fillText(t.text, t.x, t.y);
             this.ctx.restore();
@@ -421,22 +433,19 @@ export default class Game {
         }
     }
 
-    // --- CORRECCIÓN FINAL: quitGame ---
-    // Esta función limpia toda la UI y vuelve al StartScreen
     quitGame() {
         this.state = 'MENU';
+        this.audio.stopMusic(); // <--- PARAR MÚSICA AL SALIR
         
-        // Ocultar todas las pantallas posibles
         this.uiPause.classList.add('hidden');
         this.uiPause.classList.remove('flex');
         
         this.uiHUD.classList.add('hidden');
         this.uiHUD.classList.remove('flex');
         
-        this.uiGameOver.classList.add('hidden'); // CRÍTICO: Antes faltaba esto
-        this.uiGameOver.classList.remove('flex'); // CRÍTICO
+        this.uiGameOver.classList.add('hidden');
+        this.uiGameOver.classList.remove('flex');
         
-        // Mostrar Inicio
         this.uiStart.classList.remove('hidden');
         
         if(this.btnPause) this.btnPause.innerText = '⏸';
