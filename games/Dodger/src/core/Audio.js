@@ -3,41 +3,39 @@ export default class AudioController {
         this.ctx = null;
         this.isMuted = localStorage.getItem('dodger_muted') === 'true';
         
-        // --- BUFFERS PARA SFX (Archivos Reales) ---
+        // --- BUFFERS PARA SFX ---
         this.buffers = {};
         this.sfxList = {
             'start': 'assets/audio/sfx_start.mp3',
             'crash': 'assets/audio/sfx_explosion.mp3',
-            'levelUp': 'assets/audio/sfx_levelup.mp3', // Usado para powers también
+            'levelUp': 'assets/audio/sfx_levelup.mp3',
             'coin': 'assets/audio/sfx_coin.mp3',
             'shield': 'assets/audio/sfx_shield.mp3'
         };
 
-        // --- NODOS DE AMBIENTE PROCEDURAL ---
+        // --- REFERENCIAS DE AMBIENTE ---
         this.ambientNodes = {
-            droneOsc: null,
+            droneOsc: null,     // Array de osciladores
             droneGain: null,
             pulseOsc: null,
-            pulseGain: null,
             tensionFilter: null,
             masterGain: null
         };
         
         this.pulseInterval = null;
-        this.currentScore = 0;
+        this.stopTimer = null; // NUEVO: Para cancelar limpiezas pendientes
     }
 
     init() {
         if (!this.ctx) {
             this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-            this.loadSFX(); // Cargar archivos reales
+            this.loadSFX();
         }
         if (this.ctx.state === 'suspended') {
             this.ctx.resume();
         }
     }
 
-    // Carga de archivos MP3
     async loadSFX() {
         for (const [key, url] of Object.entries(this.sfxList)) {
             try {
@@ -47,8 +45,7 @@ export default class AudioController {
                 const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
                 this.buffers[key] = audioBuffer;
             } catch (e) {
-                // Silencioso: si no está el archivo, usaremos fallback sintético
-                console.log(`[Audio] Archivo ${key} no encontrado, usando sintetizador.`);
+                console.log(`[Audio] Usando fallback para ${key}`);
             }
         }
     }
@@ -57,7 +54,6 @@ export default class AudioController {
         this.isMuted = !this.isMuted;
         localStorage.setItem('dodger_muted', this.isMuted);
         
-        // Apagar/Prender ambiente en tiempo real
         if (this.ambientNodes.masterGain) {
             this.ambientNodes.masterGain.gain.setTargetAtTime(
                 this.isMuted ? 0 : 0.3, 
@@ -68,31 +64,37 @@ export default class AudioController {
         return this.isMuted;
     }
 
-    // --- MOTOR DE AMBIENTE (Procedural) ---
+    // --- MOTOR DE AMBIENTE ---
     startMusic() {
         if (!this.ctx) return;
-        this.stopMusic(); // Limpiar anterior
+        
+        // 1. Limpieza agresiva antes de empezar
+        // Cancelamos cualquier "muerte programada" anterior para que no mate lo nuevo
+        if (this.stopTimer) clearTimeout(this.stopTimer);
+        this.stopMusic(true); // true = forzar parada inmediata sin fade-out
 
         const now = this.ctx.currentTime;
+        
+        // Crear Master Gain para la música
         this.ambientNodes.masterGain = this.ctx.createGain();
         this.ambientNodes.masterGain.connect(this.ctx.destination);
-        // Fade in inicial
+        
+        // Fade in
         this.ambientNodes.masterGain.gain.setValueAtTime(0, now);
         this.ambientNodes.masterGain.gain.linearRampToValueAtTime(this.isMuted ? 0 : 0.3, now + 2);
 
-        // CAPA 1: DRONE (Base)
-        // Dos osciladores desafinados para crear textura "gruesa"
+        // CAPA 1: DRONE
         const osc1 = this.ctx.createOscillator();
         const osc2 = this.ctx.createOscillator();
         const droneFilter = this.ctx.createBiquadFilter();
         
         osc1.type = 'sawtooth';
-        osc1.frequency.value = 55; // Nota baja (A1)
+        osc1.frequency.value = 55; 
         osc2.type = 'triangle';
-        osc2.frequency.value = 55.5; // Desafinación ligera
+        osc2.frequency.value = 55.5; 
 
         droneFilter.type = 'lowpass';
-        droneFilter.frequency.value = 150; // Muy oscuro al inicio
+        droneFilter.frequency.value = 150; 
 
         const droneGain = this.ctx.createGain();
         droneGain.gain.value = 0.5;
@@ -105,28 +107,29 @@ export default class AudioController {
         osc1.start();
         osc2.start();
 
-        // Guardar referencias para modificar o parar
+        // Guardar referencias
         this.ambientNodes.droneOsc = [osc1, osc2];
         this.ambientNodes.tensionFilter = droneFilter;
 
-        // CAPA 2: PULSO RÍTMICO (Hearthbeat)
-        // Generado por intervalo para simular BPM
+        // CAPA 2: PULSO
         this.pulseInterval = setInterval(() => {
             if (this.isMuted || !this.ctx) return;
             this.triggerPulse();
-        }, 600); // ~100 BPM
+        }, 600);
     }
 
     triggerPulse() {
+        // Validación extra por si el contexto murió
+        if (!this.ambientNodes.masterGain) return; 
+
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         
-        // Sonido "Tick" suave
         osc.frequency.setValueAtTime(800, t);
         osc.frequency.exponentialRampToValueAtTime(100, t + 0.1);
         
-        gain.gain.setValueAtTime(0.05, t); // Muy sutil
+        gain.gain.setValueAtTime(0.05, t); 
         gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
 
         osc.connect(gain);
@@ -137,55 +140,67 @@ export default class AudioController {
 
     updateMusic(score) {
         if (!this.ambientNodes.tensionFilter) return;
-        
-        // CAPA 3: TENSIÓN PROGRESIVA
-        // Abrimos el filtro LowPass del drone según el score
-        // Score 0 -> 150Hz (Oscuro)
-        // Score 5000 -> 800Hz (Brillante/Tenso)
         const targetFreq = Math.min(150 + (score * 0.15), 1200);
-        
-        this.ambientNodes.tensionFilter.frequency.setTargetAtTime(
-            targetFreq, 
-            this.ctx.currentTime, 
-            1.0 // Transición suave
-        );
+        this.ambientNodes.tensionFilter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 1.0);
     }
 
-    stopMusic() {
-        if (this.ambientNodes.masterGain) {
-            // Fade out rápido
-            const now = this.ctx.currentTime;
-            this.ambientNodes.masterGain.gain.cancelScheduledValues(now);
-            this.ambientNodes.masterGain.gain.setValueAtTime(this.ambientNodes.masterGain.gain.value, now);
-            this.ambientNodes.masterGain.gain.linearRampToValueAtTime(0, now + 0.5);
-            
-            setTimeout(() => {
-                if(this.ambientNodes.droneOsc) {
-                    this.ambientNodes.droneOsc.forEach(osc => osc.stop());
-                }
-                clearInterval(this.pulseInterval);
-            }, 600);
+    stopMusic(immediate = false) {
+        // Limpiar intervalo de pulso siempre
+        if (this.pulseInterval) {
+            clearInterval(this.pulseInterval);
+            this.pulseInterval = null;
+        }
+
+        // Si no hay música sonando, salir
+        if (!this.ambientNodes.masterGain) return;
+
+        // CAPTURAR REFERENCIAS LOCALES (Clausura)
+        // Esto es vital: guardamos "qué osciladores eran" en este momento exacto.
+        // Si this.ambientNodes cambia después, esta función seguirá apagando los VIEJOS.
+        const nodesToStop = this.ambientNodes.droneOsc;
+        const masterGainToFade = this.ambientNodes.masterGain;
+
+        // Limpiar referencias globales inmediatamente para que el sistema sepa que está "apagado"
+        this.ambientNodes.droneOsc = null;
+        this.ambientNodes.masterGain = null;
+        this.ambientNodes.tensionFilter = null;
+
+        const now = this.ctx.currentTime;
+
+        if (immediate) {
+            // Parada instantánea (al reiniciar)
+            if(nodesToStop) nodesToStop.forEach(osc => { try { osc.stop(); } catch(e){} });
+            masterGainToFade.disconnect();
         } else {
-             clearInterval(this.pulseInterval);
+            // Parada suave (Game Over)
+            masterGainToFade.gain.cancelScheduledValues(now);
+            masterGainToFade.gain.setValueAtTime(masterGainToFade.gain.value, now);
+            masterGainToFade.gain.linearRampToValueAtTime(0, now + 0.5); // Fade out 0.5s
+            
+            // Programar parada real de los osciladores capturados
+            this.stopTimer = setTimeout(() => {
+                if(nodesToStop) {
+                    nodesToStop.forEach(osc => {
+                        try { osc.stop(); } catch(e) {} // Try/catch por si ya pararon
+                    });
+                }
+                // Desconectar para liberar memoria
+                setTimeout(() => { try { masterGainToFade.disconnect(); } catch(e){} }, 100);
+            }, 600);
         }
     }
 
-    // --- REPRODUCCIÓN SFX (Híbrida: Archivo o Sintetizador) ---
     play(type) {
         if (this.isMuted || !this.ctx) return;
-
-        // Opción A: Reproducir archivo cargado
+        
         if (this.buffers[type]) {
             const source = this.ctx.createBufferSource();
             source.buffer = this.buffers[type];
             source.connect(this.ctx.destination);
             source.start();
-            return;
+        } else {
+            this.playSynthFallback(type);
         }
-
-        // Opción B: Fallback (Sintetizador Web Audio antiguo)
-        // Esto asegura que el juego tenga sonido aunque no subas los mp3
-        this.playSynthFallback(type);
     }
 
     playSynthFallback(type) {
@@ -197,31 +212,19 @@ export default class AudioController {
 
         switch (type) {
             case 'start':
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(220, now);
-                osc.frequency.exponentialRampToValueAtTime(880, now + 0.3);
-                gainNode.gain.setValueAtTime(0.1, now);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-                osc.start(now); osc.stop(now + 0.3);
-                break;
+                osc.type = 'sine'; osc.frequency.setValueAtTime(220, now); osc.frequency.exponentialRampToValueAtTime(880, now + 0.3);
+                gainNode.gain.setValueAtTime(0.1, now); gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3); break;
             case 'crash':
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(100, now);
-                osc.frequency.exponentialRampToValueAtTime(20, now + 0.3);
-                gainNode.gain.setValueAtTime(0.3, now);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-                osc.start(now); osc.stop(now + 0.3);
-                break;
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, now); osc.frequency.exponentialRampToValueAtTime(20, now + 0.3);
+                gainNode.gain.setValueAtTime(0.3, now); gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3); break;
             case 'levelUp':
             case 'coin':
             case 'shield':
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(440, now);
-                osc.frequency.setValueAtTime(880, now + 0.1);
-                gainNode.gain.setValueAtTime(0.1, now);
-                gainNode.gain.linearRampToValueAtTime(0, now + 0.2);
-                osc.start(now); osc.stop(now + 0.2);
-                break;
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(880, now + 0.1);
+                gainNode.gain.setValueAtTime(0.1, now); gainNode.gain.linearRampToValueAtTime(0, now + 0.2);
+                osc.start(now); osc.stop(now + 0.2); break;
         }
     }
 }
