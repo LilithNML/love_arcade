@@ -71,6 +71,7 @@ export default class Game {
         // ... (Mantener igual que antes) ...
         document.getElementById('startBtn').onclick = () => this.startGame();
         document.getElementById('restartBtn').onclick = () => this.startGame();
+        document.getElementById('btnGoHome').onclick = () => this.quitGame();
         document.getElementById('btnResume').onclick = () => this.togglePause();
         document.getElementById('btnQuit').onclick = () => this.quitGame();
         document.getElementById('btnSkins').onclick = () => this.openSkinMenu();
