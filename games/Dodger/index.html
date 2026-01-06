@@ -11,67 +11,152 @@
     
     <title>Dodger - Love Arcade</title>
     
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
     
     <style>
+        :root {
+            --bg-dark: #0f172a;
+            --neon-blue: #3b82f6;
+            --neon-purple: #a855f7;
+            --neon-red: #ef4444;
+            --neon-green: #22c55e;
+            --neon-yellow: #eab308;
+            --glass-bg: rgba(0, 0, 0, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.15);
+        }
+
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #0f172a;
-            touch-action: none; /* Bloquea gestos del navegador */
-            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--bg-dark);
+            touch-action: none;
+            font-family: 'Rajdhani', sans-serif; /* Fuente base técnica */
             user-select: none;
             -webkit-tap-highlight-color: transparent;
-            height: 100dvh; /* Altura dinámica para móviles */
+            height: 100dvh;
             width: 100vw;
-        }
-
-        /* CAPAS (Z-INDEX) */
-        
-        /* Nivel 0: Fondo */
-        #game-bg { 
-            position: absolute; 
-            top: 0; left: 0; 
-            width: 100%; height: 100%; 
-            z-index: 0; 
-            background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); 
-        }
-
-        /* Nivel 1: Juego (Nave/Enemigos/Estrellas) */
-        canvas { 
-            display: block; 
-            position: relative; /* Importante para z-index */
-            z-index: 1; 
-        }
-        
-        /* Nivel 50+: UI (HUD, Menús) */
-        .ui-layer { 
-            position: absolute; 
-            top: 0; left: 0; 
-            width: 100%; height: 100%; 
-            z-index: 50; 
-            pointer-events: none; 
-        }
-        
-        .interactive { pointer-events: auto; }
-        
-        /* Botones HUD (Pausa/Mute) */
-        .hud-btn {
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.2);
             color: white;
-            width: 40px; height: 40px;
-            border-radius: 50%;
-            display: flex; justify-content: center; align-items: center;
-            font-size: 20px; cursor: pointer;
-            backdrop-filter: blur(4px);
-            transition: transform 0.1s;
-            pointer-events: auto;
         }
-        .hud-btn:active { transform: scale(0.9); background: rgba(255,255,255,0.1); }
 
-        /* Animaciones */
-        .animate-blink { animation: blink 1s infinite; }
+        /* TIPOGRAFÍA RETRO */
+        h1, h2, .retro-text {
+            font-family: 'Press Start 2P', cursive;
+            line-height: 1.5;
+        }
+
+        /* CAPAS */
+        #game-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
+        canvas { display: block; position: relative; z-index: 1; }
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; display: flex; flex-direction: column; }
+        
+        /* UTILIDADES CSS (Reemplazo de Tailwind) */
+        .hidden { display: none !important; }
+        .flex { display: flex !important; }
+        .flex-col { flex-direction: column; }
+        .justify-center { justify-content: center; }
+        .justify-between { justify-content: space-between; }
+        .items-center { align-items: center; }
+        .gap-2 { gap: 0.5rem; }
+        .gap-4 { gap: 1rem; }
+        .p-4 { padding: 1rem; }
+        .w-full { width: 100%; }
+        .text-center { text-align: center; }
+        .interactive { pointer-events: auto; }
+        .cursor-pointer { cursor: pointer; }
+
+        /* HUD & BOTONES */
+        .hud-top { width: 100%; padding: 15px 20px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: flex-start; }
+        
+        .score-box { font-size: 1.5rem; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .text-green { color: var(--neon-green); }
+        .text-yellow { color: var(--neon-yellow); font-size: 1rem; }
+
+        .hud-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            color: white;
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 1.2rem;
+            backdrop-filter: blur(5px);
+            transition: all 0.2s;
+        }
+        .hud-btn:active { transform: scale(0.9); background: rgba(255,255,255,0.2); }
+
+        /* PANTALLAS (Menú, Game Over, Pausa) */
+        .screen-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 70;
+        }
+
+        .title-gradient {
+            font-size: 2.5rem; /* Ajustado para móviles */
+            background: linear-gradient(to right, var(--neon-blue), var(--neon-purple));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: var(--neon-blue);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 1.5rem;
+            border-radius: 50px;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn-primary:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(59, 130, 246, 0.8); }
+        .btn-primary:active { transform: scale(0.95); }
+
+        .btn-secondary {
+            background: transparent;
+            color: #9ca3af;
+            border: 1px solid #4b5563;
+            padding: 10px 25px;
+            border-radius: 8px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { color: white; border-color: white; background: rgba(255,255,255,0.05); }
+
+        /* GRID DE SKINS */
+        #skinsGrid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            max-width: 400px;
+            max-height: 50vh;
+            overflow-y: auto;
+            width: 100%;
+        }
+        .skin-card {
+            background: rgba(255,255,255,0.05);
+            border: 2px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex; flex-direction: column; align-items: center;
+            transition: all 0.2s;
+        }
+        .skin-card.locked { opacity: 0.5; background: rgba(0,0,0,0.5); }
+        .skin-card.selected { border-color: var(--neon-blue); background: rgba(59, 130, 246, 0.1); }
+        .skin-card:not(.locked):hover { background: rgba(255,255,255,0.1); }
+
+        /* ANIMACIONES */
+        .animate-blink { animation: blink 2s infinite; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         
         .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
@@ -81,97 +166,77 @@
             30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
             40%, 60% { transform: translate3d(8px, 0, 0); }
         }
+
+        /* Controles táctiles invisibles */
+        #touchControls { width: 100%; height: 100%; position: absolute; top:0; left:0; z-index: 10; display: flex; }
+        .touch-zone { width: 50%; height: 100%; }
     </style>
 </head>
 <body>
 
     <div id="game-bg"></div>
-    
     <canvas id="gameCanvas"></canvas>
 
-    <div id="hud" class="ui-layer hidden flex-col justify-between p-4 pb-8">
-        <div class="flex justify-between items-start w-full">
-            <div class="text-white font-bold text-xl drop-shadow-md select-none pointer-events-none">
-                <div class="text-green-400">SCORE: <span id="scoreDisplay">0</span></div>
-                <div class="text-yellow-400 text-sm">LVL: <span id="levelDisplay">1</span></div>
+    <div id="hud" class="ui-layer hidden">
+        <div class="hud-top interactive">
+            <div class="score-box">
+                <div class="text-green">SCORE: <span id="scoreDisplay">0</span></div>
+                <div class="text-yellow">LVL: <span id="levelDisplay">1</span></div>
             </div>
-            
-            <div class="flex gap-2 pointer-events-auto">
+            <div class="flex gap-2">
                 <button id="btnMute" class="hud-btn">🔊</button>
                 <button id="btnPause" class="hud-btn">⏸</button>
             </div>
         </div>
     </div>
 
-    <div id="pauseScreen" class="ui-layer hidden interactive flex flex-col justify-center items-center bg-black/60 backdrop-blur-md z-[60]">
-        <h2 class="text-4xl font-black text-white tracking-widest mb-8">PAUSA</h2>
-        <button id="btnResume" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-10 rounded-full shadow-lg text-xl mb-4 transform transition active:scale-95 cursor-pointer">
-            CONTINUAR
-        </button>
-        <button id="btnQuit" class="text-red-400 hover:text-red-300 border border-red-500/30 px-6 py-2 rounded text-sm mt-4 cursor-pointer">
-            SALIR AL MENÚ
-        </button>
+    <div id="pauseScreen" class="ui-layer hidden interactive justify-center items-center screen-overlay">
+        <h2 class="retro-text" style="font-size: 2rem; margin-bottom: 2rem; color: white;">PAUSA</h2>
+        <button id="btnResume" class="btn-primary" style="margin-bottom: 1rem;">CONTINUAR</button>
+        <button id="btnQuit" class="btn-secondary">SALIR AL MENÚ</button>
     </div>
 
-    <div id="startScreen" class="ui-layer interactive flex flex-col justify-center items-center bg-black/80 backdrop-blur-sm z-[70]">
-        <h1 class="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-4 tracking-tighter" style="filter: drop-shadow(0 0 10px rgba(59,130,246,0.5));">DODGER</h1>
-        <p class="text-gray-300 mb-8 text-sm uppercase tracking-widest">Esquiva. Sobrevive. Repite.</p>
+    <div id="startScreen" class="ui-layer interactive justify-center items-center screen-overlay">
+        <h1 class="title-gradient retro-text">DODGER</h1>
+        <p style="color: #9ca3af; letter-spacing: 2px; margin-bottom: 2rem; font-size: 0.9rem;">ESQUIVA • SOBREVIVE • REPITE</p>
         
-        <button id="startBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-12 rounded-full shadow-[0_0_20px_rgba(37,99,235,0.6)] transform transition hover:scale-105 active:scale-95 animate-blink cursor-pointer z-50">
-            JUGAR AHORA
-        </button>
-        <p class="mt-6 text-gray-500 text-xs">← Flechas / Touch →</p>
+        <button id="startBtn" class="btn-primary animate-blink z-50">JUGAR</button>
+        <p style="margin-top: 1.5rem; font-size: 0.8rem; color: #6b7280;">← Flechas / Touch →</p>
         
-        <div class="flex gap-4 mt-8">
-            <button id="btnSkins" class="text-blue-400 border border-blue-500/30 px-6 py-2 rounded hover:bg-blue-500/10 text-sm cursor-pointer z-50 transition">
-                NAVES (SKINS)
-            </button>
-            <button id="exitBtn" class="text-red-500 border border-red-500/30 px-6 py-2 rounded hover:bg-red-500/10 text-sm cursor-pointer z-50 transition">
-                SALIR
-            </button>
+        <div class="flex gap-4" style="margin-top: 2rem;">
+            <button id="btnSkins" class="btn-secondary cursor-pointer z-50">NAVES</button>
+            <button id="exitBtn" class="btn-secondary cursor-pointer z-50 text-red-400 border-red-900">SALIR</button>
         </div>
     </div>
 
-    <div id="skinMenu" class="ui-layer hidden interactive flex flex-col justify-center items-center bg-black/90 backdrop-blur-md z-[80]">
-        <h2 class="text-3xl font-black text-white mb-6 uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-            Selecciona tu Nave
-        </h2>
-        
-        <div id="skinsGrid" class="grid grid-cols-2 gap-4 w-full max-w-md px-4 mb-8 max-h-[60vh] overflow-y-auto">
+    <div id="skinMenu" class="ui-layer hidden interactive justify-center items-center screen-overlay">
+        <h2 class="retro-text" style="font-size: 1.2rem; margin-bottom: 1.5rem; color: var(--neon-blue);">HANGAR</h2>
+        <div id="skinsGrid">
             </div>
-
-        <button id="btnBackSkins" class="text-gray-400 hover:text-white border border-gray-600 px-8 py-2 rounded-full cursor-pointer hover:bg-gray-800 transition">
-            VOLVER
-        </button>
+        <button id="btnBackSkins" class="btn-secondary" style="margin-top: 20px;">VOLVER</button>
     </div>
 
-    <div id="gameOverScreen" class="ui-layer hidden interactive flex flex-col justify-center items-center bg-red-900/90 backdrop-blur-md z-[70]">
-        <h2 class="text-5xl font-black text-white mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">GAME OVER</h2>
+    <div id="gameOverScreen" class="ui-layer hidden interactive justify-center items-center screen-overlay" style="background: rgba(50, 0, 0, 0.9);">
+        <h2 class="retro-text" style="font-size: 2rem; color: var(--neon-red); text-shadow: 0 0 10px red;">GAME OVER</h2>
         
-        <div class="bg-black/40 p-6 rounded-xl border border-white/10 mb-6 text-center w-64">
-            <div class="mb-2">
-                <span class="text-gray-400 text-sm block">Puntuación Final</span>
-                <span class="text-3xl text-white font-bold" id="finalScore">0</span>
+        <div style="background: rgba(0,0,0,0.5); padding: 20px; border-radius: 12px; border: 1px solid var(--glass-border); margin: 20px 0; text-align: center;">
+            <div style="margin-bottom: 10px;">
+                <span style="color: #9ca3af; font-size: 0.9rem;">Puntuación</span>
+                <div style="font-size: 2rem; font-weight: bold;" id="finalScore">0</div>
             </div>
-            
-            <div class="mt-4 pt-4 border-t border-white/10">
-                <span class="text-gray-400 text-sm block">Monedas Ganadas</span>
-                <span class="text-4xl text-yellow-400 font-bold" id="coinsEarned">+0</span>
+            <div style="border-top: 1px solid #ffffff20; padding-top: 10px;">
+                <span style="color: #9ca3af; font-size: 0.9rem;">Monedas</span>
+                <div style="font-size: 1.5rem; color: var(--neon-yellow); font-weight: bold;" id="coinsEarned">+0</div>
             </div>
         </div>
 
-        <button id="restartBtn" class="bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-12 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 cursor-pointer z-50 mb-4">
-            JUGAR OTRA VEZ
-        </button>
-
-        <button id="btnGoHome" class="text-gray-300 border border-gray-500/50 hover:bg-white/10 px-8 py-2 rounded-full text-sm transition cursor-pointer z-50">
-            VOLVER AL MENÚ
-        </button>
+        <button id="restartBtn" class="btn-primary" style="background: var(--neon-green); box-shadow: 0 0 15px rgba(34, 197, 94, 0.5); margin-bottom: 1rem;">REINTENTAR</button>
+        <button id="btnGoHome" class="btn-secondary">MENÚ PRINCIPAL</button>
     </div>
 
-    <div id="touchControls" class="absolute top-0 left-0 w-full h-full flex z-10 hidden">
-        <div id="touchLeft" class="w-1/2 h-full"></div>
-        <div id="touchRight" class="w-1/2 h-full"></div>
+    <div id="touchControls" class="hidden">
+        <div id="touchLeft" class="touch-zone"></div>
+        <div id="touchRight" class="touch-zone"></div>
     </div>
 
     <script src="../../js/app.js"></script>
