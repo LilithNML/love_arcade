@@ -27,20 +27,20 @@ export default class Game {
         this.score = 0;
         this.level = 1;
         this.particles = [];
-        this.floatingTexts = []; // NUEVO: Textos flotantes
+        this.floatingTexts = [];
         this.powerups = [];
         this.lastTime = 0;
         
         // Temporizadores
         this.powerupTimer = 0;
-        this.magnetSpawnTimer = 0; // NUEVO: Para forzar spawn de orbes
+        this.magnetSpawnTimer = 0;
         
         this.activeEffects = {
             magnet: 0, 
             slow: 0
         };
 
-        // UI REFS
+        // --- UI REFS ---
         this.uiStart = document.getElementById('startScreen');
         this.uiHUD = document.getElementById('hud');
         this.uiGameOver = document.getElementById('gameOverScreen');
@@ -57,6 +57,7 @@ export default class Game {
 
         this.bindEvents();
         
+        // --- INICIO ASÍNCRONO ---
         this.resources.loadAll().then(() => {
             this.state = 'MENU';
             this.resize();
@@ -68,15 +69,23 @@ export default class Game {
     }
 
     bindEvents() {
-        // ... (Mantener igual que antes) ...
+        // Botones de Pantalla
         document.getElementById('startBtn').onclick = () => this.startGame();
         document.getElementById('restartBtn').onclick = () => this.startGame();
-        document.getElementById('btnGoHome').onclick = () => this.quitGame();
         document.getElementById('btnResume').onclick = () => this.togglePause();
+        
+        // CORRECCIÓN: QuitGame ahora sirve tanto para Pausa como para Game Over
         document.getElementById('btnQuit').onclick = () => this.quitGame();
+        document.getElementById('btnGoHome').onclick = () => this.quitGame();
+        
+        // Botones de Menú Skins
         document.getElementById('btnSkins').onclick = () => this.openSkinMenu();
         document.getElementById('btnBackSkins').onclick = () => this.closeSkinMenu();
+
+        // Botón Pausa (HUD)
         if(this.btnPause) this.btnPause.onclick = () => this.togglePause();
+
+        // Botón Mute (HUD)
         if(this.btnMute) {
             this.btnMute.innerText = this.audio.isMuted ? '🔇' : '🔊';
             this.btnMute.onclick = () => {
@@ -85,43 +94,82 @@ export default class Game {
                 this.btnMute.blur();
             };
         }
+
+        // Teclado
         window.addEventListener('keydown', (e) => {
             if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
                 if (this.state === 'PLAY' || this.state === 'PAUSE') this.togglePause();
             }
         });
+        
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && this.state === 'PLAY') this.togglePause();
         });
     }
 
-    // ... (Métodos openSkinMenu, closeSkinMenu, resize iguales) ...
-    openSkinMenu() { /* Código existente */ 
+    // --- MENÚ DE SKINS ---
+    openSkinMenu() {
         this.uiStart.classList.add('hidden');
         this.uiSkins.classList.remove('hidden');
         this.uiSkins.classList.add('flex');
+        
         const container = document.getElementById('skinsGrid');
         container.innerHTML = '';
+        
         const highScore = parseInt(localStorage.getItem('dodger_highscore') || 0);
         const skins = this.skinManager.getUnlockedSkins(highScore);
         const currentId = this.skinManager.getCurrentSkin();
+
         skins.forEach(skin => {
             const div = document.createElement('div');
-            div.className = `p-4 rounded-lg border-2 flex flex-col items-center cursor-pointer transition ${skin.locked ? 'border-gray-700 bg-gray-900 opacity-50' : skin.id === currentId ? 'border-blue-500 bg-blue-900/40' : 'border-gray-500 hover:bg-gray-800'}`;
+            div.className = `p-4 rounded-lg border-2 flex flex-col items-center cursor-pointer transition ${
+                skin.locked ? 'border-gray-700 bg-gray-900 opacity-50' : 
+                skin.id === currentId ? 'border-blue-500 bg-blue-900/40' : 'border-gray-500 hover:bg-gray-800'
+            }`;
+            
             const img = this.resources.get(skin.id);
-            if(img) { const preview = img.cloneNode(); preview.style.width = '48px'; div.appendChild(preview); }
-            const name = document.createElement('div'); name.className = 'text-white font-bold mt-2'; name.innerText = skin.locked ? '???' : skin.name; div.appendChild(name);
-            const desc = document.createElement('div'); desc.className = 'text-xs text-gray-400 text-center mt-1'; desc.innerText = skin.locked ? `Req: ${skin.req} pts` : 'Desbloqueado'; div.appendChild(desc);
-            if (!skin.locked) { div.onclick = () => { this.skinManager.selectSkin(skin.id, highScore); this.openSkinMenu(); }; }
+            if(img) {
+                const preview = img.cloneNode();
+                preview.style.width = '48px';
+                div.appendChild(preview);
+            }
+
+            const name = document.createElement('div');
+            name.className = 'text-white font-bold mt-2';
+            name.innerText = skin.locked ? '???' : skin.name;
+            div.appendChild(name);
+
+            const desc = document.createElement('div');
+            desc.className = 'text-xs text-gray-400 text-center mt-1';
+            desc.innerText = skin.locked ? `Req: ${skin.req} pts` : 'Desbloqueado';
+            div.appendChild(desc);
+
+            if (!skin.locked) {
+                div.onclick = () => {
+                    this.skinManager.selectSkin(skin.id, highScore);
+                    this.openSkinMenu();
+                };
+            }
             container.appendChild(div);
         });
     }
-    closeSkinMenu() { /* Código existente */
-        this.uiSkins.classList.add('hidden'); this.uiSkins.classList.remove('flex'); this.uiStart.classList.remove('hidden');
+
+    closeSkinMenu() {
+        this.uiSkins.classList.add('hidden');
+        this.uiSkins.classList.remove('flex');
+        this.uiStart.classList.remove('hidden');
     }
-    resize() { /* Código existente */
-        this.width = window.innerWidth; this.height = window.innerHeight; this.canvas.width = this.width; this.canvas.height = this.height;
-        if(this.player) { this.player.gameWidth = this.width; this.player.y = this.height - this.player.size - 80; }
+
+    // --- LÓGICA CORE ---
+    resize() {
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+        if(this.player) {
+            this.player.gameWidth = this.width;
+            this.player.y = this.height - this.player.size - 80;
+        }
     }
 
     startGame() {
@@ -135,7 +183,7 @@ export default class Game {
         this.activeEffects = { magnet: 0, slow: 0 };
         this.powerups = [];
         this.particles = [];
-        this.floatingTexts = []; // Reset textos
+        this.floatingTexts = [];
         this.powerupTimer = 0;
         this.magnetSpawnTimer = 0;
         
@@ -148,8 +196,10 @@ export default class Game {
         this.theme = new ThemeManager();
         this.applyTheme(this.theme.get());
 
+        // Ocultar todas las pantallas excepto HUD
         this.uiStart.classList.add('hidden');
         this.uiGameOver.classList.add('hidden'); 
+        this.uiGameOver.classList.remove('flex'); // Asegurar quitar flex
         this.uiHUD.classList.remove('hidden');
         this.uiHUD.classList.add('flex');
         
@@ -191,14 +241,13 @@ export default class Game {
                 break;
         }
 
-        // Crear Texto Flotante
         this.floatingTexts.push({
             x: this.player.x + 20,
             y: this.player.y,
             text: text,
             color: color,
-            life: 1.0, // segundos de vida
-            vy: -50 // velocidad hacia arriba
+            life: 1.0, 
+            vy: -50 
         });
     }
 
@@ -208,7 +257,6 @@ export default class Game {
             return;
         }
 
-        // --- LÓGICA DE TIEMPO ---
         let timeScale = 1.0;
         this.player.isMagnetActive = (this.activeEffects.magnet > 0);
         this.player.isSlowActive = (this.activeEffects.slow > 0);
@@ -223,18 +271,15 @@ export default class Game {
 
         const gameDt = dt * timeScale;
 
-        // --- SPAWN LOGIC: IMÁN BUFF ---
-        // Si el imán está activo, forzamos aparición de Orbes constantemente
+        // Imán Buff
         if (this.activeEffects.magnet > 0) {
             this.magnetSpawnTimer += gameDt;
-            if (this.magnetSpawnTimer > 0.4) { // Cada 0.4 segundos
+            if (this.magnetSpawnTimer > 0.4) { 
                 this.magnetSpawnTimer = 0;
-                // Crear solo Orbes
                 this.powerups.push(new PowerUp(this.width, 'orb', this.resources));
             }
         }
 
-        // --- ACTUALIZACIÓN ---
         this.score++;
         this.elScore.innerText = this.score;
 
@@ -252,7 +297,6 @@ export default class Game {
             this.elLevel.innerText = this.level;
         }
 
-        // --- GENERACIÓN NORMAL DE POWERUPS ---
         this.powerupTimer += gameDt;
         if (this.powerupTimer > 6) { 
             this.powerupTimer = 0;
@@ -263,7 +307,6 @@ export default class Game {
             }
         }
 
-        // --- UPDATE ENTIDADES ---
         const isMagnet = this.activeEffects.magnet > 0;
         for (let i = this.powerups.length - 1; i >= 0; i--) {
             let p = this.powerups[i];
@@ -282,7 +325,6 @@ export default class Game {
                 this.audio.play('levelUp'); 
                 this.spawner.obstacles = []; 
                 this.createExplosion(this.player.x, this.player.y, '#06b6d4');
-                // Texto visual
                 this.floatingTexts.push({
                     x: this.player.x, y: this.player.y,
                     text: "BLOCKED!", color: "#06b6d4", life: 1.0, vy: -50
@@ -304,7 +346,7 @@ export default class Game {
         }
     }
 
-    triggerGameOver() { /* Igual que antes */
+    triggerGameOver() {
         this.state = 'GAMEOVER';
         this.audio.play('crash');
         document.body.classList.add('shake');
@@ -312,8 +354,13 @@ export default class Game {
         const currentHigh = parseInt(localStorage.getItem('dodger_highscore') || 0);
         if (this.score > currentHigh) { localStorage.setItem('dodger_highscore', this.score); }
         const result = this.economy.payout(this.score);
-        this.uiHUD.classList.add('hidden'); this.uiHUD.classList.remove('flex');
-        this.uiGameOver.classList.remove('hidden'); this.uiGameOver.classList.add('flex');
+        
+        // Mostrar UI Game Over
+        this.uiHUD.classList.add('hidden'); 
+        this.uiHUD.classList.remove('flex');
+        this.uiGameOver.classList.remove('hidden'); 
+        this.uiGameOver.classList.add('flex');
+        
         this.elFinalScore.innerText = this.score;
         this.elCoinsEarned.innerText = `+${result.coins}`;
     }
@@ -330,7 +377,6 @@ export default class Game {
             if (this.state !== 'GAMEOVER') this.player.draw(this.ctx);
         }
 
-        // --- PARTICULAS ---
         for (let i = this.particles.length - 1; i >= 0; i--) {
             let p = this.particles[i];
             p.x += p.vx; p.y += p.vy;
@@ -345,14 +391,12 @@ export default class Game {
             if (p.life <= 0) this.particles.splice(i, 1);
         }
 
-        // --- TEXTOS FLOTANTES (UI IN-GAME) ---
         for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
             let t = this.floatingTexts[i];
-            t.y += t.vy * 0.016; // Mover arriba
+            t.y += t.vy * 0.016; 
             t.life -= 0.016;
-            
             this.ctx.save();
-            this.ctx.globalAlpha = Math.max(0, t.life); // Fade out
+            this.ctx.globalAlpha = Math.max(0, t.life); 
             this.ctx.fillStyle = t.color;
             this.ctx.shadowColor = t.color;
             this.ctx.shadowBlur = 5;
@@ -360,12 +404,11 @@ export default class Game {
             this.ctx.textAlign = "center";
             this.ctx.fillText(t.text, t.x, t.y);
             this.ctx.restore();
-
             if (t.life <= 0) this.floatingTexts.splice(i, 1);
         }
     }
 
-    togglePause() { /* Igual */
+    togglePause() {
         if (this.state === 'PLAY') {
             this.state = 'PAUSE';
             this.uiPause.classList.remove('hidden'); this.uiPause.classList.add('flex');
@@ -377,13 +420,29 @@ export default class Game {
             this.lastTime = performance.now();
         }
     }
-    quitGame() { /* Igual */
+
+    // --- CORRECCIÓN FINAL: quitGame ---
+    // Esta función limpia toda la UI y vuelve al StartScreen
+    quitGame() {
         this.state = 'MENU';
-        this.uiPause.classList.add('hidden'); this.uiHUD.classList.add('hidden');
+        
+        // Ocultar todas las pantallas posibles
+        this.uiPause.classList.add('hidden');
+        this.uiPause.classList.remove('flex');
+        
+        this.uiHUD.classList.add('hidden');
+        this.uiHUD.classList.remove('flex');
+        
+        this.uiGameOver.classList.add('hidden'); // CRÍTICO: Antes faltaba esto
+        this.uiGameOver.classList.remove('flex'); // CRÍTICO
+        
+        // Mostrar Inicio
         this.uiStart.classList.remove('hidden');
+        
         if(this.btnPause) this.btnPause.innerText = '⏸';
     }
-    loop(timestamp) { /* Igual */
+
+    loop(timestamp) {
         if (!this.lastTime) this.lastTime = timestamp;
         if (this.state === 'PAUSE') { this.lastTime = timestamp; requestAnimationFrame((t)=>this.loop(t)); return; }
         const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1); 
