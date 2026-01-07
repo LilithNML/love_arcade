@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Love Breaker - Beta</title>
+    <title>Love Breaker</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
@@ -14,6 +14,8 @@
             color: #fff;
             font-family: 'Press Start 2P', cursive;
             touch-action: none; /* Previene scroll en móvil */
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         #game-container {
@@ -60,13 +62,14 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.85);
+            background: rgba(0, 0, 0, 0.9);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             pointer-events: auto;
             z-index: 10;
+            transition: opacity 0.3s;
         }
 
         .hidden {
@@ -82,21 +85,38 @@
             line-height: 1.5;
         }
 
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+            margin-top: 20px;
+        }
+
         .btn {
             background: #ff7eb3;
             border: 4px solid #fff;
             color: #1a0b2e;
             padding: 15px 30px;
             font-family: 'Press Start 2P', cursive;
-            font-size: 16px;
+            font-size: 14px;
             cursor: pointer;
             transition: transform 0.1s;
-            margin-top: 20px;
             text-transform: uppercase;
+            min-width: 200px;
+            text-align: center;
         }
 
         .btn:active {
             transform: scale(0.95);
+        }
+
+        .btn.secondary {
+            background: #2d1b4e;
+            border: 4px solid #ff7eb3;
+            color: #ff7eb3;
+            font-size: 12px;
+            padding: 12px 24px;
         }
 
         .stats-box {
@@ -107,6 +127,7 @@
             margin-bottom: 20px;
             line-height: 2;
             font-size: 12px;
+            min-width: 250px;
         }
 
         .coin-text {
@@ -137,8 +158,12 @@
         <div class="stats-box">
             <p>Mueve el mouse o desliza</p>
             <p>No pierdas la pelotita</p>
+            <p style="margin-top:10px; font-size: 10px; color: #aaa;">50 Puntos = 1 Moneda</p>
         </div>
-        <button class="btn" id="start-btn">JUGAR</button>
+        <div class="btn-group">
+            <button class="btn" id="start-btn">JUGAR</button>
+            <button class="btn secondary" onclick="exitGame()">SALIR</button>
+        </div>
     </div>
 
     <!-- GAME OVER -->
@@ -150,19 +175,72 @@
             <p>Ganaste: <span id="coins-earned" class="coin-text">0</span> Monedas</p>
             <p id="new-record-msg" class="hidden" style="color: #ff7eb3; margin-top:10px;">¡NUEVO RÉCORD!</p>
         </div>
-        <button class="btn" id="restart-btn">JUGAR OTRA VEZ</button>
+        <div class="btn-group">
+            <button class="btn" id="restart-btn">JUGAR OTRA VEZ</button>
+            <button class="btn secondary" onclick="exitGame()">SALIR</button>
+        </div>
     </div>
 </div>
 
+<script src="../../js/app.js"></script>
+    
 <script>
 /**
- * SISTEMA DE AUDIO (Sintetizador simple para evitar carga de archivos)
+ * ------------------------------------------------------------------
+ * INTEGRACIÓN LOVE ARCADE (SISTEMA DE MONEDAS)
+ * ------------------------------------------------------------------
+ */
+function sendPayout(score) {
+    // 1. Cálculo oficial: floor(score / 50), Max 60
+    let coins = Math.floor(score / 50);
+    if (coins > 60) coins = 60;
+    if (coins < 0) coins = 0;
+
+    // 2. Generar ID único para esta transacción
+    const levelId = 'run_' + Date.now();
+
+    console.log(`[LoveBreaker] Intentando pagar ${coins} monedas. ID: ${levelId}`);
+
+    // 3. Comunicación con la plataforma
+    if (window.GameCenter && typeof window.GameCenter.completeLevel === 'function') {
+        try {
+            window.GameCenter.completeLevel('lovebreaker', levelId, coins);
+            console.log('[LoveBreaker] Transacción enviada a Love Arcade.');
+        } catch (e) {
+            console.error('[LoveBreaker] Error al enviar monedas:', e);
+        }
+    } else {
+        console.warn('[LoveBreaker] Modo Standalone: GameCenter no detectado. Pago simulado.');
+    }
+
+    return coins; // Devolvemos el valor solo para mostrarlo en UI
+}
+
+function exitGame() {
+    // Redirección segura al Hub
+    window.location.href = '../../index.html';
+}
+
+/**
+ * SISTEMA DE AUDIO (Sintetizador simple)
  */
 const AudioSys = {
     ctx: null,
     init: function() {
-        window.AudioContext = window.AudioContext || window.webkitAudioContext;
-        this.ctx = new AudioContext();
+        if (!this.ctx) {
+            window.AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    },
+    stopAll: function() {
+        if(this.ctx) {
+            this.ctx.close().then(() => {
+                this.ctx = new AudioContext();
+            });
+        }
     },
     playTone: function(freq, type, duration, vol = 0.1) {
         if (!this.ctx) return;
@@ -171,7 +249,7 @@ const AudioSys = {
         osc.type = type;
         osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
         gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
         osc.connect(gain);
         gain.connect(this.ctx.destination);
         osc.start();
@@ -184,8 +262,9 @@ const AudioSys = {
         setTimeout(() => this.playTone(1800, 'square', 0.2), 100);
     },
     playLoss: function() {
-        this.playTone(150, 'sawtooth', 0.5, 0.3);
-        setTimeout(() => this.playTone(100, 'sawtooth', 0.5, 0.3), 200);
+        // Sonido descendente rápido
+        this.playTone(150, 'sawtooth', 0.3, 0.3);
+        setTimeout(() => this.playTone(100, 'sawtooth', 0.3, 0.3), 150);
     }
 };
 
@@ -200,61 +279,34 @@ const menuOverlay = document.getElementById('menu-overlay');
 const gameOverOverlay = document.getElementById('game-over-overlay');
 
 // Estado del juego
-let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER
-let animationId;
-let lastTime = 0;
+let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER_PENDING, GAMEOVER
 let score = 0;
 let blocksDestroyed = 0;
 let highScore = localStorage.getItem('lovebreaker_highscore') || 0;
 highScoreEl.innerText = highScore;
 
-// Dimensiones lógicas (para escalar en pantallas grandes)
 const GAME_WIDTH = 800;
 const GAME_HEIGHT = 600;
-let scale = 1;
 
 /**
- * OBJETOS DEL JUEGO
+ * OBJETOS
  */
 const paddle = {
-    w: 100,
-    h: 20,
-    x: GAME_WIDTH / 2 - 50,
-    y: GAME_HEIGHT - 50,
-    speed: 0,
-    color: '#ff7eb3',
-    
+    w: 100, h: 20, x: 350, y: 550, color: '#ff7eb3',
     draw: function() {
         ctx.fillStyle = this.color;
-        // Dibujamos un paddle estilo "Carta de amor" o rectángulo redondeado
         ctx.beginPath();
         ctx.roundRect(this.x, this.y, this.w, this.h, 10);
         ctx.fill();
-        
-        // Detalle de corazón en el centro
         ctx.fillStyle = '#bd33a4';
-        const cx = this.x + this.w / 2;
-        const cy = this.y + this.h / 2 + 2;
         ctx.font = "20px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("♥", cx, cy);
+        ctx.fillText("♥", this.x + this.w / 2 - 7, this.y + this.h / 2 + 7);
     },
-    
-    reset: function() {
-        this.x = GAME_WIDTH / 2 - this.w / 2;
-    }
+    reset: function() { this.x = GAME_WIDTH / 2 - this.w / 2; }
 };
 
 const ball = {
-    x: GAME_WIDTH / 2,
-    y: GAME_HEIGHT / 2,
-    r: 8,
-    dx: 0,
-    dy: 0,
-    speed: 7, // Velocidad base
-    active: false,
-    
+    x: 400, y: 300, r: 8, dx: 0, dy: 0, speed: 7, active: false,
     draw: function() {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
@@ -264,7 +316,6 @@ const ball = {
         ctx.fill();
         ctx.shadowBlur = 0;
     },
-    
     reset: function() {
         this.x = paddle.x + paddle.w / 2;
         this.y = paddle.y - 20;
@@ -272,7 +323,6 @@ const ball = {
         this.dy = 0;
         this.active = false;
     },
-    
     launch: function() {
         if (!this.active) {
             this.active = true;
@@ -282,46 +332,24 @@ const ball = {
     }
 };
 
-// Sistema de partículas
 let particles = [];
-function createParticles(x, y, color) {
-    for(let i=0; i<8; i++) {
-        particles.push({
-            x: x,
-            y: y,
-            dx: (Math.random() - 0.5) * 8,
-            dy: (Math.random() - 0.5) * 8,
-            life: 1.0,
-            color: color
-        });
-    }
-}
-
-// Bloques
 let bricks = [];
 const brickRowCount = 5;
 const brickColumnCount = 8;
 const brickPadding = 10;
 const brickOffsetTop = 60;
 const brickOffsetLeft = 35;
-// Ancho calculado dinámicamente
 const brickWidth = (GAME_WIDTH - (brickOffsetLeft * 2) - (brickPadding * (brickColumnCount - 1))) / brickColumnCount;
 const brickHeight = 25;
-
 const colors = ['#ff7eb3', '#ff758c', '#ff8fa3', '#a29bfe', '#74b9ff'];
 
 function initBricks() {
     bricks = [];
     for(let c=0; c<brickColumnCount; c++) {
         for(let r=0; r<brickRowCount; r++) {
-            let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
-            let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
-            bricks.push({ 
-                x: brickX, 
-                y: brickY, 
-                status: 1, 
-                color: colors[r % colors.length] 
-            });
+            let bX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
+            let bY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+            bricks.push({ x: bX, y: bY, status: 1, color: colors[r % colors.length] });
         }
     }
 }
@@ -329,70 +357,33 @@ function initBricks() {
 /**
  * LÓGICA PRINCIPAL
  */
-
-// Manejo de Input
-let inputX = GAME_WIDTH / 2;
-
 function handleInput(clientX) {
-    // Convertir coordenada de pantalla a coordenada de juego
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    
-    // Ajustar por el escalado interno del canvas
     const realX = (clientX - rect.left) * (GAME_WIDTH / rect.width);
-    
-    inputX = Math.max(0, Math.min(GAME_WIDTH, realX));
-    
-    // Movimiento directo del paddle
-    let targetX = inputX - paddle.w / 2;
-    
-    // Clamp
+    let targetX = Math.max(0, Math.min(GAME_WIDTH, realX)) - paddle.w / 2;
     if (targetX < 0) targetX = 0;
     if (targetX + paddle.w > GAME_WIDTH) targetX = GAME_WIDTH - paddle.w;
-    
     paddle.x = targetX;
     
-    // Si la bola no está activa, sigue al paddle
     if (!ball.active && gameState === 'PLAYING') {
         ball.x = paddle.x + paddle.w / 2;
     }
 }
 
-// Event Listeners
 window.addEventListener('mousemove', e => handleInput(e.clientX));
-window.addEventListener('touchmove', e => {
-    e.preventDefault(); // Evitar scroll
-    handleInput(e.touches[0].clientX);
-}, { passive: false });
+window.addEventListener('touchmove', e => { e.preventDefault(); handleInput(e.touches[0].clientX); }, { passive: false });
+const launchHandler = () => { if(gameState === 'PLAYING' && !ball.active) ball.launch(); };
+window.addEventListener('mousedown', launchHandler);
+window.addEventListener('touchstart', launchHandler);
 
-// Click para lanzar
-window.addEventListener('mousedown', () => {
-    if(gameState === 'PLAYING' && !ball.active) ball.launch();
-});
-window.addEventListener('touchstart', () => {
-    if(gameState === 'PLAYING' && !ball.active) ball.launch();
-});
-
-// Resize
 function resize() {
-    // Mantener aspect ratio 4:3
     let aspect = GAME_WIDTH / GAME_HEIGHT;
     let windowAspect = window.innerWidth / window.innerHeight;
-    
-    let displayWidth, displayHeight;
-    
-    if (windowAspect < aspect) {
-        displayWidth = window.innerWidth;
-        displayHeight = window.innerWidth / aspect;
-    } else {
-        displayHeight = window.innerHeight;
-        displayWidth = window.innerHeight * aspect;
-    }
-    
-    canvas.style.width = `${displayWidth}px`;
-    canvas.style.height = `${displayHeight}px`;
-    
-    // Resolución interna fija para lógica consistente
+    let w, h;
+    if (windowAspect < aspect) { w = window.innerWidth; h = w / aspect; }
+    else { h = window.innerHeight; w = h * aspect; }
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
     canvas.width = GAME_WIDTH;
     canvas.height = GAME_HEIGHT;
 }
@@ -402,47 +393,32 @@ resize();
 function update() {
     if (gameState !== 'PLAYING') return;
 
-    // Actualizar bola
     if (ball.active) {
         ball.x += ball.dx;
         ball.y += ball.dy;
 
-        // Rebote Paredes
-        if(ball.x + ball.r > GAME_WIDTH || ball.x - ball.r < 0) {
-            ball.dx = -ball.dx;
-        }
-        if(ball.y - ball.r < 0) {
-            ball.dy = -ball.dy;
-        }
+        // Paredes
+        if(ball.x + ball.r > GAME_WIDTH || ball.x - ball.r < 0) ball.dx = -ball.dx;
+        if(ball.y - ball.r < 0) ball.dy = -ball.dy;
         
-        // Game Over
+        // Game Over Condition
         if(ball.y - ball.r > GAME_HEIGHT) {
-            endGame();
+            triggerGameOver(); // Punto único de fallo
+            return;
         }
 
-        // Colisión Paddle
-        if(ball.y + ball.r > paddle.y && 
-           ball.y - ball.r < paddle.y + paddle.h &&
-           ball.x > paddle.x && 
-           ball.x < paddle.x + paddle.w) {
-            
-            // Lógica de rebote arcade: cambia ángulo según dónde golpee
-            let hitPoint = ball.x - (paddle.x + paddle.w/2);
-            // Normalizar entre -1 y 1
-            hitPoint = hitPoint / (paddle.w/2);
-            
-            let angle = hitPoint * (Math.PI/3); // Max 60 grados
-            
+        // Paddle Collision
+        if(ball.y + ball.r > paddle.y && ball.y - ball.r < paddle.y + paddle.h &&
+           ball.x > paddle.x && ball.x < paddle.x + paddle.w) {
+            let hitPoint = (ball.x - (paddle.x + paddle.w/2)) / (paddle.w/2);
+            let angle = hitPoint * (Math.PI/3);
             ball.dx = ball.speed * Math.sin(angle);
             ball.dy = -ball.speed * Math.cos(angle);
-            
             AudioSys.playPaddle();
-            
-            // Subir la bola un poco para evitar atascos
             ball.y = paddle.y - ball.r - 1;
         }
 
-        // Colisión Bloques
+        // Bricks Collision
         let activeBricks = 0;
         bricks.forEach(b => {
             if(b.status === 1) {
@@ -453,48 +429,48 @@ function update() {
                     score += 10;
                     blocksDestroyed++;
                     scoreEl.innerText = score;
-                    createParticles(b.x + brickWidth/2, b.y + brickHeight/2, b.color);
+                    // Partículas
+                    for(let i=0; i<6; i++) {
+                        particles.push({
+                            x: b.x + brickWidth/2, y: b.y + brickHeight/2,
+                            dx: (Math.random()-0.5)*8, dy: (Math.random()-0.5)*8,
+                            life: 1.0, color: b.color
+                        });
+                    }
                     AudioSys.playHit();
                 }
             }
         });
 
-        // Nivel completado (Endless: respawn)
+        // Nivel completado
         if(activeBricks === 0) {
             AudioSys.playCoin();
-            ball.speed += 0.5; // Hacerlo un poco más difícil
+            ball.speed += 0.5;
             ball.reset();
             initBricks();
-            // Bonus por limpiar pantalla
             score += 100;
             scoreEl.innerText = score;
         }
     }
 
-    // Actualizar partículas
+    // Partículas
     for(let i = particles.length - 1; i >= 0; i--) {
         let p = particles[i];
-        p.x += p.dx;
-        p.y += p.dy;
-        p.life -= 0.05;
+        p.x += p.dx; p.y += p.dy; p.life -= 0.05;
         if(p.life <= 0) particles.splice(i, 1);
     }
 }
 
 function draw() {
-    // Fondo limpio
     ctx.fillStyle = '#1a0b2e';
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    // Dibujar Bloques
     bricks.forEach(b => {
         if(b.status === 1) {
             ctx.fillStyle = b.color;
             ctx.shadowColor = b.color;
             ctx.shadowBlur = 10;
             ctx.fillRect(b.x, b.y, brickWidth, brickHeight);
-            
-            // Brillo interior
             ctx.fillStyle = 'rgba(255,255,255,0.2)';
             ctx.fillRect(b.x, b.y, brickWidth, brickHeight/2);
             ctx.shadowBlur = 0;
@@ -504,7 +480,6 @@ function draw() {
     paddle.draw();
     ball.draw();
 
-    // Dibujar partículas
     particles.forEach(p => {
         ctx.globalAlpha = p.life;
         ctx.fillStyle = p.color;
@@ -518,12 +493,12 @@ function draw() {
 }
 
 function loop() {
-    update();
+    if(gameState === 'PLAYING') update();
     draw();
 }
 
 /**
- * GESTIÓN DE ESTADOS
+ * GESTIÓN DE ESTADOS Y CIERRE
  */
 function startGame() {
     AudioSys.init();
@@ -537,27 +512,39 @@ function startGame() {
     
     paddle.reset();
     ball.reset();
-    ball.speed = 7; // Reset speed
+    ball.speed = 7;
     initBricks();
 }
 
-function endGame() {
-    gameState = 'GAMEOVER';
+function triggerGameOver() {
+    if (gameState === 'GAMEOVER_PENDING' || gameState === 'GAMEOVER') return;
+    
+    // 1. Bloquear estado para evitar bucles
+    gameState = 'GAMEOVER_PENDING';
+    
+    // 2. Audio Cut (Arcade Feel)
     AudioSys.playLoss();
     
-    // Calcular economía
-    let coins = Math.floor(score / 10);
-    let isNewRecord = false;
+    // 3. Ejecutar Lógica de Negocio (Monedas) - INMEDIATAMENTE
+    const coinsEarned = sendPayout(score);
     
+    // 4. Pausa dramática antes de mostrar UI
+    setTimeout(() => {
+        showGameOverUI(coinsEarned);
+    }, 500); 
+}
+
+function showGameOverUI(coins) {
+    gameState = 'GAMEOVER';
+    
+    let isNewRecord = false;
     if(score > highScore) {
         highScore = score;
         localStorage.setItem('lovebreaker_highscore', highScore);
         highScoreEl.innerText = highScore;
-        coins += 50; // Bonus record
         isNewRecord = true;
     }
 
-    // Actualizar UI
     document.getElementById('final-score').innerText = score;
     document.getElementById('final-blocks').innerText = blocksDestroyed;
     document.getElementById('coins-earned').innerText = coins;
@@ -565,7 +552,7 @@ function endGame() {
     const recordMsg = document.getElementById('new-record-msg');
     if(isNewRecord) {
         recordMsg.classList.remove('hidden');
-        AudioSys.playCoin(); // Sonido extra de felicidad
+        AudioSys.playCoin(); 
     } else {
         recordMsg.classList.add('hidden');
     }
@@ -573,11 +560,11 @@ function endGame() {
     gameOverOverlay.classList.remove('hidden');
 }
 
-// Botones UI
+// Listeners Botones
 document.getElementById('start-btn').addEventListener('click', startGame);
 document.getElementById('restart-btn').addEventListener('click', startGame);
 
-// Iniciar Loop
+// Start
 resize();
 loop();
 
