@@ -309,7 +309,6 @@
 </head>
 <body>
 
-    <!-- HUD -->
     <div id="uiLayer">
         <div id="hud-top" class="hidden-menu">
             <div class="hud-group">
@@ -338,10 +337,8 @@
             </div>
         </div>
 
-        <!-- Notification Area -->
         <div id="notification-area"></div>
 
-        <!-- START SCREEN -->
         <div id="startScreen" class="screen">
             <h1 style="font-size: 4rem;">NEON<br>RUNNER</h1>
             <div class="sub-label">SISTEMA SOBRECARGADO v1.1</div>
@@ -356,7 +353,6 @@
             </button>
         </div>
 
-        <!-- PAUSE OVERLAY -->
         <div id="pauseOverlay" class="screen hidden">
             <h1>PAUSA</h1>
             <p>SISTEMA SUSPENDIDO</p>
@@ -378,7 +374,6 @@
             </button>
         </div>
 
-        <!-- GAME OVER SCREEN -->
         <div id="gameOverScreen" class="screen hidden">
             <h2>CRASH</h2>
             <div class="stats-grid">
@@ -418,7 +413,7 @@
  */
 
 // --- CONFIGURACIÓN ---
-const CONFIG = {
+const HAZCONFIG = {
     baseSpeed: 400, 
     maxSpeed: 1200,
     gravity: 2000,
@@ -439,7 +434,7 @@ const state = {
     isMuted: false,
     distance: 0,
     score: 0,
-    speed: CONFIG.baseSpeed,
+    speed: HAZCONFIG.baseSpeed,
     sessionCoins: 0, 
     lastTime: 0,
     cameraShake: 0,
@@ -596,7 +591,7 @@ let width, height, floorY;
 function resize() {
     width = canvas.width = window.innerWidth;
     height = canvas.height = window.innerHeight;
-    floorY = height - (height * CONFIG.floorHeightPct);
+    floorY = height - (height * HAZCONFIG.floorHeightPct);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -631,14 +626,14 @@ class ObstaclePool {
 
         if (obs.type === 'spike') {
             obs.y = floorY;
-            obs.color = CONFIG.colors.obstacleGround;
+            obs.color = HAZCONFIG.colors.obstacleGround;
             obs.width = 40; 
             obs.height = 50;
         } else {
             obs.y = floorY - 90 - (Math.random() * 80); 
             obs.width = 40;
             obs.height = 40;
-            obs.color = CONFIG.colors.obstacleAir;
+            obs.color = HAZCONFIG.colors.obstacleAir;
         }
     }
 
@@ -716,7 +711,7 @@ class Player {
 
     update(dt) {
         // Physics
-        this.dy += CONFIG.gravity * dt;
+        this.dy += HAZCONFIG.gravity * dt;
         this.y += this.dy * dt;
 
         // Ground
@@ -731,7 +726,7 @@ class Player {
 
         // Pulse Animation (Heartbeat of the core)
         // Faster speed = Faster Pulse
-        let pulseSpeed = 5 + (state.speed / CONFIG.baseSpeed) * 5;
+        let pulseSpeed = 5 + (state.speed / HAZCONFIG.baseSpeed) * 5;
         this.pulse = Math.sin(state.gameTime * pulseSpeed) * 0.15;
 
         // Trail
@@ -768,9 +763,9 @@ class Player {
         ctx.scale(s, s);
 
         ctx.shadowBlur = 15 + (this.pulse * 10); // Breathing glow
-        ctx.shadowColor = CONFIG.colors.player;
+        ctx.shadowColor = HAZCONFIG.colors.player;
         ctx.fillStyle = '#000';
-        ctx.strokeStyle = CONFIG.colors.player;
+        ctx.strokeStyle = HAZCONFIG.colors.player;
         ctx.lineWidth = 3;
         
         ctx.fill(SHAPES.player);
@@ -787,7 +782,7 @@ class Player {
 
     jump() {
         if (this.jumps > 0) {
-            this.dy = -CONFIG.jumpForce;
+            this.dy = -HAZCONFIG.jumpForce;
             this.jumps--;
             AudioSys.playSFX('jump');
         }
@@ -812,8 +807,8 @@ let gridOffset = 0;
 function drawBackground(dt) {
     // 1. Gradient Background
     let grad = ctx.createLinearGradient(0, 0, 0, height);
-    grad.addColorStop(0, CONFIG.colors.bgTop);
-    grad.addColorStop(1, CONFIG.colors.bgBottom);
+    grad.addColorStop(0, HAZCONFIG.colors.bgTop);
+    grad.addColorStop(1, HAZCONFIG.colors.bgBottom);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
 
@@ -868,7 +863,7 @@ let nextSpawn = 0;
 function resetGame() {
     state.distance = 0;
     state.score = 0;
-    state.speed = CONFIG.baseSpeed;
+    state.speed = HAZCONFIG.baseSpeed;
     state.cameraShake = 0;
     state.sessionCoins = 0;
     state.gameTime = 0;
@@ -894,18 +889,18 @@ function resetGame() {
 function update(dt) {
     state.gameTime += dt;
 
-    if (state.speed < CONFIG.maxSpeed) {
+    if (state.speed < HAZCONFIG.maxSpeed) {
         state.speed += (10 * dt);
     }
     
     // Audio Drone Update
-    AudioSys.updateDrone(state.speed / CONFIG.baseSpeed);
+    AudioSys.updateDrone(state.speed / HAZCONFIG.baseSpeed);
 
     state.distance += state.speed * dt;
     state.score = Math.floor(state.distance / 100);
 
     // Camera Shake
-    if (state.speed > CONFIG.maxSpeed * 0.8) {
+    if (state.speed > HAZCONFIG.maxSpeed * 0.8) {
         state.cameraShake = (Math.random() - 0.5) * 4;
     } else {
         state.cameraShake = 0;
@@ -928,7 +923,7 @@ function update(dt) {
     // UI Update
     document.getElementById('hudDist').innerText = Math.floor(state.distance / 100);
     document.getElementById('hudScore').innerText = state.score;
-    document.getElementById('hudSpeed').innerText = (state.speed / CONFIG.baseSpeed).toFixed(1);
+    document.getElementById('hudSpeed').innerText = (state.speed / HAZCONFIG.baseSpeed).toFixed(1);
 }
 
 function checkCollisions() {
@@ -955,7 +950,7 @@ function checkCollisions() {
 
 function checkMilestones() {
     const distM = Math.floor(state.distance / 100);
-    const speedM = state.speed / CONFIG.baseSpeed;
+    const speedM = state.speed / HAZCONFIG.baseSpeed;
 
     REWARDS.forEach(r => {
         if (state.sessionClaimedIds.has(r.id)) return;
@@ -1025,7 +1020,7 @@ function gameOver() {
     }
 
     document.getElementById('finalDist').innerText = finalDist + 'm';
-    document.getElementById('finalSpeed').innerText = (state.speed / CONFIG.baseSpeed).toFixed(1);
+    document.getElementById('finalSpeed').innerText = (state.speed / HAZCONFIG.baseSpeed).toFixed(1);
     document.getElementById('finalCoins').innerText = state.sessionCoins;
     
     const recordTag = document.getElementById('newRecordTag');
@@ -1100,7 +1095,7 @@ function togglePause() {
     } else if (state.screen === 'PAUSED') {
         state.screen = 'PLAYING';
         state.lastTime = performance.now(); 
-        AudioSys.updateDrone(state.speed / CONFIG.baseSpeed); // Restore audio
+        AudioSys.updateDrone(state.speed / HAZCONFIG.baseSpeed); // Restore audio
         toggleScreen(null);
     }
 }
@@ -1118,7 +1113,7 @@ document.getElementById('btnMute').addEventListener('click', () => {
     } else {
         on.style.display = 'block';
         off.style.display = 'none';
-        AudioSys.updateDrone(state.speed / CONFIG.baseSpeed);
+        AudioSys.updateDrone(state.speed / HAZCONFIG.baseSpeed);
     }
     AudioSys.playSFX('ui');
 });
@@ -1148,5 +1143,3 @@ requestAnimationFrame(loop);
 </script>
 </body>
 </html>
-
-
