@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Runner: Versión Final</title>
+    <title>Neon Runner: Versión Final (Fixed)</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
 
@@ -31,6 +31,7 @@
             display: block;
             width: 100vw;
             height: 100vh;
+            touch-action: none; /* Importante para prevenir zoom/scroll */
         }
 
         /* --- UI LAYOUT --- */
@@ -40,7 +41,8 @@
             left: 0;
             width: 100%;
             height: 100%;
-            pointer-events: none;
+            /* FIX 4.1: Permitimos interacciones en el layer, delegando bloqueo a .hidden */
+            pointer-events: auto; 
             display: flex;
             flex-direction: column;
             z-index: 10;
@@ -66,6 +68,14 @@
             opacity: 0 !important;
             pointer-events: none !important;
             transform: translate(-50%, -40%) scale(0.95) !important;
+        }
+
+        /* FIX: Definición de hidden-menu para el HUD */
+        .hidden-menu { 
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-8px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
         }
 
         /* --- TYPOGRAPHY --- */
@@ -117,6 +127,7 @@
             padding: 0 20px;
             box-sizing: border-box;
             background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            transition: opacity 0.3s ease;
         }
 
         .hud-group {
@@ -187,14 +198,21 @@
             position: relative;
             overflow: hidden;
             transition: all 0.2s;
-            clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
+            /* FIX: Eliminado clip-path complejo para mejor hit-testing en móviles, 
+               usando border-radius como fallback seguro */
+            border-radius: 6px; 
             pointer-events: auto;
+            touch-action: manipulation;
         }
 
         .btn-main:hover {
             background: var(--c-neon);
             color: #000;
             box-shadow: 0 0 30px var(--c-neon);
+        }
+
+        .btn-main:active {
+            transform: scale(0.95);
         }
 
         .btn-danger {
@@ -240,6 +258,7 @@
             align-items: flex-end;
             padding-right: 20px;
             gap: 10px;
+            pointer-events: none; /* Las notificaciones no deben bloquear clicks */
         }
 
         .toast {
@@ -341,7 +360,7 @@
 
         <div id="startScreen" class="screen">
             <h1 style="font-size: 4rem;">NEON<br>RUNNER</h1>
-            <div class="sub-label">SISTEMA SOBRECARGADO v1.1</div>
+            <div class="sub-label">SISTEMA SOBRECARGADO v1.2</div>
             <p style="font-size: 0.9rem; margin-top: 30px;">
                 TAP para Saltar // DOBLE TAP para Impulso Aéreo<br>
                 Evita las defensas del sistema
@@ -407,13 +426,13 @@
 <script>
 /**
  * ------------------------------------------------------------------
- * NEON RUNNER: GOLD MASTER 1.0.1
- * Optimization: Path2D, Object Pooling, Ambient Audio
+ * NEON RUNNER: GOLD MASTER 1.0.2 (HOTFIXED)
+ * Changes: Pointer Events, Milestone logic, Lazy Audio
  * ------------------------------------------------------------------
  */
 
 // --- CONFIGURACIÓN ---
-const HAZCONFIG = {
+const CONFIG = {
     baseSpeed: 400, 
     maxSpeed: 1200,
     gravity: 2000,
@@ -424,7 +443,7 @@ const HAZCONFIG = {
         obstacleGround: '#ff3333',
         obstacleAir: '#ffaa00',
         bgTop: '#000000',
-        bgBottom: '#050510' // Azul muy oscuro para el gradiente
+        bgBottom: '#050510'
     }
 };
 
@@ -434,15 +453,16 @@ const state = {
     isMuted: false,
     distance: 0,
     score: 0,
-    speed: HAZCONFIG.baseSpeed,
+    speed: CONFIG.baseSpeed,
     sessionCoins: 0, 
     lastTime: 0,
     cameraShake: 0,
-    gameTime: 0, // Tiempo acumulado para animaciones
+    gameTime: 0, 
     sessionClaimedIds: new Set()
 };
 
 // --- ECONOMÍA ---
+// Nota: val es en Metros (dist) o Multiplicador (speed)
 const REWARDS = [
     { type: 'dist', val: 500, coins: 5, id: 'nr_d_500' },
     { type: 'dist', val: 1000, coins: 10, id: 'nr_d_1000' },
@@ -454,8 +474,19 @@ const REWARDS = [
     { type: 'speed', val: 2.5, coins: 20, id: 'nr_s_25' }
 ];
 
-// --- SISTEMA DE AUDIO AVANZADO ---
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+// --- SISTEMA DE AUDIO AVANZADO (LAZY LOAD) ---
+let audioCtx = null; // Inicializar solo tras interacción
+
+function ensureAudioCtx() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    return audioCtx;
+}
+
 const AudioSys = {
     droneOsc: null,
     droneGain: null,
@@ -464,28 +495,28 @@ const AudioSys = {
 
     initDrone: () => {
         if (AudioSys.isInit) return;
+        const ctx = ensureAudioCtx();
+        
         // Drone oscilador principal
-        AudioSys.droneOsc = audioCtx.createOscillator();
+        AudioSys.droneOsc = ctx.createOscillator();
         AudioSys.droneOsc.type = 'sawtooth';
-        AudioSys.droneOsc.frequency.value = 55; // Bajo profundo
+        AudioSys.droneOsc.frequency.value = 55; 
 
-        // LFO para modular volumen (efecto respiración)
-        AudioSys.lfoOsc = audioCtx.createOscillator();
+        // LFO para modular volumen
+        AudioSys.lfoOsc = ctx.createOscillator();
         AudioSys.lfoOsc.type = 'sine';
-        AudioSys.lfoOsc.frequency.value = 0.2; // Muy lento
+        AudioSys.lfoOsc.frequency.value = 0.2; 
 
-        AudioSys.droneGain = audioCtx.createGain();
+        AudioSys.droneGain = ctx.createGain();
         AudioSys.droneGain.gain.value = 0.0;
 
-        // Conexiones
-        // LFO -> Gain param (modulación sutil)
-        const lfoGain = audioCtx.createGain();
+        const lfoGain = ctx.createGain();
         lfoGain.gain.value = 0.02; 
         AudioSys.lfoOsc.connect(lfoGain);
         lfoGain.connect(AudioSys.droneGain.gain);
 
         AudioSys.droneOsc.connect(AudioSys.droneGain);
-        AudioSys.droneGain.connect(audioCtx.destination);
+        AudioSys.droneGain.connect(ctx.destination);
 
         AudioSys.droneOsc.start();
         AudioSys.lfoOsc.start();
@@ -493,24 +524,24 @@ const AudioSys = {
     },
 
     updateDrone: (speedRatio) => {
-        if (!AudioSys.isInit || state.isMuted) return;
+        if (!AudioSys.isInit || state.isMuted || !audioCtx) return;
         
-        // Pitch sube con la velocidad
         const targetFreq = 55 + (speedRatio * 30);
         AudioSys.droneOsc.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.1);
 
-        // Volumen base sube con velocidad
         const targetVol = 0.03 + (speedRatio * 0.05);
         AudioSys.droneGain.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.1);
     },
 
     playSFX: (type) => {
-        if (state.isMuted || audioCtx.state === 'suspended') return;
-        const t = audioCtx.currentTime;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
+        if (state.isMuted) return;
+        const ctx = ensureAudioCtx();
+        
+        const t = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
         osc.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(ctx.destination);
 
         if (type === 'jump') {
             osc.type = 'triangle';
@@ -547,20 +578,18 @@ const AudioSys = {
     },
 
     stopAll: () => {
-        if(AudioSys.droneGain) AudioSys.droneGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.2);
+        if(AudioSys.droneGain && audioCtx) AudioSys.droneGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.2);
     }
 };
 
-// --- PRE-CALCULATED SHAPES (Path2D Optimization) ---
+// --- PRE-CALCULATED SHAPES ---
 const SHAPES = {
     player: new Path2D(),
     spike: new Path2D(),
     drone: new Path2D()
 };
 
-// Init Shapes
 (function initShapes(){
-    // Hex/Rhombus Player (Centered at 0,0, size ~30)
     let s = 30;
     SHAPES.player.moveTo(s, 0);
     SHAPES.player.lineTo(0, s);
@@ -568,17 +597,15 @@ const SHAPES = {
     SHAPES.player.lineTo(0, -s);
     SHAPES.player.closePath();
 
-    // Spike (Pointing Up, base width ~40, height ~50)
-    SHAPES.spike.moveTo(-20, 0); // Bottom Left relative to pivot
-    SHAPES.spike.lineTo(0, -50); // Tip
-    SHAPES.spike.lineTo(20, 0);  // Bottom Right
+    SHAPES.spike.moveTo(-20, 0); 
+    SHAPES.spike.lineTo(0, -50); 
+    SHAPES.spike.lineTo(20, 0);  
     SHAPES.spike.closePath();
 
-    // Drone (Diamond)
-    SHAPES.drone.moveTo(0, 20); // Bottom
-    SHAPES.drone.lineTo(20, 0); // Right
-    SHAPES.drone.lineTo(0, -20); // Top
-    SHAPES.drone.lineTo(-20, 0); // Left
+    SHAPES.drone.moveTo(0, 20); 
+    SHAPES.drone.lineTo(20, 0); 
+    SHAPES.drone.lineTo(0, -20); 
+    SHAPES.drone.lineTo(-20, 0); 
     SHAPES.drone.closePath();
 })();
 
@@ -591,7 +618,7 @@ let width, height, floorY;
 function resize() {
     width = canvas.width = window.innerWidth;
     height = canvas.height = window.innerHeight;
-    floorY = height - (height * HAZCONFIG.floorHeightPct);
+    floorY = height - (height * CONFIG.floorHeightPct);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -608,32 +635,31 @@ class ObstaclePool {
                 type: 'spike',
                 width: 40, height: 40,
                 color: '#fff',
-                rotation: 0 // For drones
+                rotation: 0
             });
         }
     }
 
     spawn(speed) {
         let obs = this.pool.find(o => !o.active);
-        if(!obs) return; // Pool empty (rare)
+        if(!obs) return;
 
         obs.active = true;
         obs.x = width + 50;
         obs.rotation = 0;
         
-        // Logic type
         obs.type = Math.random() > 0.4 ? 'spike' : 'drone';
 
         if (obs.type === 'spike') {
             obs.y = floorY;
-            obs.color = HAZCONFIG.colors.obstacleGround;
+            obs.color = CONFIG.colors.obstacleGround;
             obs.width = 40; 
             obs.height = 50;
         } else {
             obs.y = floorY - 90 - (Math.random() * 80); 
             obs.width = 40;
             obs.height = 40;
-            obs.color = HAZCONFIG.colors.obstacleAir;
+            obs.color = CONFIG.colors.obstacleAir;
         }
     }
 
@@ -644,21 +670,17 @@ class ObstaclePool {
             obs.x -= state.speed * dt;
             if (obs.x < -100) obs.active = false;
 
-            // Visual Logic
             let xOffset = 0;
             let yOffset = 0;
 
             if (obs.type === 'spike') {
-                // Vibrate if close to player
                 if (Math.abs(obs.x - playerX) < 200) {
                     xOffset = (Math.random() - 0.5) * 4;
                 }
             } else {
-                // Drone rotates
                 obs.rotation += 2 * dt;
             }
 
-            // Draw
             ctx.save();
             ctx.translate(obs.x + xOffset, obs.y + yOffset);
             
@@ -669,14 +691,12 @@ class ObstaclePool {
             ctx.shadowColor = obs.color;
 
             if (obs.type === 'spike') {
-                // Spike path is defined relative to bottom center
                 ctx.fill(SHAPES.spike);
                 ctx.stroke(SHAPES.spike);
             } else {
                 ctx.rotate(obs.rotation);
                 ctx.fill(SHAPES.drone);
                 ctx.stroke(SHAPES.drone);
-                // Inner blink
                 ctx.fillStyle = `rgba(255,255,255,${Math.sin(state.gameTime * 10) * 0.5 + 0.5})`;
                 ctx.fillRect(-2, -2, 4, 4);
             }
@@ -694,7 +714,7 @@ class ObstaclePool {
     }
 }
 
-const obstacles = new ObstaclePool(10); // 10 active max usually enough
+const obstacles = new ObstaclePool(10); 
 
 // --- PLAYER ---
 class Player {
@@ -710,11 +730,9 @@ class Player {
     }
 
     update(dt) {
-        // Physics
-        this.dy += HAZCONFIG.gravity * dt;
+        this.dy += CONFIG.gravity * dt;
         this.y += this.dy * dt;
 
-        // Ground
         if (this.y + this.size > floorY) {
             this.y = floorY - this.size;
             this.dy = 0;
@@ -724,12 +742,9 @@ class Player {
             this.rotation += 5 * dt;
         }
 
-        // Pulse Animation (Heartbeat of the core)
-        // Faster speed = Faster Pulse
-        let pulseSpeed = 5 + (state.speed / HAZCONFIG.baseSpeed) * 5;
+        let pulseSpeed = 5 + (state.speed / CONFIG.baseSpeed) * 5;
         this.pulse = Math.sin(state.gameTime * pulseSpeed) * 0.15;
 
-        // Trail
         if (state.screen === 'PLAYING') {
             this.trail.push({ x: this.x, y: this.y, rot: this.rotation });
             if (this.trail.length > 8) this.trail.shift();
@@ -737,7 +752,6 @@ class Player {
     }
 
     draw() {
-        // Trail
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         this.trail.forEach((t, i) => {
@@ -749,29 +763,26 @@ class Player {
             let s = 1.0 - ((this.trail.length - i) * 0.05);
             ctx.scale(s, s);
             ctx.stroke(SHAPES.player);
-            ctx.setTransform(1,0,0,1,0,0); // Reset transform
+            ctx.setTransform(1,0,0,1,0,0);
         });
         ctx.restore();
 
-        // Main Body
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate(this.rotation);
         
-        // Pulse Scale
         let s = 1 + this.pulse;
         ctx.scale(s, s);
 
-        ctx.shadowBlur = 15 + (this.pulse * 10); // Breathing glow
-        ctx.shadowColor = HAZCONFIG.colors.player;
+        ctx.shadowBlur = 15 + (this.pulse * 10); 
+        ctx.shadowColor = CONFIG.colors.player;
         ctx.fillStyle = '#000';
-        ctx.strokeStyle = HAZCONFIG.colors.player;
+        ctx.strokeStyle = CONFIG.colors.player;
         ctx.lineWidth = 3;
         
         ctx.fill(SHAPES.player);
         ctx.stroke(SHAPES.player);
 
-        // Core Center
         ctx.fillStyle = '#fff';
         ctx.beginPath();
         ctx.arc(0, 0, 5, 0, Math.PI*2);
@@ -782,56 +793,54 @@ class Player {
 
     jump() {
         if (this.jumps > 0) {
-            this.dy = -HAZCONFIG.jumpForce;
+            this.dy = -CONFIG.jumpForce;
             this.jumps--;
             AudioSys.playSFX('jump');
         }
     }
 }
 
-// --- BACKGROUND ---
+// --- BACKGROUND (Optimized: Alpha pre-calc) ---
 const stars = Array(40).fill().map(() => ({
     x: Math.random() * window.innerWidth,
     y: Math.random() * window.innerHeight,
     s: Math.random() * 2,
-    vx: Math.random() * 20 + 10
+    vx: Math.random() * 20 + 10,
+    a: 0.3 + Math.random() * 0.5 // Alpha fijo
 }));
-const farStars = Array(20).fill().map(() => ({ // Capa de profundidad
+const farStars = Array(20).fill().map(() => ({ 
     x: Math.random() * window.innerWidth,
     y: Math.random() * window.innerHeight,
     s: Math.random() * 1,
-    vx: Math.random() * 5 + 2 // Más lentas
+    vx: Math.random() * 5 + 2,
+    a: 0.4
 }));
 let gridOffset = 0;
 
 function drawBackground(dt) {
-    // 1. Gradient Background
     let grad = ctx.createLinearGradient(0, 0, 0, height);
-    grad.addColorStop(0, HAZCONFIG.colors.bgTop);
-    grad.addColorStop(1, HAZCONFIG.colors.bgBottom);
+    grad.addColorStop(0, CONFIG.colors.bgTop);
+    grad.addColorStop(1, CONFIG.colors.bgBottom);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
 
-    // 2. Far Stars
     ctx.fillStyle = '#aaa';
     farStars.forEach(st => {
         st.x -= (st.vx + state.speed * 0.01) * dt; 
         if(st.x < 0) st.x = width;
-        ctx.globalAlpha = 0.4;
+        ctx.globalAlpha = st.a;
         ctx.fillRect(st.x, st.y, st.s, st.s);
     });
 
-    // 3. Near Stars
     ctx.fillStyle = '#fff';
     stars.forEach(st => {
         st.x -= (st.vx + state.speed * 0.05) * dt;
         if (st.x < 0) st.x = width;
-        ctx.globalAlpha = Math.random() * 0.5 + 0.3;
+        ctx.globalAlpha = st.a;
         ctx.fillRect(st.x, st.y, st.s, st.s);
     });
     ctx.globalAlpha = 1.0;
 
-    // 4. Grid Floor
     gridOffset = (gridOffset + state.speed * dt) % 100;
     ctx.save();
     ctx.beginPath();
@@ -845,7 +854,6 @@ function drawBackground(dt) {
         ctx.lineTo(x - 300, height);
     }
     ctx.stroke();
-    // Horizontal perspective lines
     for (let i = 0; i < height - floorY; i += 40) {
         ctx.beginPath();
         ctx.moveTo(0, floorY + i);
@@ -863,24 +871,21 @@ let nextSpawn = 0;
 function resetGame() {
     state.distance = 0;
     state.score = 0;
-    state.speed = HAZCONFIG.baseSpeed;
+    state.speed = CONFIG.baseSpeed;
     state.cameraShake = 0;
     state.sessionCoins = 0;
     state.gameTime = 0;
     state.sessionClaimedIds.clear();
     
     player = new Player();
-    // Reset pool
     obstacles.pool.forEach(o => o.active = false);
     nextSpawn = 0;
 
-    // Reset UI
     document.getElementById('hudDist').innerText = '0';
     document.getElementById('hudScore').innerText = '0';
     document.getElementById('hudSpeed').innerText = '1.0';
     document.getElementById('notification-area').innerHTML = '';
     
-    // Hide stats cards for animation replay
     document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('visible'));
     
     AudioSys.initDrone();
@@ -889,18 +894,16 @@ function resetGame() {
 function update(dt) {
     state.gameTime += dt;
 
-    if (state.speed < HAZCONFIG.maxSpeed) {
+    if (state.speed < CONFIG.maxSpeed) {
         state.speed += (10 * dt);
     }
     
-    // Audio Drone Update
-    AudioSys.updateDrone(state.speed / HAZCONFIG.baseSpeed);
+    AudioSys.updateDrone(state.speed / CONFIG.baseSpeed);
 
     state.distance += state.speed * dt;
     state.score = Math.floor(state.distance / 100);
 
-    // Camera Shake
-    if (state.speed > HAZCONFIG.maxSpeed * 0.8) {
+    if (state.speed > CONFIG.maxSpeed * 0.8) {
         state.cameraShake = (Math.random() - 0.5) * 4;
     } else {
         state.cameraShake = 0;
@@ -908,7 +911,6 @@ function update(dt) {
 
     player.update(dt);
 
-    // Spawning
     nextSpawn -= (state.speed * dt);
     if (nextSpawn <= 0) {
         obstacles.spawn(state.speed);
@@ -916,14 +918,12 @@ function update(dt) {
         nextSpawn = safetyGap + Math.random() * 400;
     }
 
-    // Collision & Logic
     checkCollisions();
     checkMilestones();
 
-    // UI Update
     document.getElementById('hudDist').innerText = Math.floor(state.distance / 100);
     document.getElementById('hudScore').innerText = state.score;
-    document.getElementById('hudSpeed').innerText = (state.speed / HAZCONFIG.baseSpeed).toFixed(1);
+    document.getElementById('hudSpeed').innerText = (state.speed / CONFIG.baseSpeed).toFixed(1);
 }
 
 function checkCollisions() {
@@ -948,9 +948,11 @@ function checkCollisions() {
     }
 }
 
+// FIX 4.5: Lógica corregida para hitos
 function checkMilestones() {
-    const distM = Math.floor(state.distance / 100);
-    const speedM = state.speed / HAZCONFIG.baseSpeed;
+    // Usamos la misma unidad que el HUD: Metros
+    const distHUD = Math.floor(state.distance / 100);
+    const speedM = state.speed / CONFIG.baseSpeed;
 
     REWARDS.forEach(r => {
         if (state.sessionClaimedIds.has(r.id)) return;
@@ -959,14 +961,19 @@ function checkMilestones() {
         let title = "";
         let msg = "";
 
-        if (r.type === 'dist' && distM >= r.val) {
-            triggered = true;
-            title = "SECTOR DESPEJADO";
-            msg = `Alcanzados ${r.val}m`;
-        } else if (r.type === 'speed' && speedM >= r.val) {
-            triggered = true;
-            title = "VELOCIDAD CRÍTICA";
-            msg = `Aumento x${r.val}`;
+        if (r.type === 'dist') {
+            // Comparamos metros con metros
+            if (distHUD >= r.val) {
+                triggered = true;
+                title = "SECTOR DESPEJADO";
+                msg = `Alcanzados ${r.val}m`;
+            }
+        } else if (r.type === 'speed') {
+            if (speedM >= r.val) {
+                triggered = true;
+                title = "VELOCIDAD CRÍTICA";
+                msg = `Aumento x${r.val}`;
+            }
         }
 
         if (triggered) {
@@ -976,15 +983,19 @@ function checkMilestones() {
 }
 
 function awardCoin(id, coins, title, msg) {
-    state.sessionClaimedIds.add(id);
     state.sessionCoins += coins; 
-    
-    if (window.GameCenter && window.GameCenter.completeLevel) {
-        window.GameCenter.completeLevel('neonrunner', id, coins);
-    }
-    
     AudioSys.playSFX('milestone');
     showToast(title, msg, coins);
+    
+    // FIX 4.6: Safer GameCenter call
+    if (window.GameCenter && window.GameCenter.completeLevel) {
+        try {
+            window.GameCenter.completeLevel('neonrunner', id, coins);
+            state.sessionClaimedIds.add(id);
+        } catch(e) { console.warn('GC Sync fail', e); }
+    } else {
+        state.sessionClaimedIds.add(id);
+    }
 }
 
 function showToast(title, msg, coins) {
@@ -1020,7 +1031,7 @@ function gameOver() {
     }
 
     document.getElementById('finalDist').innerText = finalDist + 'm';
-    document.getElementById('finalSpeed').innerText = (state.speed / HAZCONFIG.baseSpeed).toFixed(1);
+    document.getElementById('finalSpeed').innerText = (state.speed / CONFIG.baseSpeed).toFixed(1);
     document.getElementById('finalCoins').innerText = state.sessionCoins;
     
     const recordTag = document.getElementById('newRecordTag');
@@ -1029,7 +1040,6 @@ function gameOver() {
 
     toggleScreen('gameOverScreen');
 
-    // Trigger stats animation
     setTimeout(() => {
         document.querySelectorAll('.stat-card').forEach(c => c.classList.add('visible'));
     }, 100);
@@ -1058,51 +1068,69 @@ function loop(timestamp) {
 
 function toggleScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
-    document.getElementById('hud-top').classList.remove('hidden-menu');
+    
+    // Manage HUD visibility via class
+    const hud = document.getElementById('hud-top');
+    if (screenId === 'startScreen' || screenId === 'gameOverScreen') {
+        hud.classList.add('hidden-menu');
+    } else {
+        hud.classList.remove('hidden-menu');
+    }
     
     const target = document.getElementById(screenId);
     if (target) target.classList.remove('hidden');
-
-    if (screenId === 'startScreen') document.getElementById('hud-top').classList.add('hidden-menu');
 }
 
-document.getElementById('btnStart').addEventListener('click', () => {
-    resetGame();
-    state.screen = 'PLAYING';
-    AudioSys.playSFX('ui');
-    if(audioCtx.state === 'suspended') audioCtx.resume();
-    toggleScreen(null);
-});
-
-document.getElementById('btnRetry').addEventListener('click', () => {
+// FIX 4.3 & 4.7: Handlers unificados y Pointer Events
+function handleStart() {
+    ensureAudioCtx(); // Inicializar audio aquí
     resetGame();
     state.screen = 'PLAYING';
     AudioSys.playSFX('ui');
     toggleScreen(null);
-});
+}
 
+// Bind buttons with pointerdown for immediate mobile response
+function bindBtn(id, cb) {
+    const el = document.getElementById(id);
+    if(el) {
+        el.addEventListener('pointerdown', (e) => { 
+            e.preventDefault(); 
+            cb(); 
+        });
+        el.addEventListener('click', (e) => {
+            e.preventDefault();
+            // Fallback (usually pointerdown catches it first)
+            if(state.screen !== 'PLAYING' && id === 'btnStart') cb();
+        });
+    }
+}
+
+bindBtn('btnStart', handleStart);
+bindBtn('btnRetry', handleStart);
+
+// Pause Logic
 function togglePause() {
     AudioSys.playSFX('ui');
     if (state.screen === 'PLAYING') {
         state.screen = 'PAUSED';
         AudioSys.stopAll();
-        
-        // Update Pause Stats
         document.getElementById('pauseDist').innerText = Math.floor(state.distance/100) + 'm';
         document.getElementById('pauseScore').innerText = state.score;
-
         toggleScreen('pauseOverlay');
     } else if (state.screen === 'PAUSED') {
         state.screen = 'PLAYING';
         state.lastTime = performance.now(); 
-        AudioSys.updateDrone(state.speed / HAZCONFIG.baseSpeed); // Restore audio
+        AudioSys.updateDrone(state.speed / CONFIG.baseSpeed);
         toggleScreen(null);
     }
 }
-document.getElementById('btnPause').addEventListener('click', togglePause);
-document.getElementById('btnResume').addEventListener('click', togglePause);
+bindBtn('btnPause', togglePause);
+bindBtn('btnResume', togglePause);
 
-document.getElementById('btnMute').addEventListener('click', () => {
+// Mute
+document.getElementById('btnMute').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
     state.isMuted = !state.isMuted;
     const on = document.getElementById('iconVolOn');
     const off = document.getElementById('iconVolOff');
@@ -1113,7 +1141,8 @@ document.getElementById('btnMute').addEventListener('click', () => {
     } else {
         on.style.display = 'block';
         off.style.display = 'none';
-        AudioSys.updateDrone(state.speed / HAZCONFIG.baseSpeed);
+        ensureAudioCtx();
+        AudioSys.updateDrone(state.speed / CONFIG.baseSpeed);
     }
     AudioSys.playSFX('ui');
 });
@@ -1124,17 +1153,29 @@ window.exitToArcade = function() {
 
 function handleAction(e) {
     if (state.screen === 'PLAYING') {
-        if (e.type === 'keydown' && e.code === 'Space') e.preventDefault();
+        // Prevent default only if necessary to avoid blocking UI clicks
+        // But for canvas, we want to stop scroll
+        if(e.type === 'touchstart' || e.type === 'pointerdown') {
+            // e.preventDefault(); // done in listener
+        }
         player.jump();
     }
 }
 
 window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' || e.code === 'ArrowUp') handleAction(e);
+    if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        handleAction(e);
+    }
     if (e.code === 'Escape') togglePause();
 });
-canvas.addEventListener('mousedown', handleAction);
-canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(e); }, {passive: false});
+
+// Canvas Interactions: Use pointerdown for unified touch/mouse support
+canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handleAction(e);
+}, {passive: false});
+
 
 // Init
 toggleScreen('startScreen');
