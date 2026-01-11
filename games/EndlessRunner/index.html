@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Runner: Versión Final (Fixed)</title>
+    <title>Neon Runner: Versión Final (Fixed Touch)</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
 
@@ -41,11 +41,17 @@
             left: 0;
             width: 100%;
             height: 100%;
-            /* FIX 4.1: Permitimos interacciones en el layer, delegando bloqueo a .hidden */
-            pointer-events: auto; 
+            /* FIX 4.1: UI layer no intercepta por defecto, eventos pasan al canvas */
+            pointer-events: none; 
             display: flex;
             flex-direction: column;
             z-index: 10;
+        }
+
+        /* FIX 4.1: Los elementos hijos interactivos capturan sus propios eventos */
+        .screen, .icon-btn, .btn-main, .btn-exit-text, .toast {
+            pointer-events: auto;
+            -webkit-tap-highlight-color: rgba(0,0,0,0);
         }
 
         .screen {
@@ -56,7 +62,6 @@
             width: 100%;
             max-width: 600px;
             text-align: center;
-            pointer-events: auto;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -70,7 +75,6 @@
             transform: translate(-50%, -40%) scale(0.95) !important;
         }
 
-        /* FIX: Definición de hidden-menu para el HUD */
         .hidden-menu { 
             opacity: 0;
             pointer-events: none;
@@ -171,7 +175,6 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            pointer-events: auto;
             transition: all 0.2s;
         }
 
@@ -198,10 +201,7 @@
             position: relative;
             overflow: hidden;
             transition: all 0.2s;
-            /* FIX: Eliminado clip-path complejo para mejor hit-testing en móviles, 
-               usando border-radius como fallback seguro */
             border-radius: 6px; 
-            pointer-events: auto;
             touch-action: manipulation;
         }
 
@@ -239,7 +239,6 @@
             letter-spacing: 1px;
             padding: 10px;
             transition: color 0.2s;
-            pointer-events: auto;
             display: flex;
             align-items: center;
             gap: 5px;
@@ -258,7 +257,7 @@
             align-items: flex-end;
             padding-right: 20px;
             gap: 10px;
-            pointer-events: none; /* Las notificaciones no deben bloquear clicks */
+            pointer-events: none; /* Las notificaciones no bloquean */
         }
 
         .toast {
@@ -360,7 +359,7 @@
 
         <div id="startScreen" class="screen">
             <h1 style="font-size: 4rem;">NEON<br>RUNNER</h1>
-            <div class="sub-label">SISTEMA SOBRECARGADO v1.2</div>
+            <div class="sub-label">SISTEMA SOBRECARGADO v1.3</div>
             <p style="font-size: 0.9rem; margin-top: 30px;">
                 TAP para Saltar // DOBLE TAP para Impulso Aéreo<br>
                 Evita las defensas del sistema
@@ -426,8 +425,8 @@
 <script>
 /**
  * ------------------------------------------------------------------
- * NEON RUNNER: GOLD MASTER 1.0.2 (HOTFIXED)
- * Changes: Pointer Events, Milestone logic, Lazy Audio
+ * NEON RUNNER: GOLD MASTER 1.0.3 (TOUCH FIXED)
+ * Changes: UI pointer-events, Canvas Touch Fallback, Safety Delegation
  * ------------------------------------------------------------------
  */
 
@@ -462,7 +461,6 @@ const state = {
 };
 
 // --- ECONOMÍA ---
-// Nota: val es en Metros (dist) o Multiplicador (speed)
 const REWARDS = [
     { type: 'dist', val: 500, coins: 5, id: 'nr_d_500' },
     { type: 'dist', val: 1000, coins: 10, id: 'nr_d_1000' },
@@ -475,7 +473,7 @@ const REWARDS = [
 ];
 
 // --- SISTEMA DE AUDIO AVANZADO (LAZY LOAD) ---
-let audioCtx = null; // Inicializar solo tras interacción
+let audioCtx = null; 
 
 function ensureAudioCtx() {
     if (!audioCtx) {
@@ -497,12 +495,10 @@ const AudioSys = {
         if (AudioSys.isInit) return;
         const ctx = ensureAudioCtx();
         
-        // Drone oscilador principal
         AudioSys.droneOsc = ctx.createOscillator();
         AudioSys.droneOsc.type = 'sawtooth';
         AudioSys.droneOsc.frequency.value = 55; 
 
-        // LFO para modular volumen
         AudioSys.lfoOsc = ctx.createOscillator();
         AudioSys.lfoOsc.type = 'sine';
         AudioSys.lfoOsc.frequency.value = 0.2; 
@@ -806,7 +802,7 @@ const stars = Array(40).fill().map(() => ({
     y: Math.random() * window.innerHeight,
     s: Math.random() * 2,
     vx: Math.random() * 20 + 10,
-    a: 0.3 + Math.random() * 0.5 // Alpha fijo
+    a: 0.3 + Math.random() * 0.5 
 }));
 const farStars = Array(20).fill().map(() => ({ 
     x: Math.random() * window.innerWidth,
@@ -948,9 +944,7 @@ function checkCollisions() {
     }
 }
 
-// FIX 4.5: Lógica corregida para hitos
 function checkMilestones() {
-    // Usamos la misma unidad que el HUD: Metros
     const distHUD = Math.floor(state.distance / 100);
     const speedM = state.speed / HAZCONFIG.baseSpeed;
 
@@ -962,7 +956,6 @@ function checkMilestones() {
         let msg = "";
 
         if (r.type === 'dist') {
-            // Comparamos metros con metros
             if (distHUD >= r.val) {
                 triggered = true;
                 title = "SECTOR DESPEJADO";
@@ -987,7 +980,6 @@ function awardCoin(id, coins, title, msg) {
     AudioSys.playSFX('milestone');
     showToast(title, msg, coins);
     
-    // FIX 4.6: Safer GameCenter call
     if (window.GameCenter && window.GameCenter.completeLevel) {
         try {
             window.GameCenter.completeLevel('neonrunner', id, coins);
@@ -1069,7 +1061,6 @@ function loop(timestamp) {
 function toggleScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
     
-    // Manage HUD visibility via class
     const hud = document.getElementById('hud-top');
     if (screenId === 'startScreen' || screenId === 'gameOverScreen') {
         hud.classList.add('hidden-menu');
@@ -1081,16 +1072,14 @@ function toggleScreen(screenId) {
     if (target) target.classList.remove('hidden');
 }
 
-// FIX 4.3 & 4.7: Handlers unificados y Pointer Events
 function handleStart() {
-    ensureAudioCtx(); // Inicializar audio aquí
+    ensureAudioCtx();
     resetGame();
     state.screen = 'PLAYING';
     AudioSys.playSFX('ui');
     toggleScreen(null);
 }
 
-// Bind buttons with pointerdown for immediate mobile response
 function bindBtn(id, cb) {
     const el = document.getElementById(id);
     if(el) {
@@ -1100,7 +1089,6 @@ function bindBtn(id, cb) {
         });
         el.addEventListener('click', (e) => {
             e.preventDefault();
-            // Fallback (usually pointerdown catches it first)
             if(state.screen !== 'PLAYING' && id === 'btnStart') cb();
         });
     }
@@ -1109,7 +1097,6 @@ function bindBtn(id, cb) {
 bindBtn('btnStart', handleStart);
 bindBtn('btnRetry', handleStart);
 
-// Pause Logic
 function togglePause() {
     AudioSys.playSFX('ui');
     if (state.screen === 'PLAYING') {
@@ -1128,7 +1115,6 @@ function togglePause() {
 bindBtn('btnPause', togglePause);
 bindBtn('btnResume', togglePause);
 
-// Mute
 document.getElementById('btnMute').addEventListener('pointerdown', (e) => {
     e.preventDefault();
     state.isMuted = !state.isMuted;
@@ -1153,11 +1139,8 @@ window.exitToArcade = function() {
 
 function handleAction(e) {
     if (state.screen === 'PLAYING') {
-        // Prevent default only if necessary to avoid blocking UI clicks
-        // But for canvas, we want to stop scroll
-        if(e.type === 'touchstart' || e.type === 'pointerdown') {
-            // e.preventDefault(); // done in listener
-        }
+        // Safe to prevent default here as we handle logic
+        if(e.cancelable) e.preventDefault(); 
         player.jump();
     }
 }
@@ -1170,10 +1153,30 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Escape') togglePause();
 });
 
-// Canvas Interactions: Use pointerdown for unified touch/mouse support
-canvas.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
+// FIX 4.3: Fallback masivo para eventos de canvas
+function canvasPointerHandler(e) {
+    // Si no es un botón de UI, saltar
     handleAction(e);
+}
+canvas.addEventListener('pointerdown', canvasPointerHandler, {passive:false});
+canvas.addEventListener('touchstart', canvasPointerHandler, {passive:false});
+canvas.addEventListener('mousedown', canvasPointerHandler);
+
+
+// FIX 4.2: SAFETY NET - Delegación en el UI Layer
+// Si el usuario toca "la nada" en la capa UI (donde no hay botón), pasa el evento al juego.
+const uiLayer = document.getElementById('uiLayer');
+uiLayer.addEventListener('touchstart', (ev) => {
+    const tgt = ev.target;
+    // Si tocó un botón o pantalla interactiva, no hacer nada (dejar que el botón actúe)
+    if (tgt.closest && tgt.closest('.btn-main, .icon-btn, .screen, .btn-exit-text, .toast')) {
+        return;
+    }
+    // Si tocó fondo vacío y el juego corre, saltar
+    if (state.screen === 'PLAYING') {
+        if(ev.cancelable) ev.preventDefault();
+        handleAction(ev);
+    }
 }, {passive: false});
 
 
