@@ -267,3 +267,25 @@ details[open] summary::after { transform: rotate(45deg); }
     .container { padding: 20px; }
     .shop-hero { flex-direction: column; gap: 20px; text-align: center; }
 }
+
+/* Ajuste para el input de promos */
+.promo-input-group {
+    display: flex;
+    gap: 10px;
+}
+
+#promo-input:focus {
+    border-color: var(--accent) !important;
+    background: rgba(155, 89, 255, 0.05) !important;
+}
+
+@media (max-width: 480px) {
+    .promo-input-group {
+        flex-direction: column;
+    }
+    #btn-redeem {
+        width: 100%;
+        justify-content: center;
+        padding: 14px;
+    }
+}
