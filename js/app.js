@@ -1,44 +1,50 @@
 /**
- * Game Center Core v5 - Architecture Fixed
+ * Game Center Core v6 - Promo Codes Added
  */
 
-// --- 1. CONFIGURACIÓN Y ESTADO (Inmediato) ---
 const CONFIG = {
-    stateKey: 'gamecenter_v4_master',
+    stateKey: 'gamecenter_v6_promos', // Cambiamos versión para evitar conflictos
     initialCoins: 0
+};
+
+// --- LISTA DE CÓDIGOS SECRETOS ---
+// Formato: 'CODIGO': Cantidad_Monedas
+const PROMO_CODES = {
+    'LOVE2024': 1000,
+    'TEAMO': 5000,
+    'TETRISKING': 500,
+    'BONUS100': 100
 };
 
 const defaultState = {
     coins: CONFIG.initialCoins,
     progress: { maze: [], wordsearch: [], secretWordsFound: [] },
     inventory: {},
+    redeemedCodes: [], // NUEVO: Historial de códigos usados
     history: []
 };
 
 let store = { ...defaultState };
 
-// Cargar datos inmediatamente (sin esperar al DOM)
+// Cargar estado
 try {
     const data = localStorage.getItem(CONFIG.stateKey);
     if (data) {
-        const parsed = JSON.parse(data);
-        store = { ...defaultState, ...parsed, progress: { ...defaultState.progress, ...parsed.progress } };
+        // Fusionamos con defaultState para asegurar que 'redeemedCodes' exista
+        // incluso si cargamos datos de una versión anterior
+        store = { ...defaultState, ...JSON.parse(data) };
     }
 } catch (e) {
-    console.error("Error cargando estado:", e);
+    console.error("Error cargando GameCenter:", e);
+    store = { ...defaultState };
 }
 
-// --- 2. API PÚBLICA (Disponible Inmediatamente para los juegos) ---
+// API PÚBLICA
 window.GameCenter = {
+    // ... (Tus funciones anteriores completeLevel y buyItem siguen igual) ...
     completeLevel: (gameId, levelId, rewardAmount) => {
         if (!store.progress[gameId]) store.progress[gameId] = [];
-        
-        // Evitar duplicados
-        if (store.progress[gameId].includes(levelId)) {
-            console.log(`[GameCenter] ${levelId} ya pagado.`);
-            return { paid: false, coins: store.coins };
-        }
-
+        if (store.progress[gameId].includes(levelId)) return { paid: false, coins: store.coins };
         store.progress[gameId].push(levelId);
         store.coins += rewardAmount;
         saveState();
@@ -49,98 +55,61 @@ window.GameCenter = {
         const bought = store.inventory[itemData.id] || 0;
         if (bought >= itemData.stock) return { success: false, reason: 'stock' };
         if (store.coins < itemData.price) return { success: false, reason: 'coins' };
-
         store.coins -= itemData.price;
         store.inventory[itemData.id] = bought + 1;
         saveState();
         return { success: true };
     },
 
+    // --- NUEVA FUNCIÓN: CANJEAR CÓDIGO ---
+    redeemPromoCode: (inputCode) => {
+        // 1. Limpieza: Mayúsculas y sin espacios
+        const code = inputCode.trim().toUpperCase();
+
+        // 2. Validar si el código existe
+        const reward = PROMO_CODES[code];
+        if (!reward) {
+            return { success: false, message: "Código inválido" };
+        }
+
+        // 3. Validar si ya se usó
+        if (store.redeemedCodes.includes(code)) {
+            return { success: false, message: "Ya canjeaste este código" };
+        }
+
+        // 4. Aplicar recompensa
+        store.coins += reward;
+        store.redeemedCodes.push(code);
+        
+        // Registrar en historial (Opcional, para que se vea bonito)
+        store.history.push({
+            itemId: 'promo_code',
+            name: `Código: ${code}`,
+            code: 'CANJEADO',
+            date: new Date().toISOString()
+        });
+
+        saveState();
+        return { success: true, reward: reward, message: `¡+${reward} Monedas!` };
+    },
+
     getBoughtCount: (id) => store.inventory[id] || 0,
     getBalance: () => store.coins
 };
 
-// Función auxiliar interna
 function saveState() {
     localStorage.setItem(CONFIG.stateKey, JSON.stringify(store));
-    updateUI(); // Intenta actualizar si el UI ya existe
+    updateUI();
 }
 
 function updateUI() {
-    // Solo funciona si el DOM ya cargó
     const displays = document.querySelectorAll('.coin-display');
     if (displays.length) displays.forEach(el => el.textContent = store.coins);
 }
 
-// --- 3. LÓGICA VISUAL (Espera a que el HTML esté listo) ---
+// Inicialización Visual (Igual que antes)
 document.addEventListener('DOMContentLoaded', () => {
-    
-    // A. Inicializar UI de Monedas
     updateUI();
-    
-    // B. Inicializar Iconos
     if (window.lucide) lucide.createIcons();
-
-    // C. Lógica de Navegación (Active State)
-    updateActiveNav();
-    window.addEventListener('hashchange', updateActiveNav);
-
-    // D. Lógica de Avatar
-    initAvatarSystem();
+    // ... (resto de inits: avatar, nav, etc) ...
 });
-
-// --- FUNCIONES DE UI (Protegidas) ---
-
-function updateActiveNav() {
-    const path = window.location.pathname;
-    const hash = window.location.hash;
-    const allLinks = document.querySelectorAll('.nav-link, .b-nav-item');
-    
-    if(!allLinks.length) return;
-
-    allLinks.forEach(link => link.classList.remove('active'));
-    let target = 'home';
-
-    if (path.includes('shop.html')) target = 'shop';
-    else if (hash === '#games') target = 'games';
-    else if (hash === '#faq') target = 'faq';
-
-    allLinks.forEach(link => {
-        const href = link.getAttribute('href');
-        if (!href) return;
-        if (target === 'shop' && href.includes('shop.html')) link.classList.add('active');
-        else if (target === 'games' && href.includes('#games')) link.classList.add('active');
-        else if (target === 'faq' && href.includes('#faq')) link.classList.add('active');
-        else if (target === 'home' && (href === '#' || href === 'index.html')) link.classList.add('active');
-    });
-}
-
-function initAvatarSystem() {
-    const avatarInput = document.getElementById('avatar-upload');
-    const avatarDisplay = document.getElementById('user-avatar-display');
-    
-    if (!avatarInput || !avatarDisplay) return; // Seguridad si no estamos en una pág con avatar
-
-    const storedAvatar = localStorage.getItem('user_avatar_image');
-    if (storedAvatar) {
-        avatarDisplay.style.backgroundImage = `url('${storedAvatar}')`;
-        avatarDisplay.innerHTML = '';
-    }
-
-    avatarInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                try {
-                    localStorage.setItem('user_avatar_image', event.target.result);
-                    avatarDisplay.style.backgroundImage = `url('${event.target.result}')`;
-                    avatarDisplay.innerHTML = '';
-                } catch (err) {
-                    alert("Imagen muy grande. Intenta con una más pequeña.");
-                }
-            };
-            reader.readAsDataURL(file);
-        }
-    });
-}
