@@ -17,8 +17,8 @@
         <div class="nav-user">
             <a href="index.html" class="btn-ghost">Volver</a>
             <div class="coin-badge">
-                <i data-lucide="star" size="16" fill="#facc15" color="#facc15"></i>
-                <span class="coin-display">Cargando...</span>
+                <i data-lucide="star" size="16" fill="#facc15"></i>
+                <span class="coin-display">...</span>
             </div>
         </div>
     </nav>
@@ -29,214 +29,153 @@
             <div>
                 <span class="section-subtitle">Balance Disponible</span>
                 <div class="shop-balance">
-                    <h2>
-                        <i data-lucide="star" size="32" fill="#facc15" color="#facc15"></i> 
-                        <span class="coin-display">0</span>
-                    </h2>
+                    <h2><i data-lucide="star" size="32" fill="#facc15"></i> <span class="coin-display">0</span></h2>
                 </div>
             </div>
             <div>
-                <p style="color:var(--text-med, #94a3b8); max-width: 300px; text-align:right;">
+                <p style="color:var(--text-med); max-width: 300px; text-align:right;">
                     Canjea tus monedas ganadas en los juegos por recompensas reales.
                 </p>
             </div>
         </section>
 
-        <section class="glass-panel" style="margin-top: 20px; padding: 20px; border: 1px dashed rgba(255,255,255,0.2);">
-            <h3 style="margin-top:0; color: #facc15; display: flex; align-items: center; gap: 10px;">
-                <i data-lucide="gift" size="20"></i> Código Secreto
-            </h3>
+        <section class="glass-panel" style="margin-bottom: 2rem; padding: 1.5rem;">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:1rem;">
+                <i data-lucide="gift" color="#facc15"></i>
+                <h3 style="margin:0; font-size:1.1rem;">Código Promocional</h3>
+            </div>
+            
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <input type="text" id="promo-input" placeholder="Introduce tu código (Ej: LOVE2024)..." 
-                       style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; outline: none;">
+                <input type="text" id="promo-input" placeholder="Introduce tu código..." 
+                       style="flex: 1; min-width: 200px; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; outline: none;">
                 
-                <button id="btn-redeem" 
-                        style="padding: 12px 25px; border-radius: 8px; border: none; background: #facc15; color: black; font-weight: bold; cursor: pointer; transition: transform 0.2s;">
+                <button id="btn-redeem" class="btn-primary" style="padding: 0 20px;">
                     Canjear
                 </button>
             </div>
-            <p id="promo-msg" style="margin: 10px 0 0 0; font-size: 0.9rem; min-height: 20px; font-weight: 500;"></p>
+            <p id="promo-msg" style="margin-top: 10px; font-size: 0.9rem; min-height: 1.2rem;"></p>
         </section>
 
-        <div id="shop-grid" class="shop-grid" style="margin-top: 30px;">
+        <section>
+            <div class="section-header">
+                <h2 class="section-title">Catálogo de Premios</h2>
             </div>
+
+            <div id="shop-container" class="shop-grid">
+                <p style="color:var(--text-med)">Cargando inventario...</p>
+            </div>
+        </section>
 
     </main>
 
     <script src="js/app.js"></script>
-
     <script>
-        // --- CONFIGURACIÓN DE PRODUCTOS ---
-        const items = [
-            {
-                id: 'item_valecita',
-                name: 'Vale por una Cita',
-                price: 500,
-                image: 'assets/ticket.png', // Asegúrate de tener esta imagen o usa un placeholder
-                stock: 5
-            },
-            {
-                id: 'item_masaje',
-                name: 'Masaje de 20min',
-                price: 1200,
-                image: 'assets/massage.png',
-                stock: 3
-            },
-            {
-                id: 'item_beso',
-                name: 'Beso Sorpresa',
-                price: 150,
-                image: 'assets/kiss.png',
-                stock: 99
-            },
-            {
-                id: 'item_cena',
-                name: 'Cena Casera',
-                price: 3000,
-                image: 'assets/dinner.png',
-                stock: 1
-            }
-        ];
-
-        // --- INICIALIZACIÓN ---
         document.addEventListener('DOMContentLoaded', () => {
-            renderShop();
-            if (window.lucide) lucide.createIcons();
-            
-            // Actualizar saldo visual inicial
-            if(window.GameCenter) {
-                updateCoinDisplay(GameCenter.getBalance());
-            }
+            // Carga original de datos
+            fetch('data/shop.json')
+                .then(res => res.json())
+                .then(items => renderShop(items))
+                .catch(err => console.log(err));
+
+            // Escuchar el botón de canje (NUEVO)
+            document.getElementById('btn-redeem').addEventListener('click', handleRedeem);
         });
 
-        // Función auxiliar para actualizar todas las monedas en pantalla
-        function updateCoinDisplay(amount) {
-            document.querySelectorAll('.coin-display').forEach(el => el.textContent = amount);
+        // --- LÓGICA DE CÓDIGOS (NUEVA) ---
+        function handleRedeem() {
+            const input = document.getElementById('promo-input');
+            const msg = document.getElementById('promo-msg');
+            const code = input.value;
+
+            if(!code) return;
+
+            // Verificación de seguridad
+            if (!window.GameCenter || !window.GameCenter.redeemPromoCode) {
+                msg.style.color = '#ef4444';
+                msg.innerText = "Error: Actualiza app.js para usar esta función.";
+                return;
+            }
+
+            const result = window.GameCenter.redeemPromoCode(code);
+
+            if (result.success) {
+                msg.style.color = '#4ade80'; // Verde
+                msg.innerText = result.message;
+                input.value = '';
+                
+                // Actualizar todas las visualizaciones de monedas sin recargar
+                document.querySelectorAll('.coin-display').forEach(el => {
+                    el.textContent = GameCenter.getBalance();
+                });
+            } else {
+                msg.style.color = '#ef4444'; // Rojo
+                msg.innerText = result.message;
+            }
         }
 
-        // --- LÓGICA DE CÓDIGOS PROMOCIONALES ---
-        const btnRedeem = document.getElementById('btn-redeem');
-        if(btnRedeem) {
-            btnRedeem.addEventListener('click', () => {
-                const input = document.getElementById('promo-input');
-                const msg = document.getElementById('promo-msg');
-                const code = input.value;
-
-                if(!code) return;
-
-                // Verificación de seguridad
-                if (!window.GameCenter || !window.GameCenter.redeemPromoCode) {
-                    msg.style.color = '#ef4444';
-                    msg.innerText = "Error: Actualiza app.js para usar esta función.";
-                    return;
-                }
-
-                const result = window.GameCenter.redeemPromoCode(code);
-
-                if (result.success) {
-                    msg.style.color = '#4ade80'; // Verde Éxito
-                    msg.innerText = result.message;
-                    input.value = '';
-                    
-                    // Actualizar saldo visualmente al instante
-                    updateCoinDisplay(window.GameCenter.getBalance());
-                    
-                    // Recargar la tienda para actualizar botones de compra si ahora alcanzan las monedas
-                    setTimeout(() => renderShop(), 500); 
-                } else {
-                    msg.style.color = '#ef4444'; // Rojo Error
-                    msg.innerText = result.message;
-                    
-                    // Animación simple de error
-                    input.style.border = '1px solid #ef4444';
-                    setTimeout(() => input.style.border = '1px solid rgba(255,255,255,0.1)', 500);
-                }
-            });
-        }
-
-        // --- RENDERIZADO DE TIENDA ---
-        function renderShop() {
-            const container = document.getElementById('shop-grid');
+        // --- LÓGICA ORIGINAL DEL CATÁLOGO ---
+        function renderShop(items) {
+            const container = document.getElementById('shop-container');
             container.innerHTML = '';
-
+            
             items.forEach(item => {
-                // Calcular stock real
-                const bought = window.GameCenter ? GameCenter.getBoughtCount(item.id) : 0;
+                // Cálculo de stock
+                const bought = GameCenter.getBoughtCount(item.id);
                 const remaining = item.stock - bought;
                 const isSoldOut = remaining <= 0;
-                
-                // Chequeo visual de saldo para deshabilitar botón si no alcanza
-                const currentCoins = window.GameCenter ? GameCenter.getBalance() : 0;
-                const canAfford = currentCoins >= item.price;
 
-                const card = document.createElement('div');
-                card.className = 'shop-card glass-panel';
+                const card = document.createElement('article');
+                card.className = 'glass-panel shop-card';
                 card.innerHTML = `
-                    <div class="card-img-placeholder">
-                        ${item.image.includes('.png') ? 
-                            `<div style="width:100%; height:120px; background:#2a2a2a; display:flex; align-items:center; justify-content:center; color:#555;">IMG</div>` : 
-                            `<img src="${item.image}" alt="${item.name}">`
-                        }
-                    </div>
-                    <div class="card-content">
-                        <h3>${item.name}</h3>
-                        <p class="stock-label">Disponibles: ${remaining}/${item.stock}</p>
-                        <div class="price-tag">
-                            <i data-lucide="star" size="16" fill="#facc15" color="#facc15"></i>
-                            ${item.price}
+                    <img src="${item.image}" alt="${item.name}" class="shop-img">
+                    <div style="width:100%">
+                        <h3 style="font-size:1.1rem; margin-bottom:5px;">${item.name}</h3>
+                        <p style="font-size:0.85rem; color:var(--text-med); height:40px; overflow:hidden;">${item.desc}</p>
+                        
+                        <div class="shop-price">
+                            <i data-lucide="star" size="16" fill="#facc15"></i> ${item.price}
                         </div>
-                        <button class="btn-buy" 
-                            style="${isSoldOut ? 'opacity:0.5; cursor:not-allowed; background:#333;' : (canAfford ? '' : 'opacity:0.8;')}"
-                            ${isSoldOut ? 'disabled' : ''}
+
+                        <div style="margin: 10px 0;">
+                            ${isSoldOut 
+                                ? '<span style="color:#ef4444; font-weight:bold; font-size:0.8rem;">AGOTADO</span>' 
+                                : `<span style="color:var(--text-low); font-size:0.8rem;">Disponibles: ${remaining}</span>`
+                            }
+                        </div>
+
+                        <button 
+                            class="btn-primary" 
+                            style="width:100%; justify-content:center; ${isSoldOut ? 'opacity:0.5; pointer-events:none;' : ''}"
                             onclick='initiatePurchase(${JSON.stringify(item)})'>
-                            ${isSoldOut ? 'Agotado' : 'Canjear'}
+                            ${isSoldOut ? 'Sin Stock' : 'Canjear'}
                         </button>
                     </div>
                 `;
                 container.appendChild(card);
             });
-            if (window.lucide) lucide.createIcons();
+            if(window.lucide) lucide.createIcons();
         }
 
-        // --- PROCESO DE COMPRA ---
         function initiatePurchase(item) {
-            if (!window.GameCenter) return;
-
             const bought = GameCenter.getBoughtCount(item.id);
-            
-            // Validación doble (Frontend)
-            if((item.stock - bought) <= 0) {
-                alert("Lo siento, este producto está agotado.");
-                return;
-            }
+            if((item.stock - bought) <= 0) return;
 
             if(!confirm(`¿Canjear "${item.name}" por ${item.price} monedas?`)) return;
 
-            // Llamada al Núcleo
             const result = GameCenter.buyItem(item);
 
             if(result.success) {
-                // Generar Email
-                const subject = encodeURIComponent(`Canje Love Arcade: ${item.name}`);
+                const subject = encodeURIComponent(`Canje: ${item.name}`);
                 const body = encodeURIComponent(
-                    `¡Hola! He canjeado: ${item.name}.\n\n` +
-                    `Código de seguridad: ${Math.random().toString(36).substring(7).toUpperCase()}\n` +
-                    `Fecha: ${new Date().toLocaleString()}\n\n` +
-                    `Por favor confirma recepción.`
+                    `Hola! He canjeado: ${item.name}.\nCódigo: ${Math.random().toString(36).substring(7).toUpperCase()}\nFecha: ${new Date().toLocaleString()}`
                 );
                 
-                // NOTA: Reemplaza con tu correo real abajo
                 window.location.href = `mailto:lilithmorningstar468@gmail.com?subject=${subject}&body=${body}`;
-                
-                alert("¡Canje exitoso! Se abrirá tu correo para enviar el comprobante.");
-                
-                // Actualizar interfaz
-                updateCoinDisplay(GameCenter.getBalance());
-                renderShop();
-                
+                alert("¡Canje exitoso!");
+                location.reload();
             } else {
-                if(result.reason === 'coins') alert("No tienes suficientes monedas para este regalo.");
-                if(result.reason === 'stock') alert("¡Producto agotado justo ahora!");
+                if(result.reason === 'coins') alert("No tienes suficientes monedas.");
+                if(result.reason === 'stock') alert("¡Producto agotado!");
             }
         }
     </script>
