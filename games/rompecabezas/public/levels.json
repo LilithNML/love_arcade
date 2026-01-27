@@ -13,7 +13,7 @@
     "image": "./assets/Nivel2.webp",
     "thumbnail": "./assets/thumbnails/Nivel2_thumb.webp",
     "pieces": 9,
-    "rewardCoins": 40,
+    "rewardCoins": 45,
     "description": "Primer desafío",
     "timeLimit": 0
   },
@@ -22,7 +22,7 @@
     "image": "./assets/Nivel3.webp",
     "thumbnail": "./assets/thumbnails/Nivel3_thumb.webp",
     "pieces": 9,
-    "rewardCoins": 70,
+    "rewardCoins": 45,
     "description": "Un poco más complejo",
     "timeLimit": 0
   },
@@ -31,7 +31,7 @@
     "image": "./assets/Nivel4.webp",
     "thumbnail": "./assets/thumbnails/Nivel4_thumb.webp",
     "pieces": 16,
-    "rewardCoins": 100,
+    "rewardCoins": 80,
     "description": "Atención al detalle",
     "timeLimit": 240
   },
@@ -40,7 +40,7 @@
     "image": "./assets/Nivel5.webp",
     "thumbnail": "./assets/thumbnails/Nivel5_thumb.webp",
     "pieces": 16,
-    "rewardCoins": 140,
+    "rewardCoins": 80,
     "description": "Dificultad media",
     "timeLimit": 240
   },
@@ -49,7 +49,7 @@
     "image": "./assets/Nivel6.webp",
     "thumbnail": "./assets/thumbnails/Nivel6_thumb.webp",
     "pieces": 25,
-    "rewardCoins": 180,
+    "rewardCoins": 125,
     "description": "Empieza el reto",
     "timeLimit": 375
   },
@@ -58,7 +58,7 @@
     "image": "./assets/Nivel7.webp",
     "thumbnail": "./assets/thumbnails/Nivel7_thumb.webp",
     "pieces": 25,
-    "rewardCoins": 220,
+    "rewardCoins": 125,
     "description": "Nivel avanzado",
     "timeLimit": 375
   },
@@ -67,7 +67,7 @@
     "image": "./assets/Nivel8.webp",
     "thumbnail": "./assets/thumbnails/Nivel8_thumb.webp",
     "pieces": 36,
-    "rewardCoins": 250,
+    "rewardCoins": 180,
     "description": "Alta concentración",
     "timeLimit": 540
   },
@@ -76,7 +76,7 @@
     "image": "./assets/Nivel9.webp",
     "thumbnail": "./assets/thumbnails/Nivel9_thumb.webp",
     "pieces": 36,
-    "rewardCoins": 280,
+    "rewardCoins": 180,
     "description": "Desafío experto",
     "timeLimit": 540
   },
@@ -85,7 +85,7 @@
     "image": "./assets/Nivel10.webp",
     "thumbnail": "./assets/thumbnails/Nivel10_thumb.webp",
     "pieces": 49,
-    "rewardCoins": 300,
+    "rewardCoins": 245,
     "description": "Reto final",
     "timeLimit": 735
   },
@@ -94,7 +94,7 @@
     "image": "./assets/Nivel11.webp",
     "thumbnail": "./assets/thumbnails/Nivel11_thumb.webp",
     "pieces": 36,
-    "rewardCoins": 210,
+    "rewardCoins": 180,
     "description": "Precisión y paciencia",
     "timeLimit": 540
   },
@@ -103,7 +103,7 @@
     "image": "./assets/Nivel12.webp",
     "thumbnail": "./assets/thumbnails/Nivel12_thumb.webp",
     "pieces": 36,
-    "rewardCoins": 1,
+    "rewardCoins": 180,
     "description": "Nada garantizado",
     "timeLimit": 540
   },
@@ -112,7 +112,7 @@
     "image": "./assets/Nivel13.webp",
     "thumbnail": "./assets/thumbnails/Nivel13_thumb.webp",
     "pieces": 49,
-    "rewardCoins": 260,
+    "rewardCoins": 245,
     "description": "El doble golpe",
     "timeLimit": 735
   },
@@ -121,7 +121,7 @@
     "image": "./assets/Nivel14.webp",
     "thumbnail": "./assets/thumbnails/Nivel14_thumb.webp",
     "pieces": 36,
-    "rewardCoins": 200,
+    "rewardCoins": 180,
     "description": "Constancia silenciosa",
     "timeLimit": 540
   },
@@ -130,7 +130,7 @@
     "image": "./assets/Nivel15.webp",
     "thumbnail": "./assets/thumbnails/Nivel15_thumb.webp",
     "pieces": 49,
-    "rewardCoins": 300,
+    "rewardCoins": 245,
     "description": "Recompensa máxima",
     "timeLimit": 735
   },
@@ -139,7 +139,7 @@
     "image": "./assets/Nivel16.webp",
     "thumbnail": "./assets/thumbnails/Nivel16_thumb.webp",
     "pieces": 49,
-    "rewardCoins": 5,
+    "rewardCoins": 245,
     "description": "El engaño",
     "timeLimit": 735
   },
@@ -148,7 +148,7 @@
     "image": "./assets/Nivel17.webp",
     "thumbnail": "./assets/thumbnails/Nivel17_thumb.webp",
     "pieces": 36,
-    "rewardCoins": 250,
+    "rewardCoins": 180,
     "description": "Rebote inesperado",
     "timeLimit": 540
   },
@@ -157,7 +157,7 @@
     "image": "./assets/Nivel18.webp",
     "thumbnail": "./assets/thumbnails/Nivel18_thumb.webp",
     "pieces": 49,
-    "rewardCoins": 200,
+    "rewardCoins": 245,
     "description": "Nada fácil",
     "timeLimit": 735
   },
@@ -166,7 +166,7 @@
     "image": "./assets/Nivel19.webp",
     "thumbnail": "./assets/thumbnails/Nivel19_thumb.webp",
     "pieces": 49,
-    "rewardCoins": 290,
+    "rewardCoins": 245,
     "description": "Casi todo",
     "timeLimit": 735
   },
@@ -175,7 +175,7 @@
     "image": "./assets/Nivel20.webp",
     "thumbnail": "./assets/thumbnails/Nivel20_thumb.webp",
     "pieces": 64,
-    "rewardCoins": 300,
+    "rewardCoins": 320,
     "description": "El cierre perfecto",
     "timeLimit": 960
   }
