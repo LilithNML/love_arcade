@@ -507,10 +507,10 @@
             }
 
             win() {
-                const res = window.GameCenter.completeLevel('wordsearch', this.state.lvl, 50);
+                const res = window.GameCenter.completeLevel('wordsearch', this.state.lvl, 60);
                 document.getElementById('win-msg').innerHTML = 
                     `${LEVELS[this.state.lvl].msg}<br><br>` + 
-                    (res.paid ? `<span style='color:#34d399'>+50 Monedas</span>` : `<span style='color:#94a3b8'>Replay</span>`);
+                    (res.paid ? `<span style='color:#34d399'>+60 Monedas</span>` : `<span style='color:#94a3b8'>Replay</span>`);
                 document.getElementById('win-modal').style.display = 'flex';
             }
 
