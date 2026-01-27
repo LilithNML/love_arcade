@@ -424,17 +424,19 @@
         let cellSize = 30; 
 
         const LEVELS = [
-  { id: 1,  name: "Nivel 1",  obj:{ type:"lines", val: 4  }, moves: 50,  coins: 5  },
-  { id: 2,  name: "Nivel 2",  obj:{ type:"lines", val: 6  }, moves: 55,  coins: 8  },
-  { id: 3,  name: "Nivel 3",  obj:{ type:"lines", val: 8  }, moves: 60,  coins: 12 },
-  { id: 4,  name: "Nivel 4",  obj:{ type:"lines", val: 12 }, moves: 65,  coins: 18 },
-  { id: 5,  name: "Nivel 5",  obj:{ type:"lines", val: 16 }, moves: 70,  coins: 25 },
-  { id: 6,  name: "Nivel 6",  obj:{ type:"lines", val: 22 }, moves: 75,  coins: 35 },
-  { id: 7,  name: "Nivel 7",  obj:{ type:"lines", val: 28 }, moves: 80,  coins: 50 },
-  { id: 8,  name: "Nivel 8",  obj:{ type:"lines", val: 36 }, moves: 85,  coins: 70 },
-  { id: 9,  name: "Nivel 9",  obj:{ type:"lines", val: 45 }, moves: 90,  coins: 90 },
-  { id:10, name: "MAESTRO",  obj:{ type:"lines", val: 60 }, moves: 95,  coins: 120 }
-        ];
+  { id:1,  name:"Nivel 1",   obj:{type:"lines", val: 4},  moves:50,  coins: 6  },
+  { id:2,  name:"Nivel 2",   obj:{type:"lines", val: 6},  moves:55,  coins: 10 },
+  { id:3,  name:"Nivel 3",   obj:{type:"lines", val: 8},  moves:60,  coins: 15 },
+  { id:4,  name:"Nivel 4",   obj:{type:"lines", val:12},  moves:65,  coins: 22 },
+  { id:5,  name:"Nivel 5",   obj:{type:"lines", val:16},  moves:70,  coins: 32 },
+  { id:6,  name:"Nivel 6",   obj:{type:"lines", val:22},  moves:75,  coins: 45 },
+  { id:7,  name:"Nivel 7",   obj:{type:"lines", val:28},  moves:80,  coins: 60 },
+  { id:8,  name:"Nivel 8",   obj:{type:"lines", val:36},  moves:85,  coins: 80 },
+  { id:9,  name:"Nivel 9",   obj:{type:"lines", val:45},  moves:90,  coins:105 },
+  { id:10, name:"Nivel 10",  obj:{type:"lines", val:60},  moves:95,  coins:135 },
+  { id:11, name:"Nivel 11",  obj:{type:"lines", val:80},  moves:100, coins:170 },
+  { id:12, name:"MAESTRO",   obj:{type:"lines", val:100}, moves:105, coins:210 }
+];
 
         let canvas, ctx, nextCanvas, nextCtx, bgCanvas, bgCtx;
         let lastTime = 0;
