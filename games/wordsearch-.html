@@ -471,8 +471,8 @@
                 // Secreto
                 if(data.secret.includes(word)) {
                     const id = `ws_${this.state.lvl}_${word}`;
-                    if(GameCenter.claimSecretWord(id, 50)) {
-                        alert("✨ ¡Secreto! +50 Monedas");
+                    if(GameCenter.claimSecretWord(id, 60)) {
+                        alert("✨ ¡Secreto! +60 Monedas");
                         this.currSel.forEach(c => c.classList.add('secret'));
                     }
                     return true;
