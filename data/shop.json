@@ -1,82 +1,170 @@
 [
   {
     "id": 1,
-    "name": "Dibujo",
-    "desc": "Dibujo de Furina hecho especialmente para ti",
-    "price": 1000,
+    "name": "Rouge the Bat",
+    "desc": "La espía de G.U.N. para que le de estilo a tu teléfono.",
+    "price": 110,
     "stock": 1,
-    "image": "https://4magazines.net/wp-content/uploads/2025/01/Ilustracion-digital.jpg.webp"
+    "image": "assets/product-thumbs/rouge_the_bat_a94a3cca_thumbs.webp"
   },
   {
     "id": 2,
-    "name": "Dibujo",
-    "desc": "Dibujo de Hu Tao hecho especialmente para ti",
-    "price": 2000,
+    "name": "Sonic the Hedgehog",
+    "desc": "El erizo azul en su versión más clásica para el fondo de tu celular.",
+    "price": 110,
     "stock": 1,
-    "image": "https://4magazines.net/wp-content/uploads/2025/01/Ilustracion-digital.jpg.webp"
+    "image": "assets/product-thumbs/sonic_the_hedgehog_2936a9be_thumbs.webp"
   },
   {
     "id": 3,
-    "name": "Crunchyroll",
-    "desc": "Cuenta compartida",
-    "price": 800,
-    "stock": 0,
-    "image": "https://placehold.co/600x600/7d5fff/ffffff.png?text=Próximamente"
+    "name": "Shadow the Hedgehog",
+    "desc": "La forma de vida definitiva. Un wallpaper bastante atractivo para tu PC.",
+    "price": 250,
+    "stock": 1,
+    "image": "assets/product-thumbs/shadow_the_hedgehog_6ff623c4_thumbs.webp"
   },
   {
     "id": 4,
-    "name": "Wallpaper",
-    "desc": "Wallpaper exclusivo hecho por mí",
-    "price": 200,
-    "stock": 0,
-    "image": "https://placehold.co/600x600/7d5fff/ffffff.png?text=Próximamente"
+    "name": "Shadow the Hedgehog",
+    "desc": "La forma de vida definitiva. El fan #1 de las latinas en tu PC",
+    "price": 250,
+    "stock": 1,
+    "image": "assets/product-thumbs/shadow_the_hedgehog_2_18b617f7_thumbs.webp"
   },
   {
     "id": 5,
-    "name": "Carta",
-    "desc": "Carta digital escrita especialmente para ti",
-    "price": 100,
-    "stock": 0,
-    "image": "https://placehold.co/600x600/7d5fff/ffffff.png?text=Próximamente"
+    "name": "Goku Ultra Instinto",
+    "desc": "Goku con el pelo plateado para que tu teléfono se vea con más nivel.",
+    "price": 250,
+    "stock": 1,
+    "image": "assets/product-thumbs/goku_ultra_instinto_f089881b_thumbs.webp"
   },
   {
     "id": 6,
-    "name": "Juego",
-    "desc": "Elegir el próximo juego para jugar juntos",
-    "price": 300,
-    "stock": 0,
-    "image": "https://placehold.co/600x600/7d5fff/ffffff.png?text=Próximamente"
+    "name": "Furina",
+    "desc": "Toda la estética de la Arconte Hydro para decorar tu laptop.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/furina_d9040eb4_thumbs.webp"
   },
   {
     "id": 7,
-    "name": "Película",
-    "desc": "Elegir película o serie para ver juntos",
-    "price": 250,
-    "stock": 0,
-    "image": "https://placehold.co/600x600/7d5fff/ffffff.png?text=Próximamente"
+    "name": "Chuck",
+    "desc": "El pájaro más rápido de la isla directo para el monitor de tu computadora.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/chuck_49168af7_thumbs.webp"
   },
   {
     "id": 8,
-    "name": "Video",
-    "desc": "Video especial grabado para ti",
-    "price": 180,
-    "stock": 0,
-    "image": "https://placehold.co/600x600/7d5fff/ffffff.png?text=Próximamente"
+    "name": "Blaze the Cat",
+    "desc": "Un fondo de la princesa de la Dimensión Sol para tu laptop.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/blaze_the_cat_3ca68b7d_thumbs.webp"
   },
   {
     "id": 9,
-    "name": "Sorpresa",
-    "desc": "Sorpresa misteriosa",
-    "price": 400,
-    "stock": 0,
-    "image": "https://placehold.co/600x600/7d5fff/ffffff.png?text=Próximamente"
+    "name": "Ochaco Uraraka",
+    "desc": "La gravedad cero de Uraraka para que tu teléfono se vea más ligero.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/ochaco_uraraka_68e2e708_thumbs.webp"
   },
   {
     "id": 10,
-    "name": "Peluche",
-    "desc": "Peluche pequeño enviado con amor",
-    "price": 600,
-    "stock": 0,
-    "image": "https://placehold.co/600x600/7d5fff/ffffff.png?text=Próximamente"
+    "name": "Metal Sonic",
+    "desc": "Diseño metálico y frío para darle un toque diferente a tu smartphone.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/metal_sonic_f76ecb8c_thumbs.webp"
+  },
+  {
+    "id": 11,
+    "name": "Goku Black",
+    "desc": "El estilo de Zamasu en el cuerpo de Goku para la pantalla de tu celular.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/goku_black_05117d17_thumbs.webp"
+  },
+  {
+    "id": 12,
+    "name": "Vegetto",
+    "desc": "La fusión de los pendientes Pothala lista para tu fondo de celular.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/vegetto_3d2e6f5d_thumbs.webp"
+  },
+  {
+    "id": 13,
+    "name": "Gogeta",
+    "desc": "Resultado de la danza de la fusión para que luzca en tu teléfono.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/gogeta_d68cb043_thumbs.webp"
+  },
+  {
+    "id": 14,
+    "name": "Himiko Toga",
+    "desc": "Un diseño con el estilo de Toga para el fondo de tu teléfono.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/himiko_toga_3f42c0d7_thumbs.webp"
+  },
+  {
+    "id": 15,
+    "name": "Kaoruko Waguri",
+    "desc": "Un wallpaper con la estética del anime para tu pantalla móvil.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/kaoruko_waguri_96348cb3_thumbs.webp"
+  },
+  {
+    "id": 16,
+    "name": "Hitori Gotou",
+    "desc": "Bocchi la roca, perfecto para el fondo de tu PC.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/hitori_gotou_69e25c56_thumbs.webp"
+  },
+  {
+    "id": 17,
+    "name": "Burnice White",
+    "desc": "Directo de Zenless Zone Zero para que le des color a tu teléfono.",
+    "price": 1050,
+    "stock": 1,
+    "image": "assets/product-thumbs/burnice_white_86d8d99c_thumbs.webp"
+  },
+  {
+    "id": 18,
+    "name": "Ellen Joe",
+    "desc": "La tiburoncina de los Victoria Housekeeping para tu fondo de teléfono.",
+    "price": 1050,
+    "stock": 1,
+    "image": "assets/product-thumbs/ellen_joe_25d19b28_thumbs.webp"
+  },
+  {
+    "id": 19,
+    "name": "Nicole Demara",
+    "desc": "La jefa de las Liebres Astutas para que decore tu smartphone.",
+    "price": 1050,
+    "stock": 1,
+    "image": "assets/product-thumbs/nicole_demara_131cf874_thumbs.webp"
+  },
+  {
+    "id": 20,
+    "name": "Lanzaguisantes de Hielo",
+    "desc": "Un clásico de PvZ para que mantengas tu celular bien fresco.",
+    "price": 1050,
+    "stock": 1,
+    "image": "assets/product-thumbs/lanzaguisantes_de_hielo_7041b0cf_thumbs.webp"
+  },
+  {
+    "id": 21,
+    "name": "Astra Yao",
+    "desc": "Estética estelar y moderna para que tu teléfono se vea impecable.",
+    "price": 1050,
+    "stock": 1,
+    "image": "assets/product-thumbs/astra_yao_ec9bcd48_thumbs.webp"
   }
 ]
