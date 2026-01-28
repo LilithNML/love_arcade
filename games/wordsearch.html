@@ -292,20 +292,21 @@
 <body>
 
     <div class="header">
-        <a href="../index.html" class="btn-nav">
-            <i data-lucide="arrow-left" size="16"></i> Salir
-        </a>
+    <a href="../index.html" class="btn-nav">
+        <i data-lucide="arrow-left" size="18"></i> Salir
+    </a>
 
-        <div class="level-control-container">
-            <div id="lvl-display">Nivel 1</div>
-            <button class="btn-menu-toggle" onclick="game.toggleLevelMenu()" aria-label="Cambiar nivel">
-                <i data-lucide="chevron-down" size="20"></i>
-            </button>
+    <div class="level-control-container">
+        <button class="btn-menu-toggle" onclick="game.toggleLevelMenu()" id="main-level-btn">
+            <span id="lvl-display">Nivel 1</span>
+            <i data-lucide="chevron-down" size="20" style="color: var(--accent)"></i>
+        </button>
 
-            <div id="level-menu" class="level-dropdown">
-                </div>
-        </div>
+        <div id="level-menu" class="level-dropdown">
+            </div>
     </div>
+</div>
+
 
     <div class="game-container">
         
