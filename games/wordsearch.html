@@ -61,7 +61,7 @@
             border: 1px solid rgba(255,255,255,0.1);
         }
 
-        /* --- MENÚ DE NIVELES (NUEVO) --- */
+        /* --- MENÚ DE NIVELES --- */
         .lvl-dropdown-wrapper {
             position: relative;
         }
@@ -323,7 +323,7 @@
                 this.maxLvl = savedMax ? parseInt(savedMax) : 0;
                 
                 this.state = { 
-                    lvl: this.maxLvl, // Empieza en el máximo desbloqueado por defecto
+                    lvl: this.maxLvl, 
                     grid: [], 
                     found: []
                 };
@@ -335,7 +335,6 @@
                     menu: document.getElementById('lvl-menu')
                 };
 
-                // Cerrar menú al hacer clic fuera
                 document.addEventListener('click', (e) => {
                     if (!e.target.closest('.lvl-dropdown-wrapper')) {
                         this.dom.menu.classList.remove('show');
@@ -346,13 +345,11 @@
             }
 
             init() {
-                // Seguridad de rango
                 if(this.state.lvl >= LEVELS.length) this.state.lvl = LEVELS.length - 1;
 
                 const data = LEVELS[this.state.lvl];
                 this.state.found = [];
                 
-                // Actualizar Textos y Menú
                 this.dom.lvlText.textContent = `Nivel ${this.state.lvl + 1}`;
                 this.renderMenu();
                 
@@ -360,7 +357,7 @@
                 this.renderWords(data.words);
             }
 
-            // --- Lógica del Menú ---
+            // --- Menú ---
             toggleMenu() {
                 this.dom.menu.classList.toggle('show');
             }
@@ -378,14 +375,13 @@
                         statusClass = 'completed';
                         icon = '<i data-lucide="check" size="14"></i>';
                     } else if (index === this.maxLvl) {
-                        statusClass = ''; // Nivel actual máximo (no completado aún)
+                        statusClass = ''; 
                         icon = '<i data-lucide="circle" size="14"></i>';
                     } else {
                         statusClass = 'locked';
                         icon = '<i data-lucide="lock" size="14"></i>';
                     }
 
-                    // Permitir jugar niveles completados o el actual máximo
                     const isClickable = index <= this.maxLvl;
                     const clickAttr = isClickable ? `onclick="game.loadLevel(${index})"` : '';
 
@@ -536,6 +532,7 @@
 
             check(word) {
                 const data = LEVELS[this.state.lvl];
+                // Palabra Normal
                 if(data.words.includes(word) && !this.state.found.includes(word)) {
                     this.state.found.push(word);
                     document.getElementById(`tag-${word}`).classList.add('done');
@@ -544,11 +541,15 @@
                     if(this.state.found.length === data.words.length) setTimeout(() => this.win(), 500);
                     return true;
                 }
+                // Palabra Secreta (CORRECCIÓN APLICADA AQUÍ)
                 if(data.secret.includes(word)) {
+                    // 1. Aplicar estilo visual SIEMPRE que se encuentre
+                    this.currSel.forEach(c => c.classList.add('secret'));
+
+                    // 2. Intentar dar la recompensa
                     const id = `ws_${this.state.lvl}_${word}`;
                     if(window.GameCenter && window.GameCenter.claimSecretWord(id, 60)) {
                         alert("✨ ¡Secreto! +60 Monedas");
-                        this.currSel.forEach(c => c.classList.add('secret'));
                     }
                     return true;
                 }
@@ -556,7 +557,6 @@
             }
 
             win() {
-                // Guardar progreso máximo si estamos en el último nivel desbloqueado
                 if (this.state.lvl === this.maxLvl) {
                     this.maxLvl++;
                     localStorage.setItem('ws_soft_max_lvl', this.maxLvl);
@@ -575,7 +575,6 @@
 
             next() {
                 this.state.lvl++;
-                // Si superamos los niveles existentes, volver al menú o manejar fin del juego
                 if (this.state.lvl >= LEVELS.length) {
                     alert("¡Juego completado!");
                     this.state.lvl = LEVELS.length - 1; 
