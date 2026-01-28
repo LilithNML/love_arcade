@@ -8,16 +8,15 @@
     <style>
         /* --- ESTILOS INDEPENDIENTES (Paleta Soft Dark) --- */
         :root {
-            --bg-color: #0f172a;       
-            --grid-bg: #1e293b;        
-            --cell-idle: #334155;      
-            --text-main: #f1f5f9;      
-            --text-muted: #94a3b8;     
+            --bg-color: #0f172a;       /* Fondo principal oscuro */
+            --grid-bg: #1e293b;        /* Fondo del tablero */
+            --cell-idle: #334155;      /* Color celda inactiva */
+            --text-main: #f1f5f9;      /* Texto principal */
+            --text-muted: #94a3b8;     /* Texto secundario */
             
-            --accent: #818cf8;         
-            --found: #34d399;          
-            --secret: #d8b4fe;
-            --locked: #475569;         
+            --accent: #818cf8;         /* Color de selección (Indigo suave) */
+            --found: #34d399;          /* Color encontrado (Verde menta) */
+            --secret: #d8b4fe;         /* Color secreto (Lila) */
         }
 
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -35,7 +34,7 @@
             user-select: none;
         }
 
-        /* --- CABECERA Y MENÚ --- */
+        /* Cabecera limpia */
         .header {
             width: 100%;
             max-width: 500px;
@@ -43,16 +42,14 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(15, 23, 42, 0.98);
+            background: rgba(15, 23, 42, 0.95);
             position: sticky;
             top: 0;
-            z-index: 50;
-            height: 60px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            z-index: 50; /* Z-index alto para el menú */
         }
 
         .btn-nav {
-            background: rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.1);
             color: white;
             text-decoration: none;
             padding: 8px 12px;
@@ -64,67 +61,65 @@
             border: 1px solid rgba(255,255,255,0.1);
         }
 
-        /* Estilos del Menú de Niveles */
-        .level-menu-container {
+        /* --- MENÚ DE NIVELES (NUEVO) --- */
+        .lvl-dropdown-wrapper {
             position: relative;
         }
 
-        .level-trigger {
-            font-weight: bold;
+        .lvl-trigger {
+            font-weight: bold; 
             color: var(--accent);
-            background: rgba(129, 140, 248, 0.1);
-            padding: 8px 16px;
-            border-radius: 20px;
             cursor: pointer;
+            padding: 10px 15px; /* Área táctil grande */
+            border-radius: 8px;
             display: flex;
             align-items: center;
             gap: 8px;
+            background: rgba(30, 41, 59, 0.5);
             transition: background 0.2s;
-            border: 1px solid rgba(129, 140, 248, 0.2);
         }
 
-        .level-trigger:active { background: rgba(129, 140, 248, 0.2); }
+        .lvl-trigger:active { background: rgba(30, 41, 59, 1); }
 
-        .level-dropdown {
+        .lvl-menu {
             position: absolute;
-            top: 120%;
+            top: 110%;
             right: 0;
-            width: 220px;
             background: #1e293b;
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            padding: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            width: 220px;
+            max-height: 300px;
+            overflow-y: auto;
             display: none;
             flex-direction: column;
-            gap: 4px;
-            max-height: 60vh;
-            overflow-y: auto;
+            z-index: 100;
         }
 
-        .level-dropdown.show { display: flex; animation: slideDown 0.2s ease-out; }
+        .lvl-menu.show { display: flex; animation: slideDown 0.2s ease-out; }
 
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideDown { from{opacity:0; transform:translateY(-10px);} to{opacity:1; transform:translateY(0);} }
 
         .lvl-item {
-            padding: 12px;
-            border-radius: 8px;
-            font-size: 0.95rem;
-            cursor: pointer;
+            padding: 14px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
             color: var(--text-muted);
-            transition: 0.2s;
+            cursor: pointer;
+            font-size: 0.95rem;
         }
 
+        .lvl-item:last-child { border-bottom: none; }
         .lvl-item:hover { background: rgba(255,255,255,0.05); }
         
-        .lvl-item.current { background: var(--accent); color: #0f172a; font-weight: bold; }
+        .lvl-item.current { color: var(--accent); font-weight: bold; background: rgba(129, 140, 248, 0.1); }
         .lvl-item.completed { color: var(--found); }
-        .lvl-item.locked { color: var(--locked); cursor: not-allowed; opacity: 0.6; }
+        .lvl-item.locked { opacity: 0.5; pointer-events: none; }
 
-        /* --- ÁREA DE JUEGO --- */
+        /* Área de Juego */
         .game-container {
             width: 100%;
             max-width: 500px;
@@ -135,6 +130,7 @@
             flex: 1;
         }
 
+        /* Grid (Tablero) */
         .grid-wrapper {
             background: var(--grid-bg);
             padding: 8px;
@@ -142,16 +138,14 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             margin: 0 auto;
             width: 100%;
-            aspect-ratio: 1;
-            touch-action: none;
+            aspect-ratio: 1; /* Mantiene el cuadrado */
         }
 
         .grid {
             display: grid;
-            gap: 3px;
+            gap: 3px; 
             width: 100%;
             height: 100%;
-            touch-action: none;
         }
 
         .cell {
@@ -161,13 +155,13 @@
             justify-content: center;
             align-items: center;
             font-weight: bold;
-            font-size: clamp(14px, 4vw, 22px);
+            font-size: clamp(14px, 4vw, 22px); 
             color: var(--text-muted);
             cursor: pointer;
             transition: transform 0.1s, background 0.2s;
-            will-change: transform, background-color; 
         }
 
+        /* Estados de Celdas */
         .cell.selected { 
             background: var(--accent); 
             color: #0f172a; 
@@ -190,6 +184,7 @@
         @keyframes pop { 50% { transform: scale(1.2); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
+        /* Lista de Palabras */
         .word-list {
             display: flex;
             flex-wrap: wrap;
@@ -216,14 +211,16 @@
             border-color: var(--found);
         }
 
+        /* Controles Inferiores (Solo Reset) */
         .controls {
             display: flex;
+            justify-content: center;
             margin-top: auto;
             padding-bottom: 20px;
         }
 
         .btn-action {
-            flex: 1;
+            width: 100%;
             padding: 12px;
             border: none;
             border-radius: 10px;
@@ -234,7 +231,6 @@
             align-items: center;
             gap: 8px;
             cursor: pointer;
-            touch-action: manipulation;
         }
 
         .btn-reset { background: #475569; color: white; }
@@ -244,7 +240,7 @@
             position: fixed; inset: 0;
             background: rgba(0,0,0,0.85);
             backdrop-filter: blur(5px);
-            z-index: 100;
+            z-index: 200;
             display: none; justify-content: center; align-items: center;
             padding: 20px;
         }
@@ -264,7 +260,7 @@
         .modal-box p { color: var(--text-muted); line-height: 1.5; }
 
         .btn-confirm { background: var(--accent); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; margin-top: 15px; cursor: pointer; }
-        
+
     </style>
 </head>
 <body>
@@ -274,24 +270,27 @@
             <i data-lucide="arrow-left" size="18"></i> Salir
         </a>
         
-        <div class="level-menu-container">
-            <div class="level-trigger" onclick="game.toggleMenu()">
-                <span id="lvl-display">Nivel 1</span>
-                <i data-lucide="chevron-down" size="16"></i>
+        <div class="lvl-dropdown-wrapper">
+            <div class="lvl-trigger" onclick="game.toggleMenu()">
+                <span id="lvl-display-text">Nivel 1</span>
+                <i data-lucide="chevron-down" size="18"></i>
             </div>
-            <div id="lvl-dropdown" class="level-dropdown">
+            <div id="lvl-menu" class="lvl-menu">
                 </div>
         </div>
     </div>
 
     <div class="game-container">
+        
         <div class="grid-wrapper">
             <div id="grid" class="grid"></div>
         </div>
+
         <div id="words" class="word-list"></div>
+
         <div class="controls">
             <button class="btn-action btn-reset" onclick="game.reset()">
-                <i data-lucide="rotate-ccw" size="18"></i> Reiniciar
+                <i data-lucide="rotate-ccw" size="18"></i> Reiniciar Tablero
             </button>
         </div>
     </div>
@@ -318,28 +317,27 @@
         class WordSearch {
             constructor() {
                 this.size = 10;
+                
+                // Cargar progreso máximo
+                const savedMax = localStorage.getItem('ws_soft_max_lvl');
+                this.maxLvl = savedMax ? parseInt(savedMax) : 0;
+                
                 this.state = { 
-                    lvl: 0,
-                    maxUnlocked: 0,
+                    lvl: this.maxLvl, // Empieza en el máximo desbloqueado por defecto
                     grid: [], 
-                    found: [],
-                    foundSecrets: [] // Nuevo estado para persistencia de secretos
+                    found: []
                 };
                 
                 this.dom = {
                     grid: document.getElementById('grid'),
                     words: document.getElementById('words'),
-                    lvl: document.getElementById('lvl-display'),
-                    menu: document.getElementById('lvl-dropdown')
+                    lvlText: document.getElementById('lvl-display-text'),
+                    menu: document.getElementById('lvl-menu')
                 };
 
-                const savedMax = localStorage.getItem('ws_soft_max_lvl');
-                if(savedMax) this.state.maxUnlocked = parseInt(savedMax);
-                
-                this.state.lvl = this.state.maxUnlocked;
-
+                // Cerrar menú al hacer clic fuera
                 document.addEventListener('click', (e) => {
-                    if (!e.target.closest('.level-menu-container')) {
+                    if (!e.target.closest('.lvl-dropdown-wrapper')) {
                         this.dom.menu.classList.remove('show');
                     }
                 });
@@ -347,59 +345,65 @@
                 this.init();
             }
 
-            toggleMenu() {
+            init() {
+                // Seguridad de rango
+                if(this.state.lvl >= LEVELS.length) this.state.lvl = LEVELS.length - 1;
+
+                const data = LEVELS[this.state.lvl];
+                this.state.found = [];
+                
+                // Actualizar Textos y Menú
+                this.dom.lvlText.textContent = `Nivel ${this.state.lvl + 1}`;
                 this.renderMenu();
+                
+                this.generate([...data.words, ...data.secret]);
+                this.renderWords(data.words);
+            }
+
+            // --- Lógica del Menú ---
+            toggleMenu() {
                 this.dom.menu.classList.toggle('show');
             }
 
             renderMenu() {
-                this.dom.menu.innerHTML = LEVELS.map((l, i) => {
+                let html = '';
+                LEVELS.forEach((_, index) => {
                     let statusClass = '';
                     let icon = '';
-                    let clickAction = `onclick="game.loadLevel(${i})"`;
 
-                    if (i === this.state.lvl) {
+                    if (index === this.state.lvl) {
                         statusClass = 'current';
                         icon = '<i data-lucide="play" size="14"></i>';
-                    } else if (i <= this.state.maxUnlocked) {
+                    } else if (index < this.maxLvl) {
                         statusClass = 'completed';
                         icon = '<i data-lucide="check" size="14"></i>';
+                    } else if (index === this.maxLvl) {
+                        statusClass = ''; // Nivel actual máximo (no completado aún)
+                        icon = '<i data-lucide="circle" size="14"></i>';
                     } else {
                         statusClass = 'locked';
                         icon = '<i data-lucide="lock" size="14"></i>';
-                        clickAction = ''; 
                     }
 
-                    return `
-                        <div class="lvl-item ${statusClass}" ${clickAction}>
-                            <span>Nivel ${i + 1}</span>
+                    // Permitir jugar niveles completados o el actual máximo
+                    const isClickable = index <= this.maxLvl;
+                    const clickAttr = isClickable ? `onclick="game.loadLevel(${index})"` : '';
+
+                    html += `
+                        <div class="lvl-item ${statusClass}" ${clickAttr}>
+                            <span>Nivel ${index + 1}</span>
                             ${icon}
                         </div>
                     `;
-                }).join('');
+                });
+                this.dom.menu.innerHTML = html;
                 lucide.createIcons();
             }
 
-            loadLevel(idx) {
-                if (idx > this.state.maxUnlocked) return;
-                this.state.lvl = idx;
+            loadLevel(index) {
+                this.state.lvl = index;
                 this.dom.menu.classList.remove('show');
                 this.init();
-            }
-
-            init() {
-                if(this.state.lvl >= LEVELS.length) {
-                    this.state.lvl = LEVELS.length - 1; 
-                }
-
-                const data = LEVELS[this.state.lvl];
-                this.state.found = [];
-                this.state.foundSecrets = []; // Reset secretos
-                
-                this.dom.lvl.textContent = `Nivel ${this.state.lvl + 1}`;
-                
-                this.generate([...data.words, ...data.secret]);
-                this.renderWords(data.words);
             }
 
             generate(allWords) {
@@ -407,7 +411,8 @@
                 allWords.sort((a,b) => b.length - a.length);
 
                 for(let word of allWords) {
-                    let placed = false, attempts = 0;
+                    let placed = false;
+                    let attempts = 0;
                     while(!placed && attempts < 100) {
                         const dir = Math.floor(Math.random() * 3);
                         const dr = dir === 0 ? 0 : 1;
@@ -436,6 +441,7 @@
             canPlace(grid, word, r, c, dr, dc) {
                 if (r + dr * (word.length-1) >= this.size) return false;
                 if (c + dc * (word.length-1) >= this.size) return false;
+                
                 for(let i=0; i<word.length; i++) {
                     const char = grid[r + i*dr][c + i*dc];
                     if(char !== '' && char !== word[i]) return false;
@@ -460,9 +466,9 @@
                         cell.textContent = char;
                         cell.dataset.r = r; cell.dataset.c = c;
                         
-                        const start = (e) => { this.startSel(r,c); };
+                        const start = (e) => { e.preventDefault(); this.startSel(r,c); };
                         const move = (e) => { 
-                            if(e.cancelable) e.preventDefault(); 
+                            e.preventDefault();
                             const t = e.touches ? e.touches[0] : null;
                             if(t) {
                                 const el = document.elementFromPoint(t.clientX, t.clientY);
@@ -490,12 +496,10 @@
                 this.dom.words.innerHTML = words.map(w => `<div class="word-tag" id="tag-${w}">${w}</div>`).join('');
             }
 
-            // --- SELECCIÓN ---
             startSel(r,c) { this.selecting = true; this.startPos = {r,c}; this.updateSel(r,c); }
             moveSel(r,c) { if(this.selecting) this.updateSel(r,c); }
             
             updateSel(er, ec) {
-                // Removemos 'selected', pero NO tocamos 'found' ni 'secret'
                 document.querySelectorAll('.cell.selected').forEach(c => c.classList.remove('selected'));
                 this.currSel = [];
                 
@@ -532,8 +536,6 @@
 
             check(word) {
                 const data = LEVELS[this.state.lvl];
-                
-                // Palabra Normal
                 if(data.words.includes(word) && !this.state.found.includes(word)) {
                     this.state.found.push(word);
                     document.getElementById(`tag-${word}`).classList.add('done');
@@ -542,65 +544,47 @@
                     if(this.state.found.length === data.words.length) setTimeout(() => this.win(), 500);
                     return true;
                 }
-                
-                // Palabra Secreta (LÓGICA CORREGIDA)
                 if(data.secret.includes(word)) {
-                    // Si ya se encontró antes, solo la iluminamos (visual)
-                    if (this.state.foundSecrets.includes(word)) {
-                        return true;
-                    }
-
-                    // 1. Marcarla visualmente y guardar estado PRIMERO (para que no desaparezca)
-                    this.state.foundSecrets.push(word);
-                    this.currSel.forEach(c => c.classList.add('secret'));
-                    alert("✨ ¡Secreto encontrado!");
-
-                    // 2. Intentar cobrar (Segundo plano)
                     const id = `ws_${this.state.lvl}_${word}`;
-                    if(window.GameCenter) {
-                         window.GameCenter.claimSecretWord(id, 60);
+                    if(window.GameCenter && window.GameCenter.claimSecretWord(id, 60)) {
+                        alert("✨ ¡Secreto! +60 Monedas");
+                        this.currSel.forEach(c => c.classList.add('secret'));
                     }
-                    
                     return true;
                 }
                 return false;
             }
 
             win() {
-                let paid = false;
+                // Guardar progreso máximo si estamos en el último nivel desbloqueado
+                if (this.state.lvl === this.maxLvl) {
+                    this.maxLvl++;
+                    localStorage.setItem('ws_soft_max_lvl', this.maxLvl);
+                }
+
+                let res = { paid: false };
                 if (window.GameCenter) {
-                    const res = window.GameCenter.completeLevel('wordsearch', this.state.lvl, 60);
-                    paid = res.paid;
+                    res = window.GameCenter.completeLevel('wordsearch', this.state.lvl, 60);
                 }
-
-                if (this.state.lvl >= this.state.maxUnlocked) {
-                    this.state.maxUnlocked = this.state.lvl + 1;
-                    localStorage.setItem('ws_soft_max_lvl', this.state.maxUnlocked);
-                }
-
+                
                 document.getElementById('win-msg').innerHTML = 
                     `${LEVELS[this.state.lvl].msg}<br><br>` + 
-                    (paid ? `<span style='color:#34d399'>+60 Monedas</span>` : `<span style='color:#94a3b8'>Replay</span>`);
+                    (res.paid ? `<span style='color:#34d399'>+60 Monedas</span>` : `<span style='color:#94a3b8'>Replay</span>`);
                 document.getElementById('win-modal').style.display = 'flex';
             }
 
             next() {
-                if (this.state.lvl + 1 < LEVELS.length) {
-                    this.state.lvl++;
-                    if (this.state.lvl > this.state.maxUnlocked) {
-                        this.state.maxUnlocked = this.state.lvl;
-                        localStorage.setItem('ws_soft_max_lvl', this.state.maxUnlocked);
-                    }
-                    document.getElementById('win-modal').style.display = 'none';
-                    this.init();
-                } else {
-                    alert("¡Juego Completado! Gracias por jugar.");
-                    document.getElementById('win-modal').style.display = 'none';
-                    window.location.href = '../index.html';
+                this.state.lvl++;
+                // Si superamos los niveles existentes, volver al menú o manejar fin del juego
+                if (this.state.lvl >= LEVELS.length) {
+                    alert("¡Juego completado!");
+                    this.state.lvl = LEVELS.length - 1; 
                 }
+                document.getElementById('win-modal').style.display = 'none';
+                this.init();
             }
 
-            reset() { if(confirm("¿Reiniciar nivel?")) this.init(); }
+            reset() { if(confirm("¿Reiniciar?")) this.init(); }
         }
 
         window.onload = () => {
