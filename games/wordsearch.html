@@ -144,8 +144,7 @@
             margin: 0 auto;
             width: 100%;
             aspect-ratio: 1;
-            /* IMPORTANTE: Evita scroll al arrastrar en móviles */
-            touch-action: none; 
+            touch-action: none; /* Crucial para evitar scroll en móviles al jugar */
         }
 
         .grid {
@@ -167,7 +166,6 @@
             color: var(--text-muted);
             cursor: pointer;
             transition: transform 0.1s, background 0.2s;
-            /* Mejora rendimiento de renderizado */
             will-change: transform, background-color; 
         }
 
@@ -351,7 +349,7 @@
                 this.size = 10;
                 this.state = { 
                     lvl: 0,
-                    maxUnlocked: 0, // Nuevo: para saber hasta dónde ha llegado
+                    maxUnlocked: 0,
                     grid: [], 
                     found: [],
                     coordsMap: {} 
@@ -364,14 +362,14 @@
                     menu: document.getElementById('lvl-dropdown')
                 };
 
-                // Cargar progreso (Guardamos el MAX nivel desbloqueado)
-                const saved = localStorage.getItem('ws_soft_max_lvl');
-                if(saved) this.state.maxUnlocked = parseInt(saved);
+                // Recuperar estado
+                const savedMax = localStorage.getItem('ws_soft_max_lvl');
+                if(savedMax) this.state.maxUnlocked = parseInt(savedMax);
                 
-                // Iniciamos en el máximo nivel desbloqueado por defecto
+                // Iniciar en el último nivel desbloqueado por defecto
                 this.state.lvl = this.state.maxUnlocked;
 
-                // Evento para cerrar menú si tocas fuera
+                // Cerrar menú al tocar fuera
                 document.addEventListener('click', (e) => {
                     if (!e.target.closest('.level-menu-container')) {
                         this.dom.menu.classList.remove('show');
@@ -381,7 +379,7 @@
                 this.init();
             }
 
-            // --- MENU LOGIC ---
+            // --- GESTIÓN DEL MENÚ ---
             toggleMenu() {
                 this.renderMenu();
                 this.dom.menu.classList.toggle('show');
@@ -402,7 +400,7 @@
                     } else {
                         statusClass = 'locked';
                         icon = '<i data-lucide="lock" size="14"></i>';
-                        clickAction = ''; // No hace nada si está bloqueado
+                        clickAction = ''; 
                     }
 
                     return `
@@ -416,24 +414,21 @@
             }
 
             loadLevel(idx) {
-                if (idx > this.state.maxUnlocked) return; // Seguridad extra
+                if (idx > this.state.maxUnlocked) return;
                 this.state.lvl = idx;
                 this.dom.menu.classList.remove('show');
                 this.init();
             }
 
-            // --- GAME CORE ---
+            // --- LÓGICA DE JUEGO ---
             init() {
                 if(this.state.lvl >= LEVELS.length) {
-                    // Si se pasó del último nivel, lo regresamos al último disponible
                     this.state.lvl = LEVELS.length - 1; 
                 }
 
                 const data = LEVELS[this.state.lvl];
                 this.state.found = [];
                 this.state.coordsMap = {};
-                
-                // Actualizar texto cabecera
                 this.dom.lvl.textContent = `Nivel ${this.state.lvl + 1}`;
                 
                 this.generate([...data.words, ...data.secret]);
@@ -499,16 +494,10 @@
                         cell.textContent = char;
                         cell.dataset.r = r; cell.dataset.c = c;
                         
-                        const start = (e) => { 
-                            // Importante: No prevenir default si queremos scroll fuera del grid, 
-                            // pero dentro del grid "touch-action: none" CSS se encarga.
-                            // Aquí solo iniciamos lógica.
-                            this.startSel(r,c); 
-                        };
+                        // Manejadores de Eventos
+                        const start = (e) => { this.startSel(r,c); };
                         const move = (e) => { 
-                            // Evitar scroll nativo al mover sobre el grid
                             if(e.cancelable) e.preventDefault(); 
-                            
                             const t = e.touches ? e.touches[0] : null;
                             if(t) {
                                 const el = document.elementFromPoint(t.clientX, t.clientY);
@@ -536,6 +525,7 @@
                 this.dom.words.innerHTML = words.map(w => `<div class="word-tag" id="tag-${w}">${w}</div>`).join('');
             }
 
+            // --- SELECCIÓN ---
             startSel(r,c) { this.selecting = true; this.startPos = {r,c}; this.updateSel(r,c); }
             moveSel(r,c) { if(this.selecting) this.updateSel(r,c); }
             
@@ -576,6 +566,8 @@
 
             check(word) {
                 const data = LEVELS[this.state.lvl];
+                
+                // Palabra Normal
                 if(data.words.includes(word) && !this.state.found.includes(word)) {
                     this.state.found.push(word);
                     document.getElementById(`tag-${word}`).classList.add('done');
@@ -584,8 +576,11 @@
                     if(this.state.found.length === data.words.length) setTimeout(() => this.win(), 500);
                     return true;
                 }
+                
+                // Palabra Secreta (LÓGICA ORIGINAL RESTAURADA)
                 if(data.secret.includes(word)) {
                     const id = `ws_${this.state.lvl}_${word}`;
+                    // Asumimos que GameCenter es global desde app.js
                     if(window.GameCenter && window.GameCenter.claimSecretWord(id, 60)) {
                         alert("✨ ¡Secreto! +60 Monedas");
                         this.currSel.forEach(c => c.classList.add('secret'));
@@ -595,6 +590,7 @@
                 return false;
             }
 
+            // --- SISTEMA DE PISTAS (COBRO ESTRICTO) ---
             askHint() { document.getElementById('hint-modal').style.display = 'flex'; }
             
             confirmHint() {
@@ -603,6 +599,7 @@
                 const pending = targets.find(w => !this.state.found.includes(w));
                 
                 if(pending) {
+                    // Verificación estricta: Si no paga, NO hay pista
                     if(window.GameCenter && window.GameCenter.spendCoins(5)) {
                         const coords = this.state.coordsMap[pending];
                         const idx = coords.r * this.size + coords.c;
@@ -610,12 +607,7 @@
                         cell.classList.add('hint-active');
                         setTimeout(() => cell.classList.remove('hint-active'), 2000);
                     } else {
-                        // Modo fallback si no hay GameCenter
-                        const coords = this.state.coordsMap[pending];
-                        const idx = coords.r * this.size + coords.c;
-                        const cell = this.dom.grid.children[idx];
-                        cell.classList.add('hint-active');
-                        setTimeout(() => cell.classList.remove('hint-active'), 2000);
+                        alert("No tienes suficientes monedas.");
                     }
                 } else {
                     alert("¡Ya encontraste todo!");
@@ -629,7 +621,7 @@
                     paid = res.paid;
                 }
 
-                // Guardar Progreso Máximo
+                // Desbloqueo de nivel
                 if (this.state.lvl >= this.state.maxUnlocked) {
                     this.state.maxUnlocked = this.state.lvl + 1;
                     localStorage.setItem('ws_soft_max_lvl', this.state.maxUnlocked);
@@ -642,10 +634,8 @@
             }
 
             next() {
-                // Solo avanzamos si hay más niveles
                 if (this.state.lvl + 1 < LEVELS.length) {
                     this.state.lvl++;
-                    // Asegurar que el maxUnlocked también se actualice si es necesario
                     if (this.state.lvl > this.state.maxUnlocked) {
                         this.state.maxUnlocked = this.state.lvl;
                         localStorage.setItem('ws_soft_max_lvl', this.state.maxUnlocked);
@@ -664,14 +654,6 @@
 
         window.onload = () => {
             lucide.createIcons();
-            // Mock GameCenter para pruebas si no existe
-            if(!window.GameCenter) {
-                window.GameCenter = {
-                    spendCoins: () => true,
-                    claimSecretWord: () => true,
-                    completeLevel: () => ({ paid: true })
-                };
-            }
             game = new WordSearch();
         };
     </script>
