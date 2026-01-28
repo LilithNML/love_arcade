@@ -66,76 +66,58 @@
         }
 
         /* Contenedor del control de nivel */
-        .level-control-container {
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        #lvl-display {
-            font-weight: 700;
-            color: var(--accent);
-            font-size: 1rem;
-        }
-
-        .btn-menu-toggle {
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            padding: 4px;
-            border-radius: 4px;
-        }
-        .btn-menu-toggle:active { background: rgba(255,255,255,0.1); }
-
-        /* Menú Desplegable */
-        .level-dropdown {
-            position: absolute;
-            top: 140%;
-            right: -10px;
-            width: 240px;
-            background: var(--grid-bg);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            padding: 6px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-            opacity: 0;
-            transform: translateY(-10px) scale(0.95);
-            pointer-events: none;
-            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-            transform-origin: top right;
-            max-height: 60vh;
-            overflow-y: auto;
-        }
-
-        .level-dropdown.active {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-            pointer-events: all;
-        }
-
-        .level-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            margin-bottom: 2px;
-        }
-
-        .level-item:hover { background: rgba(255,255,255,0.05); color: var(--text-main); }
         
-        .level-item.current {
-            background: rgba(129, 140, 248, 0.15);
-            color: var(--accent);
-            font-weight: 700;
-        }
+            /* --- ACTUALIZADO: ÁREA DE TOQUE MEJORADA --- */
+.level-control-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.btn-menu-toggle {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px; /* Aumentamos el padding para un área de toque grande */
+    border-radius: 10px;
+    transition: all 0.2s ease;
+}
+
+.btn-menu-toggle:active {
+    background: rgba(129, 140, 248, 0.2);
+    transform: scale(0.96);
+}
+
+#lvl-display {
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 1.1rem; /* Un poco más grande para legibilidad */
+    pointer-events: none; /* El toque lo maneja el botón padre */
+}
+
+/* Ajuste de posición del dropdown */
+.level-dropdown {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    width: 240px;
+    background: var(--grid-bg);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 6px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+    pointer-events: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top right;
+    z-index: 100;
+}
+
 
         /* --- 3. ÁREA DE JUEGO --- */
         .game-container {
