@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sopa de Letras</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --grid-bg: #1e293b;
+            --cell-idle: #334155;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent: #818cf8;
+            --found: #34d399;
+            --hint: #fbbf24;
+            --secret: #d8b4fe;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none;
+        }
+
+        .header {
+            width: 100%;
+            max-width: 500px;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.95);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .btn-nav {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+
+        .game-container {
+            width: 100%;
+            max-width: 500px;
+            padding: 10px 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            flex: 1;
+        }
+
+        .grid-wrapper {
+            background: var(--grid-bg);
+            padding: 8px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            width: 100%;
+            aspect-ratio: 1;
+        }
+
+        .grid {
+            display: grid;
+            gap: 4px;
+            width: 100%;
+            height: 100%;
+        }
+
+        .cell {
+            background: var(--cell-idle);
+            border-radius: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: clamp(14px, 4.5vw, 22px);
+            color: var(--text-muted);
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .cell.selected { background: var(--accent); color: #0f172a; border-radius: 50%; }
+        .cell.found { background: var(--found); color: #064e3b; animation: pop 0.3s; }
+        .cell.secret { background: var(--secret); color: #4c1d95; }
+        .cell.hint-active { background: var(--hint); color: black; transform: scale(1.1); z-index: 2; box-shadow: 0 0 15px var(--hint); }
+
+        @keyframes pop { 50% { transform: scale(1.2); } }
+
+        .word-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+        .word-tag {
+            background: rgba(255,255,255,0.05);
+            padding: 5px 10px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            border: 1px solid transparent;
+        }
+        .word-tag.done { background: var(--found); color: #064e3b; text-decoration: line-through; opacity: 0.7; }
+
+        .controls { display: flex; gap: 15px; margin-top: auto; padding-bottom: 20px; width: 100%; }
+        .btn-action { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; }
+        .btn-hint { background: var(--hint); color: #451a03; }
+        .btn-reset { background: #475569; color: white; }
+
+        /* Modales */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px); z-index: 100; display: none; justify-content: center; align-items: center; padding: 20px; }
+        .modal-box { background: #1e293b; padding: 25px; border-radius: 16px; max-width: 350px; width: 100%; text-align: center; }
+        .btn-confirm { background: var(--accent); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; margin-top: 15px; cursor: pointer; }
+        .btn-cancel { background: transparent; color: var(--text-muted); border: 1px solid #334155; width: 100%; padding: 10px; border-radius: 8px; margin-top: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <a href="../index.html" class="btn-nav"><i data-lucide="arrow-left" size="18"></i> Salir</a>
+        <div id="lvl-display" style="font-weight:bold; color:var(--accent);">Nivel 1</div>
+    </div>
+
+    <div class="game-container">
+        <div class="grid-wrapper">
+            <div id="grid" class="grid"></div>
+        </div>
+        <div id="words" class="word-list"></div>
+        <div class="controls">
+            <button class="btn-action btn-reset" onclick="game.reset()"><i data-lucide="rotate-ccw" size="18"></i></button>
+            <button class="btn-action btn-hint" onclick="game.askHint()"><i data-lucide="lightbulb" size="18"></i> Pista</button>
+        </div>
+    </div>
+
+    <div id="hint-modal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>¿Usar una pista?</h3>
+            <p>Costo: 5 Monedas</p>
+            <button class="btn-confirm" onclick="game.confirmHint()">Confirmar</button>
+            <button class="btn-cancel" onclick="document.getElementById('hint-modal').style.display='none'">Cancelar</button>
+        </div>
+    </div>
+
+    <div id="win-modal" class="modal-overlay">
+        <div class="modal-box">
+            <i data-lucide="award" size="48" color="#34d399"></i>
+            <h2 id="win-title">¡Genial!</h2>
+            <p id="win-msg"></p>
+            <button class="btn-confirm" onclick="game.next()">Siguiente Nivel</button>
+        </div>
+    </div>
+
+    <script src="../js/app.js"></script>
+    <script>
+        const LEVELS = [
+            { words: ["XILONEN", "RAIDEN", "SACAROSA", "LUNA"], secret: ["BESO"], msg: "Eres mi sol." },
+            { words: ["COSPLAY", "MAR", "FLOR", "LUZ"], secret: ["PASION"], msg: "Brillas como luz." },
+            { words: ["DULCE", "SUEÑO", "SOFIA", "PAZ"], secret: ["ETERNO"], msg: "Tu risa es paz." },
+            { words: ["MAVUIKA", "ANILLO", "FLORES", "HISTORIA"], secret: ["SHADOW"], msg: "Lo conseguiste." },
+            { words: ["BOCCHI", "FONDO", "AZUL", "MIEDOS"], secret: ["YEKATERINA"], msg: "Brillas como el sol." },
+        ];
+
+        const DIRS = [
+            {dr:0, dc:1}, {dr:0, dc:-1}, {dr:1, dc:0}, {dr:-1, dc:0},
+            {dr:1, dc:1}, {dr:1, dc:-1}, {dr:-1, dc:1}, {dr:-1, dc:-1}
+        ];
+
+        class WordSearch {
+            constructor() {
+                this.size = 10;
+                this.state = { lvl: 0, grid: [], found: [], coordsMap: {} };
+                this.selecting = false;
+                this.startPos = null;
+                this.cellElements = [];
+                
+                this.dom = {
+                    grid: document.getElementById('grid'),
+                    words: document.getElementById('words'),
+                    lvl: document.getElementById('lvl-display')
+                };
+
+                const saved = localStorage.getItem('ws_soft_lvl');
+                if(saved) this.state.lvl = parseInt(saved);
+
+                this.initEvents();
+                this.init();
+            }
+
+            init() {
+                if(this.state.lvl >= LEVELS.length) {
+                    alert("¡Juego completado!");
+                    window.location.href = '../index.html';
+                    return;
+                }
+
+                const data = LEVELS[this.state.lvl];
+                this.state.found = [];
+                this.state.coordsMap = {};
+                this.dom.lvl.textContent = `Nivel ${this.state.lvl + 1}`;
+                
+                this.generate([...data.words, ...data.secret]);
+                this.renderWords(data.words);
+            }
+
+            generate(allWords) {
+                let attempts = 0;
+                let success = false;
+                
+                // Ordenar por longitud descendente para facilitar encaje
+                const sortedWords = [...allWords].sort((a,b) => b.length - a.length);
+
+                while(!success && attempts < 5) {
+                    const grid = Array(this.size).fill().map(() => Array(this.size).fill(''));
+                    if(this.placeAllWords(grid, sortedWords, 0)) {
+                        this.state.grid = grid;
+                        this.fillEmpty();
+                        this.draw();
+                        success = true;
+                    }
+                    attempts++;
+                }
+            }
+
+            placeAllWords(grid, words, index) {
+                if(index >= words.length) return true;
+                
+                const word = words[index];
+                const candidates = this.getCandidates(grid, word);
+                
+                for(const cand of candidates) {
+                    const changes = [];
+                    for(let i=0; i<word.length; i++) {
+                        const rr = cand.r + i*cand.dr;
+                        const cc = cand.c + i*cand.dc;
+                        if(grid[rr][cc] === '') {
+                            grid[rr][cc] = word[i];
+                            changes.push({r:rr, c:cc});
+                        }
+                    }
+
+                    if(this.placeAllWords(grid, words, index + 1)) {
+                        this.state.coordsMap[word] = { r: cand.r, c: cand.c };
+                        return true;
+                    }
+
+                    // Backtrack
+                    for(const ch of changes) grid[ch.r][ch.c] = '';
+                }
+                return false;
+            }
+
+            getCandidates(grid, word) {
+                const candidates = [];
+                for(let r=0; r<this.size; r++) {
+                    for(let c=0; c<this.size; c++) {
+                        for(const d of DIRS) {
+                            if(this.canPlaceAt(grid, word, r, c, d.dr, d.dc)) {
+                                candidates.push({r, c, dr: d.dr, dc: d.dc});
+                            }
+                        }
+                    }
+                }
+                return candidates.sort(() => Math.random() - 0.5);
+            }
+
+            canPlaceAt(grid, word, r, c, dr, dc) {
+                for(let i=0; i<word.length; i++) {
+                    const rr = r + i*dr;
+                    const cc = c + i*dc;
+                    if(rr<0 || rr>=this.size || cc<0 || cc>=this.size) return false;
+                    if(grid[rr][cc] !== '' && grid[rr][cc] !== word[i]) return false;
+                }
+                return true;
+            }
+
+            fillEmpty() {
+                const chars = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ";
+                for(let r=0; r<this.size; r++) {
+                    for(let c=0; c<this.size; c++) {
+                        if(this.state.grid[r][c] === '') {
+                            this.state.grid[r][c] = chars[Math.floor(Math.random() * chars.length)];
+                        }
+                    }
+                }
+            }
+
+            draw() {
+                this.dom.grid.innerHTML = '';
+                this.dom.grid.style.gridTemplateColumns = `repeat(${this.size}, 1fr)`;
+                this.cellElements = [];
+
+                for(let r=0; r<this.size; r++) {
+                    for(let c=0; c<this.size; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.textContent = this.state.grid[r][c];
+                        cell.dataset.r = r;
+                        cell.dataset.c = c;
+                        this.dom.grid.appendChild(cell);
+                        this.cellElements.push(cell);
+                    }
+                }
+            }
+
+            initEvents() {
+                const grid = this.dom.grid;
+                
+                grid.addEventListener('pointerdown', (e) => {
+                    const cell = e.target.closest('.cell');
+                    if(cell) {
+                        this.selecting = true;
+                        this.startPos = { r: parseInt(cell.dataset.r), c: parseInt(cell.dataset.c) };
+                        cell.setPointerCapture(e.pointerId);
+                        this.updateSelection(this.startPos.r, this.startPos.c);
+                    }
+                });
+
+                grid.addEventListener('pointermove', (e) => {
+                    if(!this.selecting) return;
+                    const el = document.elementFromPoint(e.clientX, e.clientY);
+                    const cell = el?.closest('.cell');
+                    if(cell) {
+                        this.updateSelection(parseInt(cell.dataset.r), parseInt(cell.dataset.c));
+                    }
+                });
+
+                grid.addEventListener('pointerup', () => {
+                    if(!this.selecting) return;
+                    this.selecting = false;
+                    this.finalizeSelection();
+                });
+            }
+
+            updateSelection(er, ec) {
+                this.cellElements.forEach(c => c.classList.remove('selected'));
+                this.currSelCells = [];
+                
+                const dr = er - this.startPos.r;
+                const dc = ec - this.startPos.c;
+                const dist = Math.max(Math.abs(dr), Math.abs(dc));
+
+                if(dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc)) {
+                    const stepR = dr === 0 ? 0 : dr / dist;
+                    const stepC = dc === 0 ? 0 : dc / dist;
+
+                    for(let i=0; i<=dist; i++) {
+                        const r = Math.round(this.startPos.r + i * stepR);
+                        const c = Math.round(this.startPos.c + i * stepC);
+                        const cell = this.cellElements[r * this.size + c];
+                        if(cell) {
+                            cell.classList.add('selected');
+                            this.currSelCells.push(cell);
+                        }
+                    }
+                }
+            }
+
+            finalizeSelection() {
+                if(!this.currSelCells?.length) return;
+                const word = this.currSelCells.map(c => c.textContent).join('');
+                const revWord = word.split('').reverse().join('');
+                
+                if(!this.checkWord(word)) this.checkWord(revWord);
+                
+                this.cellElements.forEach(c => c.classList.remove('selected'));
+                this.currSelCells = [];
+            }
+
+            checkWord(word) {
+                const lvlData = LEVELS[this.state.lvl];
+                
+                if(lvlData.words.includes(word) && !this.state.found.includes(word)) {
+                    this.state.found.push(word);
+                    this.currSelCells.forEach(c => c.classList.add('found'));
+                    document.getElementById(`tag-${word}`).classList.add('done');
+                    
+                    if(this.state.found.length === lvlData.words.length) {
+                        setTimeout(() => this.win(), 400);
+                    }
+                    return true;
+                }
+
+                if(lvlData.secret.includes(word)) {
+                    const id = `ws_${this.state.lvl}_${word}`;
+                    if(window.GameCenter?.claimSecretWord(id, 60)) {
+                        this.currSelCells.forEach(c => c.classList.add('secret'));
+                    }
+                    return true;
+                }
+                return false;
+            }
+
+            askHint() { document.getElementById('hint-modal').style.display = 'flex'; }
+
+            confirmHint() {
+                document.getElementById('hint-modal').style.display = 'none';
+                const pending = LEVELS[this.state.lvl].words.find(w => !this.state.found.includes(w));
+                
+                if(pending && (window.GameCenter?.spendCoins(5) ?? true)) {
+                    const coords = this.state.coordsMap[pending];
+                    const cell = this.cellElements[coords.r * this.size + coords.c];
+                    cell.classList.add('hint-active');
+                    setTimeout(() => cell.classList.remove('hint-active'), 2000);
+                }
+            }
+
+            win() {
+                const coins = window.GameCenter?.completeLevel('wordsearch', this.state.lvl, 60);
+                document.getElementById('win-msg').innerHTML = LEVELS[this.state.lvl].msg;
+                document.getElementById('win-modal').style.display = 'flex';
+            }
+
+            next() {
+                this.state.lvl++;
+                localStorage.setItem('ws_soft_lvl', this.state.lvl);
+                document.getElementById('win-modal').style.display = 'none';
+                this.init();
+            }
+
+            reset() { if(confirm("¿Reiniciar nivel?")) this.init(); }
+
+            renderWords(words) {
+                this.dom.words.innerHTML = words.map(w => `<div class="word-tag" id="tag-${w}">${w}</div>`).join('');
+            }
+        }
+
+        window.onload = () => {
+            lucide.createIcons();
+            window.game = new WordSearch();
+        };
+    </script>
+</body>
+</html>
