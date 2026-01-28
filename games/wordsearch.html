@@ -5,16 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sopa de Letras</title>
     <script src="https://unpkg.com/lucide@latest"></script>
-    
     <style>
-        /* --- 1. VARIABLES & RESET (Paleta Soft Dark) --- */
+        /* --- 1. VARIABLES & RESET --- */
         :root {
             --bg-color: #0f172a;       
             --grid-bg: #1e293b;        
             --cell-idle: #334155;      
             --text-main: #f1f5f9;      
             --text-muted: #94a3b8;     
-            
             --accent: #818cf8;         
             --found: #34d399;          
             --hint: #fbbf24;           
@@ -32,22 +30,21 @@
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
-            /* Prevenir rebote de scroll en iOS */
             overscroll-behavior: none; 
         }
 
-        /* --- 2. HEADER Y MENÚ --- */
+        /* --- 2. HEADER Y MENÚ (ÁREA DE TOQUE MEJORADA) --- */
         .header {
             width: 100%;
             max-width: 500px;
-            padding: 15px 20px;
+            padding: 12px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             background: rgba(15, 23, 42, 0.98);
             position: sticky;
             top: 0;
-            z-index: 50;
+            z-index: 100;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
@@ -55,97 +52,107 @@
             background: rgba(255,255,255,0.05);
             color: var(--text-muted);
             text-decoration: none;
-            padding: 8px 12px;
-            border-radius: 8px;
+            padding: 10px 14px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
-            gap: 6px;
-            font-size: 0.85rem;
-            border: 1px solid rgba(255,255,255,0.05);
-            transition: 0.2s;
+            gap: 8px;
+            font-size: 0.9rem;
         }
 
-        /* Contenedor del control de nivel */
-        
-            /* --- ACTUALIZADO: ÁREA DE TOQUE MEJORADA --- */
-.level-control-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
+        .level-control-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
 
-.btn-menu-toggle {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--text-main);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px; /* Aumentamos el padding para un área de toque grande */
-    border-radius: 10px;
-    transition: all 0.2s ease;
-}
+        .btn-menu-toggle {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px; /* Área de toque generosa */
+            border-radius: 10px;
+            transition: all 0.2s ease;
+        }
 
-.btn-menu-toggle:active {
-    background: rgba(129, 140, 248, 0.2);
-    transform: scale(0.96);
-}
+        .btn-menu-toggle:active {
+            background: rgba(129, 140, 248, 0.2);
+            transform: scale(0.96);
+        }
 
-#lvl-display {
-    font-weight: 700;
-    color: var(--accent);
-    font-size: 1.1rem; /* Un poco más grande para legibilidad */
-    pointer-events: none; /* El toque lo maneja el botón padre */
-}
+        #lvl-display {
+            font-weight: 700;
+            color: var(--accent);
+            font-size: 1.05rem;
+            pointer-events: none;
+        }
 
-/* Ajuste de posición del dropdown */
-.level-dropdown {
-    position: absolute;
-    top: calc(100% + 10px);
-    right: 0;
-    width: 240px;
-    background: var(--grid-bg);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px;
-    padding: 6px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-    opacity: 0;
-    transform: translateY(-10px) scale(0.95);
-    pointer-events: none;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    transform-origin: top right;
-    z-index: 100;
-}
+        .level-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            width: 240px;
+            background: var(--grid-bg);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 6px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            opacity: 0;
+            transform: translateY(-10px) scale(0.95);
+            pointer-events: none;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            transform-origin: top right;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
 
+        .level-dropdown.active {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: all;
+        }
 
-        /* --- 3. ÁREA DE JUEGO --- */
+        .level-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-muted);
+            margin-bottom: 2px;
+        }
+
+        .level-item.current { background: rgba(129, 140, 248, 0.15); color: var(--accent); font-weight: bold; }
+        .level-item:hover { background: rgba(255,255,255,0.05); }
+
+        /* --- 3. JUEGO --- */
         .game-container {
             width: 100%;
-            max-width: 500px; /* Ancho máximo para desktop */
-            padding: 10px 15px;
+            max-width: 500px;
+            padding: 15px;
             display: flex;
             flex-direction: column;
             gap: 15px;
-            flex: 1; /* Ocupa el espacio restante */
-            margin: 0 auto;
+            flex: 1;
         }
 
-        /* Wrapper del Grid: Mantiene el aspecto cuadrado y maneja eventos */
         .grid-wrapper {
             background: var(--grid-bg);
             padding: 6px;
             border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             width: 100%;
-            aspect-ratio: 1 / 1; /* Mantiene cuadrado perfecto */
-            touch-action: none;  /* CRUCIAL: Evita scroll al jugar */
-            position: relative;
+            aspect-ratio: 1 / 1;
+            touch-action: none;
         }
 
         .grid {
             display: grid;
-            gap: 2px; /* Gap pequeño para móviles */
+            gap: 2px;
             width: 100%;
             height: 100%;
         }
@@ -157,209 +164,74 @@
             justify-content: center;
             align-items: center;
             font-weight: bold;
-            /* Clamp: Texto se adapta entre 12px y 24px según pantalla */
-            font-size: clamp(12px, 5vw, 24px); 
+            font-size: clamp(14px, 5vw, 22px);
             color: var(--text-muted);
-            cursor: pointer;
-            user-select: none;
-            transition: background 0.1s, transform 0.1s;
         }
 
-        .cell.selected { 
-            background: var(--accent); 
-            color: #0f172a; 
-            transform: scale(0.92); 
-            border-radius: 50%;
-            z-index: 2;
-        }
-        
-        .cell.found { 
-            background: var(--found); 
-            color: #064e3b; 
-            animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        
-        .cell.secret {
-            background: var(--secret);
-            color: #4c1d95;
-            animation: pulse 2s infinite;
-        }
-        
-        .cell.hint-active {
-            background: var(--hint);
-            color: black;
-            box-shadow: 0 0 15px var(--hint);
-            transform: scale(1.1);
-            z-index: 10;
-        }
+        .cell.selected { background: var(--accent); color: #0f172a; border-radius: 50%; transform: scale(0.9); }
+        .cell.found { background: var(--found); color: #064e3b; animation: pop 0.3s; }
+        .cell.secret { background: var(--secret); color: #4c1d95; }
+        .cell.hint-active { background: var(--hint); color: #000; box-shadow: 0 0 15px var(--hint); z-index: 10; transform: scale(1.1); }
 
-        @keyframes pop { 50% { transform: scale(1.15); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        @keyframes pop { 50% { transform: scale(1.2); } }
 
-        /* Lista de Palabras */
-        .word-list {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 8px;
-            padding: 5px;
-            min-height: 50px;
-        }
+        .word-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+        .word-tag { background: rgba(255,255,255,0.05); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; color: var(--text-muted); border: 1px solid transparent; }
+        .word-tag.done { background: var(--found); color: #064e3b; opacity: 0.6; text-decoration: line-through; }
 
-        .word-tag {
-            background: rgba(255,255,255,0.03);
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            border: 1px solid rgba(255,255,255,0.05);
-            transition: 0.3s;
-        }
-
-        .word-tag.done {
-            background: var(--found);
-            color: #064e3b;
-            text-decoration: line-through;
-            opacity: 0.6;
-            border-color: transparent;
-        }
-
-        /* --- 4. CONTROLES --- */
-        .controls {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 12px;
-            margin-top: auto; /* Empuja al fondo */
-            padding-bottom: 20px;
-        }
-
-        .btn-action {
-            border: none;
-            border-radius: 12px;
-            padding: 14px;
-            font-weight: 600;
-            font-size: 0.95rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            box-shadow: 0 4px 0 rgba(0,0,0,0.2);
-            transition: transform 0.1s;
-        }
-        .btn-action:active { transform: translateY(2px); box-shadow: none; }
-
+        .controls { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-top: auto; padding-bottom: 20px; }
+        .btn-action { border: none; border-radius: 12px; padding: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
         .btn-reset { background: #334155; color: white; }
         .btn-hint { background: var(--hint); color: #451a03; }
 
-        /* --- 5. MODALES --- */
-        .modal-overlay {
-            position: fixed; inset: 0;
-            background: rgba(0,0,0,0.85);
-            backdrop-filter: blur(4px);
-            z-index: 100;
-            display: none; justify-content: center; align-items: center;
-            padding: 20px;
-            opacity: 0;
-            animation: fadeIn 0.2s forwards;
-        }
-
-        @keyframes fadeIn { to { opacity: 1; } }
-
-        .modal-box {
-            background: #1e293b;
-            padding: 30px 25px;
-            border-radius: 20px;
-            max-width: 340px;
-            width: 100%;
-            text-align: center;
-            border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            transform: scale(0.9);
-            animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-        }
-
-        @keyframes scaleIn { to { transform: scale(1); } }
-
-        .modal-box h2 { color: var(--text-main); margin: 10px 0; }
-        .modal-box p { color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
-
-        .btn-confirm { background: var(--accent); color: white; width: 100%; padding: 14px; border: none; border-radius: 10px; font-weight: bold; font-size: 1rem; cursor: pointer; }
-        .btn-cancel { background: transparent; color: var(--text-muted); width: 100%; padding: 12px; margin-top: 10px; border: none; cursor: pointer; }
-
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px; }
+        .modal-box { background: #1e293b; padding: 30px; border-radius: 20px; width: 100%; max-width: 340px; text-align: center; }
+        .btn-confirm { background: var(--accent); color: white; width: 100%; padding: 14px; border: none; border-radius: 10px; font-weight: bold; margin-top: 15px; }
     </style>
 </head>
 <body>
 
     <div class="header">
-    <a href="../index.html" class="btn-nav">
-        <i data-lucide="arrow-left" size="18"></i> Salir
-    </a>
-
-    <div class="level-control-container">
-        <button class="btn-menu-toggle" onclick="game.toggleLevelMenu()" id="main-level-btn">
-            <span id="lvl-display">Nivel 1</span>
-            <i data-lucide="chevron-down" size="20" style="color: var(--accent)"></i>
-        </button>
-
-        <div id="level-menu" class="level-dropdown">
-            </div>
+        <a href="../index.html" class="btn-nav"><i data-lucide="arrow-left" size="18"></i> Salir</a>
+        <div class="level-control-container">
+            <button class="btn-menu-toggle" onclick="game.toggleLevelMenu()">
+                <span id="lvl-display">Nivel 1</span>
+                <i data-lucide="chevron-down" size="20" style="color:var(--accent)"></i>
+            </button>
+            <div id="level-menu" class="level-dropdown"></div>
+        </div>
     </div>
-</div>
-
 
     <div class="game-container">
-        
         <div class="grid-wrapper" id="grid-container">
             <div id="grid" class="grid"></div>
         </div>
-
         <div id="words" class="word-list"></div>
-
         <div class="controls">
-            <button class="btn-action btn-reset" onclick="game.reset()">
-                <i data-lucide="rotate-ccw" size="20"></i>
-            </button>
-            <button class="btn-action btn-hint" onclick="game.askHint()">
-                <i data-lucide="lightbulb" size="20"></i> Pista
-            </button>
+            <button class="btn-action btn-reset" onclick="game.reset()"><i data-lucide="rotate-ccw" size="20"></i></button>
+            <button class="btn-action btn-hint" onclick="game.askHint()"><i data-lucide="lightbulb" size="20"></i> Pista</button>
         </div>
     </div>
 
     <div id="hint-modal" class="modal-overlay">
         <div class="modal-box">
-            <i data-lucide="sparkles" size="40" color="#fbbf24" style="margin-bottom:10px"></i>
-            <h3>¿Necesitas ayuda?</h3>
-            <p>Revelaremos la ubicación de la primera letra de una palabra faltante.</p>
-            <div style="background:rgba(251, 191, 36, 0.1); padding:8px; border-radius:8px; color:#fbbf24; font-weight:bold; margin-bottom:15px; display:inline-block;">
-                -5 Monedas
-            </div>
-            <button class="btn-confirm" onclick="game.confirmHint()">Usar Pista</button>
-            <button class="btn-cancel" onclick="document.getElementById('hint-modal').style.display='none'">Cancelar</button>
+            <h3>¿Usar Pista?</h3>
+            <p>Se mostrará la primera letra de una palabra.</p>
+            <button class="btn-confirm" onclick="game.confirmHint()">Confirmar (-5)</button>
+            <button style="background:transparent; color:var(--text-muted); border:none; margin-top:10px;" onclick="document.getElementById('hint-modal').style.display='none'">Cerrar</button>
         </div>
     </div>
 
     <div id="win-modal" class="modal-overlay">
         <div class="modal-box">
-            <i data-lucide="trophy" size="48" color="#34d399" style="margin-bottom:15px"></i>
-            <h2>¡Nivel Completado!</h2>
-            <p id="win-msg">Mensaje de victoria</p>
-            <button class="btn-confirm" onclick="game.next()">Siguiente Nivel</button>
+            <i data-lucide="award" size="48" color="#34d399"></i>
+            <h2 id="win-title">¡Excelente!</h2>
+            <p id="win-msg"></p>
+            <button class="btn-confirm" onclick="game.next()">Siguiente</button>
         </div>
     </div>
 
     <script>
-        if (!window.GameCenter) {
-            window.GameCenter = {
-                spendCoins: (amount) => { console.log(`Gasto: ${amount}`); return true; },
-                claimSecretWord: (id, val) => { console.log(`Secreto: ${id}`); return true; },
-                completeLevel: (game, lvl, rew) => { console.log(`Completado: ${lvl}`); return { paid: true }; }
-            };
-        }
-    </script>
-
-    <script>
-        // --- CONFIGURACIÓN ---
         const DIRS = [
             {dr:0, dc:1}, {dr:0, dc:-1}, {dr:1, dc:0}, {dr:-1, dc:0},
             {dr:1, dc:1}, {dr:1, dc:-1}, {dr:-1, dc:1}, {dr:-1, dc:-1}
@@ -370,23 +242,13 @@
             { words: ["COSPLAY", "MAR", "FLOR", "LUZ", "SOL"], secret: ["PASION"], msg: "Eres arte en movimiento." },
             { words: ["DULCE", "SUEÑO", "SOFIA", "PAZ", "AMOR"], secret: ["ETERNO"], msg: "Un sueño hecho realidad." },
             { words: ["MAVUIKA", "ANILLO", "FLORES", "MUNDO"], secret: ["SHADOW"], msg: "Conquistaste este mundo." },
-            { words: ["BOCCHI", "FONDO", "AZUL", "MIEDOS"], secret: ["YEKATERINA"], msg: "Superaste todos los miedos." },
-            { words: ["CIELO", "NUBE", "VIENTO", "LLUVIA"], secret: ["ARCOIRIS"], msg: "Después de la tormenta." },
-            { words: ["LIBRO", "PLUMA", "TINTA", "PAPEL"], secret: ["POEMA"], msg: "Escribes tu destino." },
-            { words: ["CAFE", "MAÑANA", "SOL", "PAN"], secret: ["AROMA"], msg: "Un despertar dulce." }
+            { words: ["BOCCHI", "FONDO", "AZUL", "MIEDOS"], secret: ["YEKATERINA"], msg: "Superaste todos los miedos." }
         ];
 
         class WordSearch {
             constructor() {
                 this.size = 10;
-                this.state = { 
-                    lvl: 0, 
-                    grid: [], 
-                    found: [],
-                    coordsMap: {},
-                    completedLvls: [] // Rastreo de progreso
-                };
-                
+                this.state = { lvl: 0, grid: [], found: [], coordsMap: {}, completed: [] };
                 this.dom = {
                     container: document.getElementById('grid-container'),
                     grid: document.getElementById('grid'),
@@ -395,187 +257,83 @@
                     menu: document.getElementById('level-menu')
                 };
 
-                // Cargar datos
-                const savedLvl = localStorage.getItem('ws_soft_lvl');
+                const savedLvl = localStorage.getItem('ws_lvl');
                 if(savedLvl) this.state.lvl = parseInt(savedLvl);
+                const savedComp = localStorage.getItem('ws_comp');
+                if(savedComp) this.state.completed = JSON.parse(savedComp);
 
-                const savedProgress = localStorage.getItem('ws_completed_list');
-                if(savedProgress) this.state.completedLvls = JSON.parse(savedProgress);
-
-                // Input State
-                this.input = { active: false, start: null, curr: null, selection: [] };
-
+                this.input = { active: false, start: null, selection: [] };
                 this.setupEvents();
                 this.init();
             }
 
-            // --- MENU LOGIC ---
-            toggleLevelMenu() {
-                const isOpen = this.dom.menu.classList.contains('active');
-                if (isOpen) {
-                    this.dom.menu.classList.remove('active');
-                } else {
-                    this.renderLevelMenu();
-                    this.dom.menu.classList.add('active');
-                }
-            }
-
-            renderLevelMenu() {
-                this.dom.menu.innerHTML = LEVELS.map((_, index) => {
-                    const isCompleted = this.state.completedLvls.includes(index);
-                    const isCurrent = this.state.lvl === index;
-                    
-                    // Iconos condicionales
-                    const icon = isCompleted 
-                        ? `<i data-lucide="check-circle" size="16" color="#34d399"></i>` 
-                        : (isCurrent ? `<i data-lucide="play-circle" size="16" color="#818cf8"></i>` : `<i data-lucide="circle" size="16" color="#334155"></i>`);
-
-                    return `
-                        <div class="level-item ${isCurrent ? 'current' : ''}" onclick="game.loadLevel(${index})">
-                            <span>Nivel ${index + 1}</span>
-                            <div class="level-status-icon">${icon}</div>
-                        </div>
-                    `;
-                }).join('');
-                
-                lucide.createIcons();
-            }
-
-            loadLevel(index) {
-                if(index === this.state.lvl) {
-                    this.dom.menu.classList.remove('active');
-                    return;
-                }
-                this.state.lvl = index;
-                localStorage.setItem('ws_soft_lvl', this.state.lvl);
-                this.dom.menu.classList.remove('active');
-                this.init();
-            }
-
-            // --- CORE GAME ---
             init() {
-                if(this.state.lvl >= LEVELS.length) this.state.lvl = 0;
                 const data = LEVELS[this.state.lvl];
-                
                 this.state.found = [];
                 this.state.coordsMap = {};
                 this.dom.lvl.textContent = `Nivel ${this.state.lvl + 1}`;
-                
-                // Algoritmo Robusto
-                const allWords = [...data.words, ...data.secret];
-                // Intentos de generación
-                let attempts = 0;
-                while(attempts < 5) {
-                    if(this.generate(allWords)) break;
-                    attempts++;
-                }
-                if(attempts >= 5) console.error("Error al generar grid");
-
+                this.generate([...data.words, ...data.secret]);
                 this.renderWords(data.words);
             }
 
             generate(wordList) {
-                // Ordenar por longitud descendente para facilitar colocación
                 const words = [...wordList].sort((a,b) => b.length - a.length);
                 const grid = Array(this.size).fill().map(() => Array(this.size).fill(''));
                 
-                // Backtracking
-                if (this.placeAllWords(grid, words)) {
-                    // Rellenar vacíos
+                if (this.backtrack(grid, words, 0)) {
                     const chars = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ";
-                    for(let r=0; r<this.size; r++) {
-                        for(let c=0; c<this.size; c++) {
-                            if(grid[r][c] === '') grid[r][c] = chars[Math.floor(Math.random() * chars.length)];
-                        }
-                    }
+                    for(let r=0; r<this.size; r++)
+                        for(let c=0; c<this.size; c++)
+                            if(grid[r][c] === '') grid[r][c] = chars[Math.floor(Math.random()*chars.length)];
                     this.state.grid = grid;
                     this.draw();
-                    return true;
+                }
+            }
+
+            backtrack(grid, words, idx) {
+                if (idx === words.length) return true;
+                const word = words[idx];
+                const positions = [];
+                for(let r=0; r<this.size; r++)
+                    for(let c=0; c<this.size; c++)
+                        for(const d of DIRS) positions.push({r,c,d});
+                
+                positions.sort(() => Math.random() - 0.5);
+
+                for (const pos of positions) {
+                    if (this.canPlace(grid, word, pos)) {
+                        const added = [];
+                        for(let i=0; i<word.length; i++) {
+                            const rr = pos.r + i*pos.d.dr, cc = pos.c + i*pos.d.dc;
+                            if(grid[rr][cc] === '') { grid[rr][cc] = word[i]; added.push({rr,cc}); }
+                        }
+                        this.state.coordsMap[word] = {r: pos.r, c: pos.c};
+                        if (this.backtrack(grid, words, idx + 1)) return true;
+                        added.forEach(p => grid[p.rr][p.cc] = '');
+                    }
                 }
                 return false;
             }
 
-            placeAllWords(grid, words, index = 0) {
-                if (index >= words.length) return true;
-                const word = words[index];
-                const candidates = this.getCandidates(grid, word);
-
-                for (const cand of candidates) {
-                    const changes = [];
-                    for(let i=0; i<word.length; i++) {
-                        const rr = cand.r + i*cand.dr;
-                        const cc = cand.c + i*cand.dc;
-                        if(grid[rr][cc] === '') {
-                            grid[rr][cc] = word[i];
-                            changes.push({r:rr, c:cc});
-                        }
-                    }
-                    // Guardar coord para pistas
-                    this.state.coordsMap[word] = { r: cand.r, c: cand.c };
-
-                    if (this.placeAllWords(grid, words, index + 1)) return true;
-
-                    // Backtrack
-                    for(const ch of changes) grid[ch.r][ch.c] = '';
-                    delete this.state.coordsMap[word];
-                }
-                return false;
-            }
-
-            getCandidates(grid, word) {
-                const candidates = [];
-                for(let r=0; r<this.size; r++) {
-                    for(let c=0; c<this.size; c++) {
-                        for(const d of DIRS) {
-                            if(this.canPlaceAt(grid, word, r, c, d)) {
-                                candidates.push({r, c, dr: d.dr, dc: d.dc});
-                            }
-                        }
-                    }
-                }
-                // Randomizar candidatos
-                for(let i=candidates.length-1; i>0; i--){
-                    const j = Math.floor(Math.random()*(i+1));
-                    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-                }
-                return candidates;
-            }
-
-            canPlaceAt(grid, word, r, c, d) {
-                const lastR = r + d.dr * (word.length - 1);
-                const lastC = c + d.dc * (word.length - 1);
-                if (lastR < 0 || lastR >= this.size || lastC < 0 || lastC >= this.size) return false;
-
+            canPlace(grid, word, pos) {
+                const lr = pos.r + (word.length-1)*pos.d.dr, lc = pos.c + (word.length-1)*pos.d.dc;
+                if (lr<0 || lr>=this.size || lc<0 || lc>=this.size) return false;
                 for(let i=0; i<word.length; i++) {
-                    const char = grid[r + i*d.dr][c + i*d.dc];
-                    if(char !== '' && char !== word[i]) return false;
+                    const c = grid[pos.r + i*pos.d.dr][pos.c + i*pos.d.dc];
+                    if (c !== '' && c !== word[i]) return false;
                 }
                 return true;
             }
 
             draw() {
-                // Config Grid
                 this.dom.grid.style.gridTemplateColumns = `repeat(${this.size}, 1fr)`;
-                const currentCells = this.dom.grid.children;
-                const reuse = currentCells.length === this.size * this.size;
-
-                if (!reuse) this.dom.grid.innerHTML = '';
-                
-                let idx = 0;
+                this.dom.grid.innerHTML = '';
                 this.state.grid.forEach((row, r) => {
                     row.forEach((char, c) => {
-                        let cell;
-                        if (reuse) {
-                            cell = currentCells[idx];
-                            cell.className = 'cell'; 
-                        } else {
-                            cell = document.createElement('div');
-                            cell.className = 'cell';
-                            this.dom.grid.appendChild(cell);
-                        }
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
                         cell.textContent = char;
-                        cell.dataset.r = r; cell.dataset.c = c;
-                        idx++;
+                        this.dom.grid.appendChild(cell);
                     });
                 });
             }
@@ -584,161 +342,115 @@
                 this.dom.words.innerHTML = words.map(w => `<div class="word-tag" id="tag-${w}">${w}</div>`).join('');
             }
 
-            // --- INPUT HANDLING (POINTER EVENTS) ---
             setupEvents() {
-                const c = this.dom.container;
-                c.addEventListener('pointerdown', (e) => {
-                    e.preventDefault();
-                    const pos = this.getGridPos(e);
-                    if(pos) {
-                        this.input.active = true;
-                        this.input.start = pos;
-                        this.input.curr = pos;
-                        this.updateVisuals();
-                        c.setPointerCapture(e.pointerId);
-                    }
-                });
-
-                c.addEventListener('pointermove', (e) => {
-                    if(!this.input.active) return;
-                    e.preventDefault();
-                    const pos = this.getGridPos(e);
-                    if(pos) {
-                        this.input.curr = pos;
-                        this.updateVisuals();
-                    }
-                });
-
-                const end = (e) => {
-                    if(this.input.active) {
-                        this.endSel();
-                        c.releasePointerCapture(e.pointerId);
-                        this.input.active = false;
-                    }
+                const container = this.dom.container;
+                const handleStart = (e) => {
+                    const pos = this.getPos(e);
+                    if (pos) { this.input.active = true; this.input.start = pos; this.updateVisuals(pos); }
+                    container.setPointerCapture(e.pointerId);
                 };
-                c.addEventListener('pointerup', end);
-                c.addEventListener('pointercancel', end);
+                const handleMove = (e) => {
+                    if (!this.input.active) return;
+                    const pos = this.getPos(e);
+                    if (pos) this.updateVisuals(pos);
+                };
+                const handleEnd = () => {
+                    if (!this.input.active) return;
+                    this.input.active = false;
+                    const word = this.input.selection.map(c => c.textContent).join('');
+                    const rev = word.split('').reverse().join('');
+                    if (!this.check(word)) this.check(rev);
+                    this.input.selection.forEach(c => c.classList.remove('selected'));
+                };
 
-                // Cerrar menú al clickear fuera
+                container.addEventListener('pointerdown', handleStart);
+                container.addEventListener('pointermove', handleMove);
+                container.addEventListener('pointerup', handleEnd);
                 document.addEventListener('click', (e) => {
-                    if (!e.target.closest('.level-control-container')) {
-                        this.dom.menu.classList.remove('active');
-                    }
+                    if (!e.target.closest('.level-control-container')) this.dom.menu.classList.remove('active');
                 });
             }
 
-            getGridPos(e) {
+            getPos(e) {
                 const rect = this.dom.grid.getBoundingClientRect();
-                // Margen de tolerancia para dedos
-                if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return null;
-                
-                const c = Math.floor((e.clientX - rect.left) / (rect.width / this.size));
-                const r = Math.floor((e.clientY - rect.top) / (rect.height / this.size));
-                
-                if(r >= 0 && r < this.size && c >= 0 && c < this.size) return {r,c};
-                return null;
+                const x = e.clientX - rect.left, y = e.clientY - rect.top;
+                if (x<0 || x>rect.width || y<0 || y>rect.height) return null;
+                return { r: Math.floor(y/(rect.height/this.size)), c: Math.floor(x/(rect.width/this.size)) };
             }
 
-            updateVisuals() {
+            updateVisuals(curr) {
                 this.input.selection.forEach(c => c.classList.remove('selected'));
                 this.input.selection = [];
-                
-                const s = this.input.start, e = this.input.curr;
-                const dr = e.r - s.r, dc = e.c - s.c;
-                
-                // Permitir selección solo en 8 direcciones válidas
-                if(dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc)) {
+                const start = this.input.start;
+                const dr = curr.r - start.r, dc = curr.c - start.c;
+                if (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc)) {
                     const steps = Math.max(Math.abs(dr), Math.abs(dc));
-                    const ir = steps === 0 ? 0 : dr/steps;
-                    const ic = steps === 0 ? 0 : dc/steps;
-                    
-                    for(let k=0; k<=steps; k++) {
-                        const r = Math.round(s.r + k*ir);
-                        const c = Math.round(s.c + k*ic);
-                        const idx = r * this.size + c;
-                        const cell = this.dom.grid.children[idx];
-                        if(cell) {
-                            cell.classList.add('selected');
-                            this.input.selection.push(cell);
-                        }
+                    const ir = steps === 0 ? 0 : dr/steps, ic = steps === 0 ? 0 : dc/steps;
+                    for (let i=0; i<=steps; i++) {
+                        const cell = this.dom.grid.children[Math.round(start.r + i*ir) * this.size + Math.round(start.c + i*ic)];
+                        cell.classList.add('selected');
+                        this.input.selection.push(cell);
                     }
                 }
-            }
-
-            endSel() {
-                if(!this.input.selection.length) return;
-                const text = this.input.selection.map(c => c.textContent).join('');
-                const rev = text.split('').reverse().join('');
-                
-                if(!this.check(text)) this.check(rev);
-                this.input.selection.forEach(c => c.classList.remove('selected'));
-                this.input.selection = [];
             }
 
             check(word) {
                 const data = LEVELS[this.state.lvl];
-                // 1. Palabra de la lista
-                if(data.words.includes(word) && !this.state.found.includes(word)) {
+                if (data.words.includes(word) && !this.state.found.includes(word)) {
                     this.state.found.push(word);
                     document.getElementById(`tag-${word}`).classList.add('done');
                     this.input.selection.forEach(c => c.classList.add('found'));
-                    if(this.state.found.length === data.words.length) setTimeout(() => this.win(), 500);
+                    if (this.state.found.length === data.words.length) setTimeout(() => this.win(), 300);
                     return true;
                 }
-                // 2. Palabra Secreta
-                if(data.secret.includes(word)) {
-                    const id = `ws_${this.state.lvl}_${word}`;
-                    if(window.GameCenter.claimSecretWord(id, 60)) {
-                        alert(`✨ Secreto: ${word}`);
-                        this.input.selection.forEach(c => c.classList.add('secret'));
-                    }
-                    return true;
+                if (data.secret.includes(word)) {
+                    this.input.selection.forEach(c => c.classList.add('secret'));
+                    alert("¡Secreto!"); return true;
                 }
                 return false;
             }
 
-            askHint() { document.getElementById('hint-modal').style.display = 'flex'; }
-            
-            confirmHint() {
-                document.getElementById('hint-modal').style.display = 'none';
-                const missing = LEVELS[this.state.lvl].words.find(w => !this.state.found.includes(w));
-                if(missing && window.GameCenter.spendCoins(5)) {
-                    const c = this.state.coordsMap[missing];
-                    const cell = this.dom.grid.children[c.r*this.size + c.c];
-                    cell.classList.add('hint-active');
-                    setTimeout(() => cell.classList.remove('hint-active'), 2500);
-                } else if(!missing) alert("Nivel completado");
-                else alert("Monedas insuficientes");
+            toggleLevelMenu() {
+                const menu = this.dom.menu;
+                if (menu.classList.contains('active')) return menu.classList.remove('active');
+                menu.innerHTML = LEVELS.map((_, i) => `
+                    <div class="level-item ${i === this.state.lvl ? 'current' : ''}" onclick="game.loadLevel(${i})">
+                        <span>Nivel ${i + 1}</span>
+                        ${this.state.completed.includes(i) ? '<i data-lucide="check" size="16"></i>' : ''}
+                    </div>
+                `).join('');
+                menu.classList.add('active');
+                lucide.createIcons();
             }
 
+            loadLevel(i) { this.state.lvl = i; localStorage.setItem('ws_lvl', i); this.dom.menu.classList.remove('active'); this.init(); }
+            
             win() {
-                // Guardar Progreso
-                if (!this.state.completedLvls.includes(this.state.lvl)) {
-                    this.state.completedLvls.push(this.state.lvl);
-                    localStorage.setItem('ws_completed_list', JSON.stringify(this.state.completedLvls));
+                if (!this.state.completed.includes(this.state.lvl)) {
+                    this.state.completed.push(this.state.lvl);
+                    localStorage.setItem('ws_comp', JSON.stringify(this.state.completed));
                 }
-
-                const res = window.GameCenter.completeLevel('ws', this.state.lvl, 60);
-                document.getElementById('win-msg').innerHTML = 
-                    `${LEVELS[this.state.lvl].msg}<br><br>` + 
-                    (res.paid ? `<span style='color:#34d399'>+60 Monedas</span>` : `<span style='color:#94a3b8'>Rejugado</span>`);
+                document.getElementById('win-msg').textContent = LEVELS[this.state.lvl].msg;
                 document.getElementById('win-modal').style.display = 'flex';
             }
 
-            next() {
-                this.state.lvl++;
-                localStorage.setItem('ws_soft_lvl', this.state.lvl);
-                document.getElementById('win-modal').style.display = 'none';
-                this.init();
-            }
+            next() { this.state.lvl = (this.state.lvl + 1) % LEVELS.length; document.getElementById('win-modal').style.display = 'none'; this.init(); }
             
-            reset() { if(confirm("¿Reiniciar nivel?")) this.init(); }
+            askHint() { document.getElementById('hint-modal').style.display = 'flex'; }
+            confirmHint() {
+                document.getElementById('hint-modal').style.display = 'none';
+                const missing = LEVELS[this.state.lvl].words.find(w => !this.state.found.includes(w));
+                if (missing) {
+                    const pos = this.state.coordsMap[missing];
+                    const cell = this.dom.grid.children[pos.r * this.size + pos.c];
+                    cell.classList.add('hint-active');
+                    setTimeout(() => cell.classList.remove('hint-active'), 2000);
+                }
+            }
+            reset() { if(confirm("¿Reiniciar?")) this.init(); }
         }
 
-        window.onload = () => {
-            lucide.createIcons();
-            window.game = new WordSearch();
-        };
+        window.onload = () => { lucide.createIcons(); window.game = new WordSearch(); };
     </script>
 </body>
 </html>
