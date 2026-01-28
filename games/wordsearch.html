@@ -16,7 +16,6 @@
             
             --accent: #818cf8;         
             --found: #34d399;          
-            --hint: #fbbf24;           
             --secret: #d8b4fe;
             --locked: #475569;         
         }
@@ -74,7 +73,7 @@
             font-weight: bold;
             color: var(--accent);
             background: rgba(129, 140, 248, 0.1);
-            padding: 8px 16px; /* Zona táctil grande */
+            padding: 8px 16px;
             border-radius: 20px;
             cursor: pointer;
             display: flex;
@@ -89,14 +88,14 @@
         .level-dropdown {
             position: absolute;
             top: 120%;
-            right: 0; /* Alineado a la derecha */
+            right: 0;
             width: 220px;
             background: #1e293b;
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             padding: 8px;
-            display: none; /* Oculto por defecto */
+            display: none;
             flex-direction: column;
             gap: 4px;
             max-height: 60vh;
@@ -144,7 +143,7 @@
             margin: 0 auto;
             width: 100%;
             aspect-ratio: 1;
-            touch-action: none; /* Crucial para evitar scroll en móviles al jugar */
+            touch-action: none;
         }
 
         .grid {
@@ -188,15 +187,6 @@
             animation: pulse 1.5s infinite;
         }
 
-        .cell.hint-active {
-            background: var(--hint);
-            color: black;
-            border: 2px solid white;
-            z-index: 5;
-            transform: scale(1.1);
-            box-shadow: 0 0 15px var(--hint);
-        }
-
         @keyframes pop { 50% { transform: scale(1.2); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
@@ -228,7 +218,6 @@
 
         .controls {
             display: flex;
-            gap: 15px;
             margin-top: auto;
             padding-bottom: 20px;
         }
@@ -248,7 +237,6 @@
             touch-action: manipulation;
         }
 
-        .btn-hint { background: var(--hint); color: #451a03; }
         .btn-reset { background: #475569; color: white; }
 
         /* Modales */
@@ -276,8 +264,7 @@
         .modal-box p { color: var(--text-muted); line-height: 1.5; }
 
         .btn-confirm { background: var(--accent); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; margin-top: 15px; cursor: pointer; }
-        .btn-cancel { background: transparent; color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); width: 100%; padding: 10px; border-radius: 8px; margin-top: 10px; cursor: pointer; }
-
+        
     </style>
 </head>
 <body>
@@ -304,24 +291,8 @@
         <div id="words" class="word-list"></div>
         <div class="controls">
             <button class="btn-action btn-reset" onclick="game.reset()">
-                <i data-lucide="rotate-ccw" size="18"></i>
+                <i data-lucide="rotate-ccw" size="18"></i> Reiniciar
             </button>
-            <button class="btn-action btn-hint" onclick="game.askHint()">
-                <i data-lucide="lightbulb" size="18"></i> Pista
-            </button>
-        </div>
-    </div>
-
-    <div id="hint-modal" class="modal-overlay">
-        <div class="modal-box">
-            <i data-lucide="lightbulb" size="40" color="#fbbf24" style="margin-bottom:10px"></i>
-            <h3>¿Usar una pista?</h3>
-            <p>Te mostraremos la primera letra de una palabra que te falte.</p>
-            <div style="background:rgba(251, 191, 36, 0.1); padding:10px; border-radius:8px; color:#fbbf24; font-weight:bold; margin:10px 0;">
-                Costo: 5 Monedas
-            </div>
-            <button class="btn-confirm" onclick="game.confirmHint()">Confirmar</button>
-            <button class="btn-cancel" onclick="document.getElementById('hint-modal').style.display='none'">Cancelar</button>
         </div>
     </div>
 
@@ -352,7 +323,7 @@
                     maxUnlocked: 0,
                     grid: [], 
                     found: [],
-                    coordsMap: {} 
+                    foundSecrets: [] // Nuevo estado para persistencia de secretos
                 };
                 
                 this.dom = {
@@ -362,14 +333,11 @@
                     menu: document.getElementById('lvl-dropdown')
                 };
 
-                // Recuperar estado
                 const savedMax = localStorage.getItem('ws_soft_max_lvl');
                 if(savedMax) this.state.maxUnlocked = parseInt(savedMax);
                 
-                // Iniciar en el último nivel desbloqueado por defecto
                 this.state.lvl = this.state.maxUnlocked;
 
-                // Cerrar menú al tocar fuera
                 document.addEventListener('click', (e) => {
                     if (!e.target.closest('.level-menu-container')) {
                         this.dom.menu.classList.remove('show');
@@ -379,7 +347,6 @@
                 this.init();
             }
 
-            // --- GESTIÓN DEL MENÚ ---
             toggleMenu() {
                 this.renderMenu();
                 this.dom.menu.classList.toggle('show');
@@ -420,7 +387,6 @@
                 this.init();
             }
 
-            // --- LÓGICA DE JUEGO ---
             init() {
                 if(this.state.lvl >= LEVELS.length) {
                     this.state.lvl = LEVELS.length - 1; 
@@ -428,7 +394,8 @@
 
                 const data = LEVELS[this.state.lvl];
                 this.state.found = [];
-                this.state.coordsMap = {};
+                this.state.foundSecrets = []; // Reset secretos
+                
                 this.dom.lvl.textContent = `Nivel ${this.state.lvl + 1}`;
                 
                 this.generate([...data.words, ...data.secret]);
@@ -450,7 +417,6 @@
 
                         if(this.canPlace(grid, word, r, c, dr, dc)) {
                             this.place(grid, word, r, c, dr, dc);
-                            this.state.coordsMap[word] = { r, c };
                             placed = true;
                         }
                         attempts++;
@@ -494,7 +460,6 @@
                         cell.textContent = char;
                         cell.dataset.r = r; cell.dataset.c = c;
                         
-                        // Manejadores de Eventos
                         const start = (e) => { this.startSel(r,c); };
                         const move = (e) => { 
                             if(e.cancelable) e.preventDefault(); 
@@ -530,6 +495,7 @@
             moveSel(r,c) { if(this.selecting) this.updateSel(r,c); }
             
             updateSel(er, ec) {
+                // Removemos 'selected', pero NO tocamos 'found' ni 'secret'
                 document.querySelectorAll('.cell.selected').forEach(c => c.classList.remove('selected'));
                 this.currSel = [];
                 
@@ -577,41 +543,27 @@
                     return true;
                 }
                 
-                // Palabra Secreta (LÓGICA ORIGINAL RESTAURADA)
+                // Palabra Secreta (LÓGICA CORREGIDA)
                 if(data.secret.includes(word)) {
-                    const id = `ws_${this.state.lvl}_${word}`;
-                    // Asumimos que GameCenter es global desde app.js
-                    if(window.GameCenter && window.GameCenter.claimSecretWord(id, 60)) {
-                        alert("✨ ¡Secreto! +60 Monedas");
-                        this.currSel.forEach(c => c.classList.add('secret'));
+                    // Si ya se encontró antes, solo la iluminamos (visual)
+                    if (this.state.foundSecrets.includes(word)) {
+                        return true;
                     }
+
+                    // 1. Marcarla visualmente y guardar estado PRIMERO (para que no desaparezca)
+                    this.state.foundSecrets.push(word);
+                    this.currSel.forEach(c => c.classList.add('secret'));
+                    alert("✨ ¡Secreto encontrado!");
+
+                    // 2. Intentar cobrar (Segundo plano)
+                    const id = `ws_${this.state.lvl}_${word}`;
+                    if(window.GameCenter) {
+                         window.GameCenter.claimSecretWord(id, 60);
+                    }
+                    
                     return true;
                 }
                 return false;
-            }
-
-            // --- SISTEMA DE PISTAS (COBRO ESTRICTO) ---
-            askHint() { document.getElementById('hint-modal').style.display = 'flex'; }
-            
-            confirmHint() {
-                document.getElementById('hint-modal').style.display = 'none';
-                const targets = LEVELS[this.state.lvl].words;
-                const pending = targets.find(w => !this.state.found.includes(w));
-                
-                if(pending) {
-                    // Verificación estricta: Si no paga, NO hay pista
-                    if(window.GameCenter && window.GameCenter.spendCoins(5)) {
-                        const coords = this.state.coordsMap[pending];
-                        const idx = coords.r * this.size + coords.c;
-                        const cell = this.dom.grid.children[idx];
-                        cell.classList.add('hint-active');
-                        setTimeout(() => cell.classList.remove('hint-active'), 2000);
-                    } else {
-                        alert("No tienes suficientes monedas.");
-                    }
-                } else {
-                    alert("¡Ya encontraste todo!");
-                }
             }
 
             win() {
@@ -621,7 +573,6 @@
                     paid = res.paid;
                 }
 
-                // Desbloqueo de nivel
                 if (this.state.lvl >= this.state.maxUnlocked) {
                     this.state.maxUnlocked = this.state.lvl + 1;
                     localStorage.setItem('ws_soft_max_lvl', this.state.maxUnlocked);
