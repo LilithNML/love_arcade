@@ -532,6 +532,7 @@
 
             check(word) {
                 const data = LEVELS[this.state.lvl];
+                
                 // Palabra Normal
                 if(data.words.includes(word) && !this.state.found.includes(word)) {
                     this.state.found.push(word);
@@ -541,15 +542,28 @@
                     if(this.state.found.length === data.words.length) setTimeout(() => this.win(), 500);
                     return true;
                 }
-                // Palabra Secreta (CORRECCIÓN APLICADA AQUÍ)
+                
+                // Palabra Secreta (LÓGICA REFORZADA)
                 if(data.secret.includes(word)) {
-                    // 1. Aplicar estilo visual SIEMPRE que se encuentre
+                    // 1. Efecto Visual Inmediato
                     this.currSel.forEach(c => c.classList.add('secret'));
 
-                    // 2. Intentar dar la recompensa
-                    const id = `ws_${this.state.lvl}_${word}`;
-                    if(window.GameCenter && window.GameCenter.claimSecretWord(id, 60)) {
-                        alert("✨ ¡Secreto! +60 Monedas");
+                    // 2. Control Local de Recompensa (bypass bug de GameCenter.claimSecretWord)
+                    const secretKey = `ws_secret_claimed_${this.state.lvl}_${word}`;
+                    
+                    if (!localStorage.getItem(secretKey)) {
+                        // Intentar añadir monedas directamente
+                        if(window.GameCenter && typeof window.GameCenter.addCoins === 'function') {
+                            window.GameCenter.addCoins(60);
+                            localStorage.setItem(secretKey, 'true');
+                            alert("✨ ¡Secreto! +60 Monedas");
+                        }
+                        // Fallback por si acaso addCoins no existe pero claimSecretWord sí
+                        else if (window.GameCenter && typeof window.GameCenter.claimSecretWord === 'function') {
+                             window.GameCenter.claimSecretWord(`ws_${this.state.lvl}_${word}`, 60);
+                             localStorage.setItem(secretKey, 'true'); // Asumimos éxito
+                             alert("✨ ¡Secreto! +60 Monedas");
+                        }
                     }
                     return true;
                 }
