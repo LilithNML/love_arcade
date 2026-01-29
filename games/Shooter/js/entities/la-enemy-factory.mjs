@@ -39,6 +39,10 @@ export class LA_EnemyFactory {
         // Bind methods
         enemy.update = this.getUpdateFunction(type).bind(enemy);
         enemy.takeDamage = this.takeDamage.bind(enemy);
+        enemy.shootStraight = this.shootStraight.bind(enemy);
+        enemy.shootAimedBurst = this.shootAimedBurst.bind(enemy);
+        enemy.shootSpread = this.shootSpread.bind(enemy);
+        enemy.shootHoming = this.shootHoming.bind(enemy);
         
         return enemy;
     }
