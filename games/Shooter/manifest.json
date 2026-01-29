@@ -1,0 +1,38 @@
+{
+  "name": "Space Shooter",
+  "short_name": "Shooter",
+  "description": "Fast-paced arcade space shooter with infinite waves and increasing difficulty",
+  "version": "1.0.0",
+  "gameId": "lovearcade_shooter",
+  "category": "arcade",
+  "author": "Love Arcade",
+  "thumbnail": "assets/sprites/thumbnail.png",
+  "features": [
+    "Infinite waves",
+    "Progressive difficulty",
+    "Touch controls",
+    "Keyboard & mouse support",
+    "Dash mechanic",
+    "Charged shots",
+    "Multiple enemy types",
+    "Score multipliers",
+    "Milestone rewards"
+  ],
+  "controls": {
+    "mobile": {
+      "movement": "Left joystick",
+      "aim": "Right joystick",
+      "fire": "Fire button (auto-fire available)",
+      "dash": "Dash button"
+    },
+    "desktop": {
+      "movement": "WASD or Arrow keys",
+      "aim": "Mouse",
+      "fire": "Left click or hold",
+      "dash": "Space or Shift"
+    }
+  },
+  "difficulty": "Medium to Hard",
+  "playTime": "5-30 minutes per session",
+  "orientation": "any"
+}
