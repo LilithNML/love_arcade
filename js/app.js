@@ -3,7 +3,7 @@
  */
 
 const CONFIG = {
-    stateKey: 'gamecenter_v8_promos', // Cambiamos versión para evitar conflictos
+    stateKey: 'gamecenter_v6_promos', // Cambiamos versión para evitar conflictos
     initialCoins: 0
 };
 
