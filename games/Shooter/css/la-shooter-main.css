@@ -1,0 +1,634 @@
+/* ================================================
+   Love Arcade Shooter - Main Stylesheet
+   Mobile-First, Responsive Design
+   ================================================ */
+
+:root {
+    /* Color Palette */
+    --la-shooter-bg-primary: #0a0e27;
+    --la-shooter-bg-secondary: #1a1f3a;
+    --la-shooter-accent-primary: #00d4ff;
+    --la-shooter-accent-secondary: #ff006e;
+    --la-shooter-text-primary: #ffffff;
+    --la-shooter-text-secondary: #a8b2d1;
+    --la-shooter-success: #00ff88;
+    --la-shooter-warning: #ffaa00;
+    --la-shooter-danger: #ff3366;
+    
+    /* Spacing */
+    --la-shooter-spacing-xs: 0.25rem;
+    --la-shooter-spacing-sm: 0.5rem;
+    --la-shooter-spacing-md: 1rem;
+    --la-shooter-spacing-lg: 1.5rem;
+    --la-shooter-spacing-xl: 2rem;
+    
+    /* Typography */
+    --la-shooter-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    --la-shooter-font-size-sm: 0.875rem;
+    --la-shooter-font-size-md: 1rem;
+    --la-shooter-font-size-lg: 1.25rem;
+    --la-shooter-font-size-xl: 1.75rem;
+    
+    /* Effects */
+    --la-shooter-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --la-shooter-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+    --la-shooter-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --la-shooter-glow-primary: 0 0 20px rgba(0, 212, 255, 0.5);
+    --la-shooter-glow-secondary: 0 0 20px rgba(255, 0, 110, 0.5);
+    
+    /* Z-Index Layers */
+    --la-shooter-z-canvas: 1;
+    --la-shooter-z-hud: 10;
+    --la-shooter-z-controls: 20;
+    --la-shooter-z-overlay: 30;
+    --la-shooter-z-exit: 40;
+}
+
+/* ================================================
+   Reset & Base Styles
+   ================================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: var(--la-shooter-font-family);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    background: var(--la-shooter-bg-primary);
+    color: var(--la-shooter-text-primary);
+}
+
+/* ================================================
+   Main Container
+   ================================================ */
+
+.la-shooter-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(ellipse at center, #1a1f3a 0%, #0a0e27 100%);
+}
+
+/* ================================================
+   Canvas
+   ================================================ */
+
+#la-shooter-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: var(--la-shooter-z-canvas);
+    display: block;
+}
+
+/* ================================================
+   Exit Button
+   ================================================ */
+
+.la-shooter-btn-exit {
+    position: absolute;
+    top: max(env(safe-area-inset-top), var(--la-shooter-spacing-md));
+    right: var(--la-shooter-spacing-md);
+    z-index: var(--la-shooter-z-exit);
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(26, 31, 58, 0.9);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    color: var(--la-shooter-text-primary);
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(10px);
+    box-shadow: var(--la-shooter-shadow-md);
+}
+
+.la-shooter-btn-exit:hover,
+.la-shooter-btn-exit:active {
+    background: rgba(255, 51, 102, 0.9);
+    border-color: var(--la-shooter-danger);
+    transform: scale(1.05);
+    box-shadow: var(--la-shooter-glow-secondary);
+}
+
+/* ================================================
+   HUD (Heads-Up Display)
+   ================================================ */
+
+.la-shooter-hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: var(--la-shooter-z-hud);
+    pointer-events: none;
+    padding: max(env(safe-area-inset-top), var(--la-shooter-spacing-md)) var(--la-shooter-spacing-md) max(env(safe-area-inset-bottom), var(--la-shooter-spacing-md));
+}
+
+.la-shooter-hud-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--la-shooter-spacing-md);
+}
+
+.la-shooter-hud-life {
+    display: flex;
+    align-items: center;
+    gap: var(--la-shooter-spacing-sm);
+    background: rgba(26, 31, 58, 0.9);
+    padding: var(--la-shooter-spacing-sm) var(--la-shooter-spacing-md);
+    border-radius: 100px;
+    backdrop-filter: blur(10px);
+    box-shadow: var(--la-shooter-shadow-sm);
+    font-size: var(--la-shooter-font-size-lg);
+    font-weight: 700;
+    color: var(--la-shooter-success);
+}
+
+.la-shooter-hud-life svg {
+    filter: drop-shadow(0 0 8px currentColor);
+}
+
+.la-shooter-hud-score {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--la-shooter-spacing-xs);
+    background: rgba(26, 31, 58, 0.9);
+    padding: var(--la-shooter-spacing-sm) var(--la-shooter-spacing-md);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    box-shadow: var(--la-shooter-shadow-sm);
+}
+
+.la-shooter-score-value {
+    font-size: var(--la-shooter-font-size-xl);
+    font-weight: 700;
+    color: var(--la-shooter-accent-primary);
+    text-shadow: 0 0 10px currentColor;
+}
+
+.la-shooter-multiplier {
+    font-size: var(--la-shooter-font-size-sm);
+    font-weight: 600;
+    color: var(--la-shooter-warning);
+    text-shadow: 0 0 8px currentColor;
+}
+
+.la-shooter-hud-bottom {
+    position: absolute;
+    bottom: calc(max(env(safe-area-inset-bottom), var(--la-shooter-spacing-md)) + 160px);
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.la-shooter-wave-info {
+    background: rgba(26, 31, 58, 0.9);
+    padding: var(--la-shooter-spacing-sm) var(--la-shooter-spacing-lg);
+    border-radius: 100px;
+    backdrop-filter: blur(10px);
+    box-shadow: var(--la-shooter-shadow-md);
+    font-size: var(--la-shooter-font-size-md);
+    font-weight: 600;
+    color: var(--la-shooter-accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    animation: la-shooter-pulse 2s ease-in-out infinite;
+}
+
+@keyframes la-shooter-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(0.98); }
+}
+
+/* ================================================
+   Touch Controls
+   ================================================ */
+
+.la-shooter-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: var(--la-shooter-z-controls);
+    pointer-events: none;
+}
+
+/* Joysticks */
+.la-shooter-joystick {
+    position: absolute;
+    bottom: max(env(safe-area-inset-bottom), var(--la-shooter-spacing-lg));
+    pointer-events: auto;
+}
+
+.la-shooter-joystick-left {
+    left: var(--la-shooter-spacing-lg);
+}
+
+.la-shooter-joystick-right {
+    right: var(--la-shooter-spacing-lg);
+}
+
+.la-shooter-joystick-base {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0, 212, 255, 0.1) 0%, rgba(26, 31, 58, 0.8) 100%);
+    border: 2px solid rgba(0, 212, 255, 0.3);
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 0 20px rgba(0, 212, 255, 0.2);
+    position: relative;
+}
+
+.la-shooter-joystick-stick {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--la-shooter-accent-primary) 0%, rgba(0, 212, 255, 0.6) 100%);
+    border: 3px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 20px var(--la-shooter-accent-primary), inset 0 0 10px rgba(255, 255, 255, 0.3);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s ease-out;
+}
+
+.la-shooter-joystick.active .la-shooter-joystick-base {
+    border-color: var(--la-shooter-accent-primary);
+    box-shadow: inset 0 0 30px rgba(0, 212, 255, 0.4), 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+/* Action Buttons */
+.la-shooter-action-buttons {
+    position: absolute;
+    bottom: max(env(safe-area-inset-bottom), var(--la-shooter-spacing-lg));
+    right: calc(var(--la-shooter-spacing-lg) + 140px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--la-shooter-spacing-md);
+    pointer-events: auto;
+}
+
+.la-shooter-btn-action {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    background: radial-gradient(circle, rgba(255, 0, 110, 0.9) 0%, rgba(255, 0, 110, 0.6) 100%);
+    color: var(--la-shooter-text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 16px rgba(255, 0, 110, 0.4);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.la-shooter-btn-action:active {
+    transform: scale(0.95);
+    box-shadow: 0 0 30px var(--la-shooter-accent-secondary), inset 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.la-shooter-btn-fire {
+    background: radial-gradient(circle, var(--la-shooter-accent-secondary) 0%, rgba(255, 0, 110, 0.6) 100%);
+}
+
+.la-shooter-btn-dash {
+    background: radial-gradient(circle, var(--la-shooter-accent-primary) 0%, rgba(0, 212, 255, 0.6) 100%);
+    box-shadow: 0 4px 16px rgba(0, 212, 255, 0.4);
+}
+
+.la-shooter-btn-dash:active {
+    box-shadow: 0 0 30px var(--la-shooter-accent-primary), inset 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.la-shooter-btn-dash.cooldown {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* ================================================
+   Overlays (Game Over, Pause, Settings)
+   ================================================ */
+
+.la-shooter-gameover,
+.la-shooter-pause,
+.la-shooter-settings {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: var(--la-shooter-z-overlay);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10, 14, 39, 0.95);
+    backdrop-filter: blur(20px);
+    animation: la-shooter-fade-in 0.3s ease;
+}
+
+@keyframes la-shooter-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.la-shooter-gameover-panel,
+.la-shooter-pause-panel,
+.la-shooter-settings-panel {
+    background: var(--la-shooter-bg-secondary);
+    border: 2px solid rgba(0, 212, 255, 0.3);
+    border-radius: 16px;
+    padding: var(--la-shooter-spacing-xl);
+    max-width: 90%;
+    width: 400px;
+    box-shadow: var(--la-shooter-shadow-lg), 0 0 40px rgba(0, 212, 255, 0.2);
+    animation: la-shooter-slide-up 0.3s ease;
+}
+
+@keyframes la-shooter-slide-up {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.la-shooter-gameover-panel h2,
+.la-shooter-pause-panel h2,
+.la-shooter-settings-panel h2 {
+    font-size: var(--la-shooter-font-size-xl);
+    font-weight: 700;
+    color: var(--la-shooter-accent-primary);
+    text-align: center;
+    margin-bottom: var(--la-shooter-spacing-lg);
+    text-shadow: 0 0 20px currentColor;
+}
+
+/* Game Over Stats */
+.la-shooter-gameover-stats {
+    display: flex;
+    flex-direction: column;
+    gap: var(--la-shooter-spacing-md);
+    margin-bottom: var(--la-shooter-spacing-lg);
+}
+
+.la-shooter-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--la-shooter-spacing-sm) var(--la-shooter-spacing-md);
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+}
+
+.la-shooter-stat-label {
+    font-size: var(--la-shooter-font-size-md);
+    color: var(--la-shooter-text-secondary);
+}
+
+.la-shooter-stat-value {
+    font-size: var(--la-shooter-font-size-lg);
+    font-weight: 700;
+    color: var(--la-shooter-text-primary);
+}
+
+.la-shooter-stat-highlight {
+    border: 2px solid var(--la-shooter-success);
+    animation: la-shooter-highlight-pulse 1s ease-in-out infinite;
+}
+
+.la-shooter-stat-highlight .la-shooter-stat-value {
+    color: var(--la-shooter-success);
+    text-shadow: 0 0 10px currentColor;
+}
+
+@keyframes la-shooter-highlight-pulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(0, 255, 136, 0.3); }
+    50% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.6); }
+}
+
+/* Actions */
+.la-shooter-gameover-actions,
+.la-shooter-pause-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--la-shooter-spacing-md);
+}
+
+.la-shooter-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--la-shooter-spacing-sm);
+    padding: var(--la-shooter-spacing-md) var(--la-shooter-spacing-lg);
+    border-radius: 8px;
+    font-size: var(--la-shooter-font-size-md);
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    outline: none;
+}
+
+.la-shooter-btn-primary {
+    background: linear-gradient(135deg, var(--la-shooter-accent-primary) 0%, #0099cc 100%);
+    color: var(--la-shooter-text-primary);
+    box-shadow: 0 4px 16px rgba(0, 212, 255, 0.3);
+}
+
+.la-shooter-btn-primary:hover,
+.la-shooter-btn-primary:active {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(0, 212, 255, 0.5);
+}
+
+.la-shooter-btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--la-shooter-text-primary);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.la-shooter-btn-secondary:hover,
+.la-shooter-btn-secondary:active {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Settings */
+.la-shooter-settings-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--la-shooter-spacing-md);
+    margin-bottom: var(--la-shooter-spacing-lg);
+}
+
+.la-shooter-setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--la-shooter-spacing-md);
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+}
+
+.la-shooter-setting-item label {
+    font-size: var(--la-shooter-font-size-md);
+    color: var(--la-shooter-text-secondary);
+}
+
+.la-shooter-setting-item input[type="checkbox"] {
+    width: 48px;
+    height: 24px;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 100px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.la-shooter-setting-item input[type="checkbox"]:checked {
+    background: var(--la-shooter-accent-primary);
+}
+
+.la-shooter-setting-item input[type="checkbox"]::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: white;
+    top: 2px;
+    left: 2px;
+    transition: left 0.2s ease;
+}
+
+.la-shooter-setting-item input[type="checkbox"]:checked::after {
+    left: 26px;
+}
+
+.la-shooter-setting-item input[type="range"] {
+    width: 120px;
+    height: 4px;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 100px;
+    outline: none;
+}
+
+.la-shooter-setting-item input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--la-shooter-accent-primary);
+    cursor: pointer;
+}
+
+/* ================================================
+   Loading Screen
+   ================================================ */
+
+.la-shooter-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--la-shooter-spacing-lg);
+    background: var(--la-shooter-bg-primary);
+}
+
+.la-shooter-loading-spinner {
+    width: 64px;
+    height: 64px;
+    border: 4px solid rgba(0, 212, 255, 0.2);
+    border-top-color: var(--la-shooter-accent-primary);
+    border-radius: 50%;
+    animation: la-shooter-spin 1s linear infinite;
+}
+
+@keyframes la-shooter-spin {
+    to { transform: rotate(360deg); }
+}
+
+.la-shooter-loading p {
+    font-size: var(--la-shooter-font-size-lg);
+    color: var(--la-shooter-text-secondary);
+}
+
+/* ================================================
+   Responsive Adjustments
+   ================================================ */
+
+@media (min-width: 768px) {
+    .la-shooter-joystick-base {
+        width: 140px;
+        height: 140px;
+    }
+    
+    .la-shooter-btn-action {
+        width: 72px;
+        height: 72px;
+    }
+}
+
+@media (min-width: 1024px) {
+    .la-shooter-controls {
+        display: none; /* Hide touch controls on desktop */
+    }
+}
+
+/* Desktop-specific styles */
+@media (hover: hover) and (pointer: fine) {
+    .la-shooter-btn:hover {
+        filter: brightness(1.1);
+    }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+    :root {
+        --la-shooter-bg-primary: #000000;
+        --la-shooter-bg-secondary: #1a1a1a;
+    }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
