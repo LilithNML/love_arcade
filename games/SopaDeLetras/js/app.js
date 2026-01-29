@@ -1,4 +1,4 @@
-const la_ws_game = {
+const LA_WORDSEARCH_CORE = {
     currentLevel: null,
     grid: [],
     renderer: null,
