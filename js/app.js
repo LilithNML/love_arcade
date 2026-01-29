@@ -10,10 +10,10 @@ const CONFIG = {
 // --- LISTA DE CÓDIGOS SECRETOS ---
 // Formato: 'CODIGO': Cantidad_Monedas
 const PROMO_CODES = {
-    'LOVE2024': 1000,
-    'TEAMO': 5000,
-    'TETRISKING': 500,
-    'BONUS100': 100
+    'AMOR2024': 60,
+    'TEAMO': 45,
+    'YEKATERINA: 50,
+    'LUNA100': 100
 };
 
 const defaultState = {
