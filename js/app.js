@@ -12,7 +12,7 @@ const CONFIG = {
 const PROMO_CODES = {
     'AMOR2024': 60,
     'TEAMO': 45,
-    'YEKATERINA: 50,
+    'YEKATERINA': 50,
     'LUNA100': 100
 };
 
