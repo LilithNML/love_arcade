@@ -166,5 +166,21 @@
     "price": 1050,
     "stock": 1,
     "image": "assets/product-thumbs/astra_yao_ec9bcd48_thumbs.webp"
+  },
+    {
+    "id": 22,
+    "name": "Xilonen",
+    "desc": "La herrera de Natlan para el fondo de tu PC.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/xilonen_c4f2a9d1_thumbs.webp"
+  },
+  {
+    "id": 23,
+    "name": "Varesa",
+    "desc": "Varesa para tu fondo de celular.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/varesa_7b8e3f6a_thumbs.webp"
   }
 ]
