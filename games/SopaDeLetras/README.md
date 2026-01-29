@@ -1,18 +1,18 @@
-# 🎮 WORD HUNT - LoveArcade
+# WORD HUNT - LoveArcade
 
 ## Descripción
 Word Hunt es un juego de sopa de letras (WordSearch) arcade con estética neo-retro oscura, completamente integrado con el sistema de monedas de LoveArcade.
 
-## ✨ Características
+## Características
 
-### 🎨 Diseño
+### Diseño
 - **Estética Neo-Arcade Oscura**: Paleta oscura con acentos neón (rosa/cyan)
 - **Tipografía**: Orbitron + Chakra Petch para look futurista
 - **Animaciones fluidas**: CSS transitions y canvas rendering
 - **Responsive**: Mobile-first design (móvil → tablet → desktop)
 - **Partículas animadas** en el fondo
 
-### 🎯 Gameplay
+### Gameplay
 - **25+ niveles** configurables
 - Grids desde 10×10 hasta 25×25
 - Sistema de progreso persistente
@@ -20,15 +20,15 @@ Word Hunt es un juego de sopa de letras (WordSearch) arcade con estética neo-re
 - Detección de selección en tiempo real
 - Visual feedback inmediato
 
-### 💰 Integración LoveArcade
-- ✅ Uso correcto de `window.GameCenter.completeLevel()`
-- ✅ Prefijos únicos (`la_ws_`) en todo el código
-- ✅ Prevención de doble pago por nivel
-- ✅ Validación de tipos antes de enviar recompensas
-- ✅ Modo standalone si GameCenter no existe
-- ✅ Progreso guardado en `localStorage` con clave prefijada
+### Integración LoveArcade
+- Uso correcto de `window.GameCenter.completeLevel()`
+- Prefijos únicos (`la_ws_`) en todo el código
+- Prevención de doble pago por nivel
+- Validación de tipos antes de enviar recompensas
+- Modo standalone si GameCenter no existe
+- Progreso guardado en `localStorage` con clave prefijada
 
-## 📁 Estructura de Archivos
+## Estructura de Archivos
 
 ```
 wordsearch/
@@ -39,7 +39,7 @@ wordsearch/
 └── README.md          # Esta documentación
 ```
 
-## 🔧 Configuración
+## Configuración
 
 ### Agregar/Modificar Niveles
 Edita `config.levels.js`:
@@ -61,7 +61,7 @@ El sistema valida automáticamente:
 - `rewardCoins` entero positivo
 - Array de palabras no vacío
 
-## 🎮 Controles
+## Controles
 
 ### Escritorio
 - **Click + Arrastrar**: Seleccionar palabra
@@ -72,9 +72,9 @@ El sistema valida automáticamente:
 - **Tap**: Navegación
 - **Panel de palabras colapsable** para ahorrar espacio
 
-## 🔒 Cumplimiento Técnico
+## Cumplimiento Técnico
 
-### ✅ Integración GameCenter
+### Integración GameCenter
 - [x] Uso de `window.GameCenter.completeLevel(gameId, levelId, coins)`
 - [x] Verificación de existencia antes de llamar
 - [x] No sobrescribe `window.GameCenter`
@@ -83,19 +83,19 @@ El sistema valida automáticamente:
 - [x] Manejo de errores graceful
 - [x] Modo standalone funcional
 
-### ✅ Seguridad
+### Seguridad
 - [x] No modifica localStorage del sistema global
 - [x] Usa clave prefijada `la_ws_completedLevels`
 - [x] Validación de datos antes de enviar
 - [x] No permite valores negativos o decimales
 
-## 🚀 Instalación
+## Instalación
 
 1. Colocar la carpeta `wordsearch/` en `LoveArcade/games/`
 2. Asegurar que existe `../../js/app.js` (relativo)
 3. Abrir `index.html` en navegador
 
-## 🎯 Flujo de Juego
+## Flujo de Juego
 
 1. **Pantalla Principal**: Mostrar stats y botones
 2. **Selección de Nivel**: Grid con todos los niveles
@@ -103,7 +103,7 @@ El sistema valida automáticamente:
 4. **Victoria**: Modal con recompensa → Siguiente nivel automático
 5. **Progreso**: Guardado local + sync con GameCenter
 
-## 🎨 Paleta de Colores
+## Paleta de Colores
 
 ```css
 --la-ws-bg-deep: #0a0e1a         /* Fondo principal */
@@ -115,7 +115,7 @@ El sistema valida automáticamente:
 --la-ws-warning: #ffaa00         /* Recompensas */
 ```
 
-## 📊 Rendimiento
+## Rendimiento
 
 ### Optimizaciones
 - Canvas rendering (evita miles de DOM nodes)
@@ -129,7 +129,7 @@ El sistema valida automáticamente:
 - Carga instantánea (<100ms)
 - Soporte para grids hasta 25×25 sin lag
 
-## 🔍 Debugging
+## Debugging
 
 ### Console Logs
 ```javascript
@@ -144,9 +144,9 @@ El sistema valida automáticamente:
 - **"GameCenter no disponible"**: Archivo `app.js` no cargado
 - **"ID duplicado"**: Revisar `config.levels.js`
 
-## 📝 Licencia
+## Licencia
 Parte del ecosistema LoveArcade.
 
 ---
 
-**Desarrollado con ❤️ para LoveArcade**
+**Desarrollado para LoveArcade**
