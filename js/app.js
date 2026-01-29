@@ -16,6 +16,7 @@ const PROMO_CODES = {
     'LUNA100': 100,
     'BOCCHI': 1300,
     'ALBONDIGA': 400,
+    'RAIDEN': 1200
 };
 
 const defaultState = {
