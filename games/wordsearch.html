@@ -270,11 +270,9 @@
     <script src="../js/app.js"></script>
     <script>
         const LEVELS = [
-            { words: ["XILONEN", "RAIDEN", "SACAROSA", "LUNA"], secret: ["BESO"], msg: "Eres mi sol." },
-            { words: ["COSPLAY", "MAR", "FLOR", "LUZ"], secret: ["PASION"], msg: "Brillas como luz." },
-            { words: ["DULCE", "SUEÑO", "SOFIA", "PAZ"], secret: ["ETERNO"], msg: "Tu risa es paz." },
-            { words: ["MAVUIKA", "ANILLO", "FLORES", "HISTORIA"], secret: ["SHADOW"], msg: "Lo conseguiste." },
-            { words: ["BOCCHI", "FONDO", "AZUL", "MIEDOS"], secret: ["YEKATERINA"], msg: "Brillas como el sol." },
+            { words: ["AMOR", "VIDA", "SOL", "LUNA"], secret: ["BESO"], msg: "Eres mi sol." },
+            { words: ["CIELO", "MAR", "FLOR", "LUZ"], secret: ["PASION"], msg: "Brillas como luz." },
+            { words: ["DULCE", "SUEÑO", "RISA", "PAZ"], secret: ["ETERNO"], msg: "Tu risa es paz." }
         ];
 
         class WordSearch {
@@ -471,8 +469,8 @@
                 // Secreto
                 if(data.secret.includes(word)) {
                     const id = `ws_${this.state.lvl}_${word}`;
-                    if(GameCenter.claimSecretWord(id, 60)) {
-                        alert("✨ ¡Secreto! +60 Monedas");
+                    if(GameCenter.claimSecretWord(id, 50)) {
+                        alert("✨ ¡Secreto! +50 Monedas");
                         this.currSel.forEach(c => c.classList.add('secret'));
                     }
                     return true;
@@ -507,10 +505,10 @@
             }
 
             win() {
-                const res = window.GameCenter.completeLevel('wordsearch', this.state.lvl, 60);
+                const res = window.GameCenter.completeLevel('wordsearch', this.state.lvl, 50);
                 document.getElementById('win-msg').innerHTML = 
                     `${LEVELS[this.state.lvl].msg}<br><br>` + 
-                    (res.paid ? `<span style='color:#34d399'>+60 Monedas</span>` : `<span style='color:#94a3b8'>Replay</span>`);
+                    (res.paid ? `<span style='color:#34d399'>+50 Monedas</span>` : `<span style='color:#94a3b8'>Replay</span>`);
                 document.getElementById('win-modal').style.display = 'flex';
             }
 
