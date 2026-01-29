@@ -17,7 +17,9 @@ const PROMO_CODES = {
     'BOCCHI': 1300,
     'ALBONDIGA': 400,
     'RAIDEN': 1200,
-    'FIX': 100
+    'FIX': 100,
+    'TAO250': 250,
+    'UIKA250': 250
 };
 
 const defaultState = {
