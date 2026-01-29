@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0e27">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Space Shooter</title>
+    <link rel="stylesheet" href="css/la-shooter-main.css">
+    <!-- Love Arcade Core System - REQUIRED -->
+    <script src="../../js/app.js"></script>
+</head>
+<body>
+    <div class="la-shooter-container">
+        <!-- Exit Button -->
+        <a href="../../index.html" class="la-shooter-btn-exit" id="la-shooter-exit-btn" aria-label="Salir al menú principal">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+        </a>
+
+        <!-- Main Game Canvas -->
+        <canvas id="la-shooter-canvas"></canvas>
+
+        <!-- HUD Overlay -->
+        <div class="la-shooter-hud">
+            <div class="la-shooter-hud-top">
+                <div class="la-shooter-hud-life">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                    </svg>
+                    <span id="la-shooter-life-value">100</span>
+                </div>
+                <div class="la-shooter-hud-score">
+                    <div class="la-shooter-score-value" id="la-shooter-score-value">0</div>
+                    <div class="la-shooter-multiplier" id="la-shooter-multiplier">x1</div>
+                </div>
+            </div>
+            <div class="la-shooter-hud-bottom">
+                <div class="la-shooter-wave-info" id="la-shooter-wave-info">Oleada 1</div>
+            </div>
+        </div>
+
+        <!-- Touch Controls -->
+        <div class="la-shooter-controls" id="la-shooter-controls">
+            <!-- Left Joystick (Movement) -->
+            <div class="la-shooter-joystick la-shooter-joystick-left" id="la-shooter-joystick-move">
+                <div class="la-shooter-joystick-base"></div>
+                <div class="la-shooter-joystick-stick"></div>
+            </div>
+
+            <!-- Right Joystick (Aim) -->
+            <div class="la-shooter-joystick la-shooter-joystick-right" id="la-shooter-joystick-aim">
+                <div class="la-shooter-joystick-base"></div>
+                <div class="la-shooter-joystick-stick"></div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="la-shooter-action-buttons">
+                <button class="la-shooter-btn-action la-shooter-btn-fire" id="la-shooter-btn-fire">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                    </svg>
+                </button>
+                <button class="la-shooter-btn-action la-shooter-btn-dash" id="la-shooter-btn-dash">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div class="la-shooter-gameover" id="la-shooter-gameover" style="display: none;">
+            <div class="la-shooter-gameover-panel">
+                <h2>¡Fin del Juego!</h2>
+                <div class="la-shooter-gameover-stats">
+                    <div class="la-shooter-stat">
+                        <span class="la-shooter-stat-label">Puntuación</span>
+                        <span class="la-shooter-stat-value" id="la-shooter-final-score">0</span>
+                    </div>
+                    <div class="la-shooter-stat">
+                        <span class="la-shooter-stat-label">Oleada</span>
+                        <span class="la-shooter-stat-value" id="la-shooter-final-wave">1</span>
+                    </div>
+                    <div class="la-shooter-stat">
+                        <span class="la-shooter-stat-label">Monedas</span>
+                        <span class="la-shooter-stat-value" id="la-shooter-final-coins">0</span>
+                    </div>
+                    <div class="la-shooter-stat la-shooter-stat-highlight" id="la-shooter-highscore-container" style="display: none;">
+                        <span class="la-shooter-stat-label">¡Nuevo Récord!</span>
+                        <span class="la-shooter-stat-value" id="la-shooter-new-highscore">0</span>
+                    </div>
+                </div>
+                <div class="la-shooter-gameover-actions">
+                    <button class="la-shooter-btn la-shooter-btn-primary" id="la-shooter-btn-restart">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                        </svg>
+                        Jugar de Nuevo
+                    </button>
+                    <a href="../../index.html" class="la-shooter-btn la-shooter-btn-secondary">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        </svg>
+                        Menú Principal
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pause Screen -->
+        <div class="la-shooter-pause" id="la-shooter-pause" style="display: none;">
+            <div class="la-shooter-pause-panel">
+                <h2>Pausa</h2>
+                <div class="la-shooter-pause-actions">
+                    <button class="la-shooter-btn la-shooter-btn-primary" id="la-shooter-btn-resume">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        Continuar
+                    </button>
+                    <button class="la-shooter-btn la-shooter-btn-secondary" id="la-shooter-btn-settings">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"/>
+                        </svg>
+                        Ajustes
+                    </button>
+                    <a href="../../index.html" class="la-shooter-btn la-shooter-btn-secondary">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        </svg>
+                        Salir
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="la-shooter-settings" id="la-shooter-settings" style="display: none;">
+            <div class="la-shooter-settings-panel">
+                <h2>Ajustes</h2>
+                <div class="la-shooter-settings-options">
+                    <div class="la-shooter-setting-item">
+                        <label for="la-shooter-setting-autofire">Disparo Automático</label>
+                        <input type="checkbox" id="la-shooter-setting-autofire" checked>
+                    </div>
+                    <div class="la-shooter-setting-item">
+                        <label for="la-shooter-setting-sfx">Efectos de Sonido</label>
+                        <input type="checkbox" id="la-shooter-setting-sfx" checked>
+                    </div>
+                    <div class="la-shooter-setting-item">
+                        <label for="la-shooter-setting-vibration">Vibración</label>
+                        <input type="checkbox" id="la-shooter-setting-vibration" checked>
+                    </div>
+                    <div class="la-shooter-setting-item">
+                        <label for="la-shooter-setting-sensitivity">Sensibilidad</label>
+                        <input type="range" id="la-shooter-setting-sensitivity" min="0.5" max="2" step="0.1" value="1">
+                    </div>
+                </div>
+                <button class="la-shooter-btn la-shooter-btn-primary" id="la-shooter-btn-close-settings">Cerrar</button>
+            </div>
+        </div>
+
+        <!-- Loading Screen -->
+        <div class="la-shooter-loading" id="la-shooter-loading">
+            <div class="la-shooter-loading-spinner"></div>
+            <p>Cargando...</p>
+        </div>
+    </div>
+
+    <!-- Main Game Module -->
+    <script type="module" src="js/main.mjs"></script>
+</body>
+</html>
