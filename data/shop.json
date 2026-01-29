@@ -198,5 +198,29 @@
     "price": 2000,
     "stock": 1,
     "image": "assets/product-thumbs/hutao_f3a7c981_thumbs.webp"
+  },
+  {
+    "id": 26,
+    "name": "Sonic x Shadow",
+    "desc": "Wallpaper de Sonic y Shadow para tu teléfono.",
+    "price": 630,
+    "stock": 1,
+    "image": "assets/product-thumbs/sonicxshadow_4a9c2d7e_thumbs.webp"
+  },
+  {
+    "id": 27,
+    "name": "Goku x Vegeta",
+    "desc": "Goku y Vegeta juntos para el fondo de tu celular.",
+    "price": 700,
+    "stock": 1,
+    "image": "assets/product-thumbs/gokuxvegeta_8f3b6c1a_thumbs.webp"
+  },
+  {
+    "id": 28,
+    "name": "Hatsune Miku",
+    "desc": "Fondo de Hatsune Miku para decorar tu PC.",
+    "price": 1500,
+    "stock": 1,
+    "image": "assets/product-thumbs/hatsunemiku_b2e7a94f_thumbs.webp"
   }
 ]
