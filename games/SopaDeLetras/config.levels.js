@@ -13,178 +13,143 @@
 window.LA_WS_LEVELS = [
     {
         id: "lvl_01",
-        title: "Inicio Fácil",
+        title: "Genshin Impact",
         gridSize: 10,
-        words: ["SOL", "LUNA", "MAR", "CIELO"],
+        words: ["VENTI", "ZHONGLI", "RAIDEN", "NAHIDA", "FURINA"],
         rewardCoins: 50
     },
     {
         id: "lvl_02",
-        title: "Animales",
+        title: "Zenless Zone Zero",
         gridSize: 10,
-        words: ["GATO", "PERRO", "PAJARO", "PEZ", "LEON"],
-        rewardCoins: 60
+        words: ["BILLY", "ANBY", "NICOLE", "ELLEN", "LYCAON"],
+        rewardCoins: 50
     },
     {
         id: "lvl_03",
-        title: "Colores",
-        gridSize: 12,
-        words: ["ROJO", "AZUL", "VERDE", "AMARILLO", "NEGRO"],
-        rewardCoins: 70
+        title: "NieR Automata",
+        gridSize: 10,
+        words: ["YORHA", "PASCAL", "ADAM", "EMIL", "PODO"],
+        rewardCoins: 50
     },
     {
         id: "lvl_04",
-        title: "Frutas",
-        gridSize: 12,
-        words: ["MANZANA", "PLATANO", "UVA", "PERA", "NARANJA"],
-        rewardCoins: 80
+        title: "Dragon Ball",
+        gridSize: 11,
+        words: ["GOKU", "VEGETA", "GOHAN", "PICCOLO", "FREEZER", "TRUNKS"],
+        rewardCoins: 60
     },
     {
         id: "lvl_05",
-        title: "Naturaleza",
-        gridSize: 13,
-        words: ["ARBOL", "FLOR", "MONTANA", "RIO", "BOSQUE", "PLAYA"],
-        rewardCoins: 90
+        title: "Five Nights Freddy",
+        gridSize: 10,
+        words: ["FREDDY", "BONNIE", "CHICA", "FOXY", "GOLDEN"],
+        rewardCoins: 50
     },
     {
         id: "lvl_06",
-        title: "Tecnología",
-        gridSize: 13,
-        words: ["COMPUTADORA", "TELEFONO", "INTERNET", "CODIGO", "ROBOT"],
-        rewardCoins: 100
+        title: "Steven Universe",
+        gridSize: 11,
+        words: ["STEVEN", "GARNET", "PERLA", "AMATISTA", "LAPIS", "CONNIE"],
+        rewardCoins: 60
     },
     {
         id: "lvl_07",
-        title: "Deportes",
-        gridSize: 14,
-        words: ["FUTBOL", "BASKETBALL", "TENIS", "NATACION", "VOLEIBOL"],
-        rewardCoins: 110
+        title: "Bocchi the Rock",
+        gridSize: 10,
+        words: ["HITORI", "NIJIKA", "RYO", "IKUYO", "ROCK", "BANDA"],
+        rewardCoins: 60
     },
     {
         id: "lvl_08",
-        title: "Música",
-        gridSize: 14,
-        words: ["GUITARRA", "PIANO", "BATERIA", "VIOLIN", "TROMPETA", "MUSICA"],
-        rewardCoins: 120
+        title: "Sonic the Hedgehog",
+        gridSize: 12,
+        words: ["SONIC", "TAILS", "KNUCKLES", "AMY", "EGGMAN", "SHADOW", "SILVER"],
+        rewardCoins: 70
     },
     {
         id: "lvl_09",
-        title: "Países",
-        gridSize: 15,
-        words: ["MEXICO", "BRASIL", "JAPON", "FRANCIA", "ITALIA", "CANADA"],
-        rewardCoins: 130
+        title: "Angry Birds",
+        gridSize: 10,
+        words: ["RED", "CHUCK", "BOMB", "STELLA", "CERDO", "HUEVO"],
+        rewardCoins: 60
     },
     {
         id: "lvl_10",
-        title: "Profesiones",
-        gridSize: 15,
-        words: ["MEDICO", "INGENIERO", "MAESTRO", "ARTISTA", "CHEF", "PILOTO"],
-        rewardCoins: 140
+        title: "Filosofía",
+        gridSize: 11,
+        words: ["PLATON", "SENECA", "KANT", "HEGEL", "LOGICA", "ETICA", "DUDA"],
+        rewardCoins: 70
     },
     {
         id: "lvl_11",
-        title: "Espacio",
-        gridSize: 16,
-        words: ["ESTRELLA", "PLANETA", "GALAXIA", "COMETA", "ASTRONAUTA", "UNIVERSO"],
-        rewardCoins: 150
+        title: "Mitología Griega",
+        gridSize: 12,
+        words: ["ZEUS", "HERA", "APOLO", "ATENEA", "HERMES", "HADES", "ARES", "CRONOS"],
+        rewardCoins: 80
     },
     {
         id: "lvl_12",
-        title: "Comida",
-        gridSize: 16,
-        words: ["PIZZA", "HAMBURGUESA", "TACO", "SUSHI", "PASTA", "ENSALADA"],
-        rewardCoins: 160
+        title: "Arte Moderno",
+        gridSize: 10,
+        words: ["DALÍ", "PICASSO", "MUSEO", "LIENZO", "PINCEL", "OLEO"],
+        rewardCoins: 60
     },
     {
         id: "lvl_13",
-        title: "Emociones",
-        gridSize: 17,
-        words: ["FELICIDAD", "TRISTEZA", "AMOR", "MIEDO", "ALEGRIA", "SORPRESA"],
-        rewardCoins: 170
+        title: "Naturaleza",
+        gridSize: 11,
+        words: ["BOSQUE", "SELVA", "DESIERTO", "PRADO", "VALLE", "COSTA"],
+        rewardCoins: 60
     },
     {
         id: "lvl_14",
-        title: "Clima",
-        gridSize: 17,
-        words: ["LLUVIA", "NIEVE", "TORNADO", "HURACAN", "TORMENTA", "VIENTO"],
-        rewardCoins: 180
+        title: "Animales Marinos",
+        gridSize: 10,
+        words: ["BALLENA", "DELFIN", "TIBURON", "PULPO", "RAYA", "MEDUSA", "CORAL", "PEZ"],
+        rewardCoins: 80
     },
     {
         id: "lvl_15",
-        title: "Transporte",
-        gridSize: 18,
-        words: ["AUTO", "AVION", "BARCO", "TREN", "BICICLETA", "HELICOPTERO", "METRO"],
-        rewardCoins: 190
+        title: "Colores Vivos",
+        gridSize: 10,
+        words: ["VIOLETA", "CARMESI", "DORADO", "PLATA", "BRONCE", "TURQUESA", "VERDE"],
+        rewardCoins: 70
     },
     {
         id: "lvl_16",
-        title: "Cuerpo Humano",
-        gridSize: 18,
-        words: ["CORAZON", "CEREBRO", "PULMON", "HIGADO", "ESTOMAGO", "RIÑON"],
-        rewardCoins: 200
+        title: "Programación",
+        gridSize: 12,
+        words: ["PYTHON", "SCRIPT", "VARIABLE", "BUCLE", "DATOS", "CODIGO", "DEBUG", "CLASE", "ARRAY", "STRING"],
+        rewardCoins: 100
     },
     {
         id: "lvl_17",
-        title: "Historia",
-        gridSize: 19,
-        words: ["IMPERIO", "REVOLUCION", "CONQUISTA", "CIVILIZACION", "GUERRA"],
-        rewardCoins: 210
+        title: "Star Wars",
+        gridSize: 12,
+        words: ["VADER", "YODA", "SKYWALKER", "LEIA", "KENOBI", "ANDOR", "AHSOKA", "SOLO"],
+        rewardCoins: 80
     },
     {
         id: "lvl_18",
-        title: "Arte",
-        gridSize: 19,
-        words: ["PINTURA", "ESCULTURA", "FOTOGRAFIA", "DANZA", "TEATRO", "CINE"],
-        rewardCoins: 220
+        title: "Postres Ricos",
+        gridSize: 10,
+        words: ["PASTEL", "HELADO", "FLAN", "DONA", "CHURRO", "MOUSSE", "CANELA"],
+        rewardCoins: 70
     },
     {
         id: "lvl_19",
-        title: "Ciencia",
-        gridSize: 20,
-        words: ["QUIMICA", "FISICA", "BIOLOGIA", "MATEMATICAS", "ASTRONOMIA"],
-        rewardCoins: 230
+        title: "Cine Clásico",
+        gridSize: 11,
+        words: ["ACTOR", "GUION", "CAMARA", "ESCENA", "PREMIO", "BUTACA", "RODAJE"],
+        rewardCoins: 70
     },
     {
         id: "lvl_20",
-        title: "Literatura",
-        gridSize: 20,
-        words: ["NOVELA", "POESIA", "CUENTO", "ENSAYO", "LIBRO", "ESCRITOR"],
-        rewardCoins: 240
-    },
-    {
-        id: "lvl_21",
-        title: "Mitos y Leyendas",
-        gridSize: 21,
-        words: ["DRAGON", "UNICORNIO", "FENIX", "MINOTAURO", "SIRENA", "CENTAURO"],
-        rewardCoins: 250
-    },
-    {
-        id: "lvl_22",
-        title: "Instrumentos",
-        gridSize: 21,
-        words: ["FLAUTA", "SAXOFON", "ARPA", "ACORDEON", "TAMBOR", "CLARINETE"],
-        rewardCoins: 260
-    },
-    {
-        id: "lvl_23",
-        title: "Arquitectura",
-        gridSize: 22,
-        words: ["CASTILLO", "CATEDRAL", "PIRAMIDE", "PUENTE", "TORRE", "PALACIO"],
-        rewardCoins: 270
-    },
-    {
-        id: "lvl_24",
-        title: "Elementos",
-        gridSize: 22,
-        words: ["FUEGO", "AGUA", "TIERRA", "AIRE", "METAL", "MADERA"],
-        rewardCoins: 280
-    },
-    {
-        id: "lvl_25",
-        title: "Desafío Final",
-        gridSize: 25,
-        words: ["AVENTURA", "MISTERIO", "VICTORIA", "CHAMPION", "LEYENDA", "EPICO", "SUPREMO"],
-        rewardCoins: 500
+        title: "Harry Potter",
+        gridSize: 12,
+        words: ["HARRY", "RON", "HERMIONE", "SNAPE", "ALBUS", "DOBBY", "DRACO", "LUNA", "MAGIA"],
+        rewardCoins: 90
     }
 ];
 
