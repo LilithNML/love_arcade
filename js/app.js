@@ -14,7 +14,8 @@ const PROMO_CODES = {
     'TEAMO': 45,
     'YEKATERINA': 50,
     'LUNA100': 100,
-    'BOCCHI': 1300
+    'BOCCHI': 1300,
+    'ALBONDIGA': 400,
 };
 
 const defaultState = {
