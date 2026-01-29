@@ -225,13 +225,13 @@
     <div id="menu-overlay" class="overlay">
         <h1>LOVE<br><span>BREAKER</span></h1>
         <div class="stats-box">
-            <p>SYSTEM READY</p>
-            <p style="font-size: 11px; margin-top:10px; opacity:0.7">SWIPE / MOUSE TO CONTROL</p>
-            <p style="font-size: 10px; color: var(--accent-purple); margin-top:5px;">50 PTS = 1 COIN</p>
+            <p>SISTEMA LISTO</p>
+            <p style="font-size: 11px; margin-top:10px; opacity:0.7">DESLIZA PARA CONTROLAR</p>
+            <p style="font-size: 10px; color: var(--accent-purple); margin-top:5px;">50 PTS = 1 MONEDA</p>
         </div>
         <div class="btn-group">
-            <button class="btn" id="start-btn">INITIALIZE</button>
-            <button class="btn secondary" onclick="exitGame()">EXIT</button>
+            <button class="btn" id="start-btn">INICIALIZAR</button>
+            <button class="btn secondary" onclick="exitGame()">SALIR</button>
         </div>
     </div>
 
@@ -240,13 +240,13 @@
         <h1>SYSTEM<br><span>PAUSED</span></h1>
         <div class="btn-group">
             <button class="btn" id="resume-btn">RESUME</button>
-            <button class="btn secondary" onclick="exitGame()">EXIT TO HUB</button>
+            <button class="btn secondary" onclick="exitGame()">VOLVER</button>
         </div>
     </div>
 
     <!-- GAME OVER -->
     <div id="game-over-overlay" class="overlay hidden">
-        <h1 style="color: var(--accent-danger); text-shadow: 0 0 10px var(--accent-danger);">SYSTEM<br>FAILURE</h1>
+        <h1 style="color: var(--accent-danger); text-shadow: 0 0 10px var(--accent-danger);">FALLA DEL<br>SISTEMA</h1>
         <div class="stats-box">
             <p>SCORE <span id="final-score" class="highlight">0</span></p>
             <p>BLOCKS <span id="final-blocks" class="highlight">0</span></p>
@@ -255,7 +255,7 @@
             <p id="new-record-msg" class="hidden" style="color: var(--accent-cyan); margin-top:10px; font-weight:bold;">NEW RECORD</p>
         </div>
         <div class="btn-group">
-            <button class="btn" id="restart-btn">RETRY</button>
+            <button class="btn" id="restart-btn">REINTENTAR</button>
             <button class="btn secondary" onclick="exitGame()">EXIT TO HUB</button>
         </div>
     </div>
