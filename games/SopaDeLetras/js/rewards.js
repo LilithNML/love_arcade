@@ -1,45 +1,46 @@
+/**
+ * Gestión de recompensas compatible con GameCenter Core v6
+ */
 const la_ws_rewards = {
-    key: 'la_ws_completed_levels',
+    storageKey: 'la_ws_completed_levels',
 
-    // Obtiene lista de niveles ya pagados desde el almacenamiento local del juego
     getPaidLevels: function() {
-        const data = localStorage.getItem(this.key);
-        return data ? JSON.parse(data) : [];
+        try {
+            const data = localStorage.getItem(this.storageKey);
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            return [];
+        }
     },
 
     markAsPaid: function(levelId) {
         const paid = this.getPaidLevels();
         if (!paid.includes(levelId)) {
             paid.push(levelId);
-            localStorage.setItem(this.key, JSON.stringify(paid));
+            localStorage.setItem(this.storageKey, JSON.stringify(paid));
         }
     },
 
-    [span_6](start_span)[span_7](start_span)// Intento de envío de monedas al GameCenter[span_6](end_span)[span_7](end_span)
     tryPay: function(levelId, coins) {
-        const alreadyPaid = this.getPaidLevels().includes(levelId);
+        const paidLevels = this.getPaidLevels();
         
-        if (alreadyPaid) {
-            console.log(`[WordSearch] El nivel ${levelId} ya fue pagado anteriormente.`);
+        // Evitar doble pago localmente
+        if (paidLevels.includes(levelId)) {
+            console.log("Nivel ya pagado anteriormente.");
             return;
         }
 
-        [span_8](start_span)[span_9](start_span)// Validación de seguridad: monedas debe ser entero positivo[span_8](end_span)[span_9](end_span)
-        const finalCoins = Math.max(0, Math.floor(coins));
-
-        [span_10](start_span)[span_11](start_span)// Verificación de existencia del Sistema Universal[span_10](end_span)[span_11](end_span)
+        // Interacción con el app.js canónico
         if (window.GameCenter && typeof window.GameCenter.completeLevel === 'function') {
-            try {
-                [span_12](start_span)[span_13](start_span)// Contrato de integración: gameId, levelId, coins[span_12](end_span)[span_13](end_span)
-                window.GameCenter.completeLevel('wordsearch', levelId, finalCoins);
+            [span_4](start_span)// El app.js canónico recibe (gameId, levelId, rewardAmount)[span_4](end_span)
+            const result = window.GameCenter.completeLevel('wordsearch', levelId, Math.floor(coins));
+            
+            if (result && result.paid) {
                 this.markAsPaid(levelId);
-                console.log(`[WordSearch] Recompensa enviada: ${finalCoins} monedas.`);
-            } catch (error) {
-                console.error('[WordSearch] Error crítico al contactar GameCenter:', error);
+                console.log(`Recompensa de ${coins} procesada por GameCenter.`);
             }
         } else {
-            [span_14](start_span)// Modo Standalone: El juego funciona pero no reporta al banco[span_14](end_span)
-            console.warn('[WordSearch] GameCenter no detectado. Jugando en modo local.');
+            // Modo standalone
             this.markAsPaid(levelId);
         }
     }
