@@ -182,5 +182,21 @@
     "price": 530,
     "stock": 1,
     "image": "assets/product-thumbs/varesa_7b8e3f6a_thumbs.webp"
+  },
+  {
+    "id": 24,
+    "name": "Mavuika",
+    "desc": "La Arconte Pyro para el fondo de tu PC.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/mavuika_9e41d6b2_thumbs.webp"
+  },
+  {
+    "id": 25,
+    "name": "Hu Tao Skin",
+    "desc": "Nueva skin de Hu Tao para tu celular.",
+    "price": 2000,
+    "stock": 1,
+    "image": "assets/product-thumbs/hutao_f3a7c981_thumbs.webp"
   }
 ]
