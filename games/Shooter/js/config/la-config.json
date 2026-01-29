@@ -1,0 +1,99 @@
+{
+  "game": {
+    "id": "lovearcade_shooter",
+    "name": "Space Shooter",
+    "version": "1.0.0",
+    "maxBullets": 200,
+    "targetFPS": 60
+  },
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "backgroundColor": "#0a0e27"
+  },
+  "player": {
+    "speed": 300,
+    "dashSpeed": 800,
+    "dashDuration": 0.15,
+    "dashCooldown": 1.5,
+    "fireRate": 0.15,
+    "chargeTime": 0.8,
+    "maxHealth": 100,
+    "invincibilityDuration": 1.5,
+    "collisionRadius": 20
+  },
+  "bullet": {
+    "speed": 800,
+    "damage": 10,
+    "chargedDamage": 50,
+    "size": 6,
+    "chargedSize": 12
+  },
+  "enemies": {
+    "scout": {
+      "hp": 20,
+      "speed": 120,
+      "pattern": "zigzag",
+      "fireRate": 0.8,
+      "score": 10,
+      "coins": 1,
+      "collisionRadius": 15
+    },
+    "shooter": {
+      "hp": 45,
+      "speed": 70,
+      "pattern": "aimed_burst",
+      "fireRate": 1.6,
+      "score": 25,
+      "coins": 2,
+      "collisionRadius": 18
+    },
+    "tank": {
+      "hp": 120,
+      "speed": 40,
+      "pattern": "straight",
+      "fireRate": 2.0,
+      "score": 50,
+      "coins": 5,
+      "collisionRadius": 25
+    },
+    "elite": {
+      "hp": 200,
+      "speed": 90,
+      "pattern": "homing_slow",
+      "fireRate": 1.2,
+      "score": 100,
+      "coins": 10,
+      "collisionRadius": 22
+    }
+  },
+  "waves": {
+    "baseSpawnInterval": 2.0,
+    "difficultyScaling": 0.1,
+    "maxDifficulty": 5,
+    "scorePerEnemy": 10,
+    "waveTransitionDelay": 3.0
+  },
+  "rewards": {
+    "scoreToCoins": 100,
+    "milestones": [
+      { "score": 1000, "coins": 10, "id": "score_1000" },
+      { "score": 2500, "coins": 25, "id": "score_2500" },
+      { "score": 5000, "coins": 50, "id": "score_5000" },
+      { "score": 10000, "coins": 100, "id": "score_10000" },
+      { "score": 25000, "coins": 250, "id": "score_25000" },
+      { "score": 50000, "coins": 500, "id": "score_50000" }
+    ]
+  },
+  "particles": {
+    "poolSize": 100,
+    "lifetimeMin": 0.3,
+    "lifetimeMax": 1.0
+  },
+  "settings": {
+    "autoFire": true,
+    "sfx": true,
+    "vibration": true,
+    "sensitivity": 1.0
+  }
+}
