@@ -150,6 +150,146 @@ window.LA_WS_LEVELS = [
         gridSize: 12,
         words: ["HARRY", "RON", "HERMIONE", "SNAPE", "ALBUS", "DOBBY", "DRACO", "LUNA", "MAGIA"],
         rewardCoins: 90
+    },
+       {
+        id: "lvl_21",
+        title: "Animales Salvajes",
+        gridSize: 10,
+        words: ["TIGRE", "CEBRA", "LEOPARDO", "JIRAFA", "HIENA"],
+        rewardCoins: 50
+    },
+    {
+        id: "lvl_22",
+        title: "Flores del Jardín",
+        gridSize: 11,
+        words: ["GIRASOL", "ROSA", "TULIPAN", "LIRIO", "CLAVEL", "DAHLIA"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_23",
+        title: "Filosofía Griega",
+        gridSize: 12,
+        words: ["ETICA", "LOGICA", "VIRTUD", "RAZON", "MORAL", "ESTOICO", "IDEA"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_24",
+        title: "Arte y Pintura",
+        gridSize: 10,
+        words: ["CUBISMO", "MUSEO", "LIENZO", "OLEO", "PINCEL", "BOCETO"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_25",
+        title: "Genshin: Mondstadt",
+        gridSize: 11,
+        words: ["DILUC", "KLEE", "JEAN", "KAEYA", "LISA", "AMBER", "MONA"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_26",
+        title: "ZZZ: Facciones",
+        gridSize: 12,
+        words: ["BELOBOG", "VICTORIA", "LIEBRES", "PUB", "ENIER", "HOSHO"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_27",
+        title: "NieR: Conceptos",
+        gridSize: 10,
+        words: ["GLORIA", "HUMANO", "PASCAL", "ADAM", "EVE", "EMIL"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_28",
+        title: "Dragon Ball Z",
+        gridSize: 11,
+        words: ["SAIYAN", "FUSION", "KI", "CELULA", "BUU", "BROLY", "RADITZ"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_29",
+        title: "FNAF: Seguridad",
+        gridSize: 10,
+        words: ["NOCHE", "GUARDIA", "MASCARA", "DUCTOS", "LUCES", "RELOJ"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_30",
+        title: "Steven: Gemas",
+        gridSize: 11,
+        words: ["ZAFIRO", "RUBI", "JASPE", "PERIDOT", "BISMUTO", "OPALO"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_31",
+        title: "Bocchi: Kessoku",
+        gridSize: 10,
+        words: ["HITORI", "NIJIKA", "KITA", "RYO", "BANDA", "SOLO"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_32",
+        title: "Sonic: Elementos",
+        gridSize: 12,
+        words: ["ANILLOS", "ESMERALDA", "CAOS", "VELOZ", "METAL", "BLAZE"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_33",
+        title: "Angry Birds: Items",
+        gridSize: 10,
+        words: ["RESORTE", "HUEVOS", "MADERA", "PIEDRA", "CRISTAL", "HONDA"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_34",
+        title: "Planetas",
+        gridSize: 11,
+        words: ["MERCURIO", "VENUS", "TIERRA", "MARTE", "JUPITER", "SATURNO"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_35",
+        title: "Piedras Preciosas",
+        gridSize: 12,
+        words: ["DIAMANTE", "ESMERALDA", "TOPACIO", "OPALO", "AMATISTA", "TURMALINA"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_36",
+        title: "Clima Extremo",
+        gridSize: 10,
+        words: ["HURACAN", "RAYO", "TRUENO", "NIEBLA", "SOL", "VIENTO", "NIEVE"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_37",
+        title: "Mitología Nórdica",
+        gridSize: 11,
+        words: ["ODIN", "THOR", "LOKI", "FREYA", "FENRIR", "HELA", "VALHALA"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_38",
+        title: "Utensilios Cocina",
+        gridSize: 12,
+        words: ["SARTEN", "HORNO", "CUCHILLO", "OLLA", "PLATO", "VASO", "BATIDORA", "TABLA"],
+        rewardCoins: 80
+    },
+    {
+        id: "lvl_39",
+        title: "Deportes Olímpicos",
+        gridSize: 10,
+        words: ["BOXEO", "GOLF", "SURF", "RUGBI", "REMO", "JUDO", "ESGRIMA"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_40",
+        title: "Leyendas Gaming",
+        gridSize: 12,
+        words: ["MARIO", "LINK", "ZELDA", "KIRBY", "SAMUS", "DONKEY", "YOSHI", "FOX", "SNAKE", "CLOUD"],
+        rewardCoins: 100
     }
 ];
 
