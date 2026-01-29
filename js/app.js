@@ -3,7 +3,7 @@
  */
 
 const CONFIG = {
-    stateKey: 'gamecenter_v7_promos', // Cambiamos versión para evitar conflictos
+    stateKey: 'gamecenter_v8_promos', // Cambiamos versión para evitar conflictos
     initialCoins: 0
 };
 
@@ -13,7 +13,8 @@ const PROMO_CODES = {
     'AMOR2024': 60,
     'TEAMO': 45,
     'YEKATERINA': 50,
-    'LUNA100': 100
+    'LUNA100': 100,
+    'BOCCHI': 100
 };
 
 const defaultState = {
