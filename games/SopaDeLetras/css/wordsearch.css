@@ -1,0 +1,86 @@
+:root {
+    --la-ws-bg: #0f0f1b;
+    --la-ws-accent: #00ffcc;
+    --la-ws-secondary: #7000ff;
+    --la-ws-text: #ffffff;
+    --la-ws-card: #1e1e2e;
+}
+
+body, html {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background: var(--la-ws-bg);
+    color: var(--la-ws-text);
+    font-family: 'Courier New', Courier, monospace;
+    overflow: hidden;
+}
+
+#la_ws_container {
+    display: flex; flex-direction: column;
+    height: 100vh; width: 100vw;
+}
+
+.la-ws-screen {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 20px;
+}
+
+.la-ws-hidden { display: none !important; }
+
+/* Menú Principal */
+.la-ws-title {
+    font-size: 3rem; color: var(--la-ws-accent);
+    text-shadow: 3px 3px var(--la-ws-secondary);
+    margin-bottom: 2rem;
+}
+
+.la-ws-menu { display: flex; flex-direction: column; gap: 15px; width: 250px; }
+
+button {
+    padding: 15px; border: none; cursor: pointer;
+    font-weight: bold; font-family: inherit; border-radius: 4px;
+    transition: transform 0.1s;
+}
+
+button:active { transform: scale(0.95); }
+
+.la-ws-btn-primary { background: var(--la-ws-accent); color: #000; }
+.la-ws-btn-secondary { background: var(--la-ws-secondary); color: #fff; }
+.la-ws-btn-exit { 
+    text-align: center; color: #ff4444; text-decoration: none; 
+    margin-top: 10px; font-weight: bold;
+}
+
+/* Grilla de Niveles */
+.la-ws-levels-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 15px; width: 100%; max-width: 500px; margin-top: 20px;
+    overflow-y: auto; padding-right: 10px;
+}
+
+.la-ws-level-card {
+    background: var(--la-ws-card); padding: 15px;
+    text-align: center; border: 2px solid transparent;
+}
+
+.la-ws-level-card.completed { border-color: var(--la-ws-accent); }
+
+/* Juego */
+#la_ws_hud { width: 100%; max-width: 600px; margin-bottom: 10px; }
+.la-ws-hud-info { display: flex; justify-content: space-between; margin-bottom: 10px; }
+
+#la_ws_game_canvas_wrapper {
+    background: #161625; border: 2px solid var(--la-ws-secondary);
+    box-shadow: 0 0 15px rgba(112, 0, 255, 0.3);
+    touch-action: none; /* Previene scroll al jugar */
+}
+
+#la_ws_word_list {
+    display: flex; flex-wrap: wrap; gap: 10px; list-style: none; padding: 0;
+    justify-content: center; font-size: 0.8rem;
+}
+
+.la-ws-word--found { text-decoration: line-through; color: var(--la-ws-accent); opacity: 0.6; }
+
+.la-ws-btn-icon { background: none; color: var(--la-ws-text); border: 1px solid #444; }
