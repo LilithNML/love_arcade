@@ -39,10 +39,6 @@ export class LA_EnemyFactory {
         // Bind methods
         enemy.update = this.getUpdateFunction(type).bind(enemy);
         enemy.takeDamage = this.takeDamage.bind(enemy);
-        enemy.shootStraight = this.shootStraight.bind(enemy);
-        enemy.shootAimedBurst = this.shootAimedBurst.bind(enemy);
-        enemy.shootSpread = this.shootSpread.bind(enemy);
-        enemy.shootHoming = this.shootHoming.bind(enemy);
         
         return enemy;
     }
@@ -65,7 +61,7 @@ export class LA_EnemyFactory {
     // === ENEMY BEHAVIORS ===
     
     updateScout(dt) {
-        const game = this.game || window.la_shooter_game;
+        const game = window.la_shooter_game; // Access global game instance
         
         // Zigzag movement
         this.stateTimer += dt;
@@ -82,13 +78,13 @@ export class LA_EnemyFactory {
         // Shoot occasionally
         this.fireTimer -= dt;
         if (this.fireTimer <= 0 && this.y > 50 && this.y < game.viewport.height - 200) {
-            this.shootStraight(game);
+            LA_EnemyFactory.shootStraight(this, game);
             this.fireTimer = this.config.fireRate + Math.random();
         }
     }
     
     updateShooter(dt) {
-        const game = this.game || window.la_shooter_game;
+        const game = window.la_shooter_game;
         
         // Slower downward movement with slight wobble
         this.stateTimer += dt;
@@ -102,13 +98,13 @@ export class LA_EnemyFactory {
         // Shoot aimed bursts
         this.fireTimer -= dt;
         if (this.fireTimer <= 0 && this.y > 100 && this.y < game.viewport.height - 150) {
-            this.shootAimedBurst(game);
+            LA_EnemyFactory.shootAimedBurst(this, game);
             this.fireTimer = this.config.fireRate;
         }
     }
     
     updateTank(dt) {
-        const game = this.game || window.la_shooter_game;
+        const game = window.la_shooter_game;
         
         // Slow straight movement
         this.vy = this.config.speed;
@@ -121,13 +117,13 @@ export class LA_EnemyFactory {
         // Shoot spread pattern
         this.fireTimer -= dt;
         if (this.fireTimer <= 0 && this.y > 100 && this.y < game.viewport.height - 150) {
-            this.shootSpread(game);
+            LA_EnemyFactory.shootSpread(this, game);
             this.fireTimer = this.config.fireRate;
         }
     }
     
     updateElite(dt) {
-        const game = this.game || window.la_shooter_game;
+        const game = window.la_shooter_game;
         
         // Advanced movement - track player horizontally
         const player = game.player;
@@ -153,19 +149,19 @@ export class LA_EnemyFactory {
         // Shoot homing pattern
         this.fireTimer -= dt;
         if (this.fireTimer <= 0 && this.y > 120 && this.y < game.viewport.height - 150) {
-            this.shootHoming(game);
+            LA_EnemyFactory.shootHoming(this, game);
             this.fireTimer = this.config.fireRate;
         }
     }
     
-    // === SHOOTING PATTERNS ===
+    // === SHOOTING PATTERNS (Static methods) ===
     
-    shootStraight(game) {
+    static shootStraight(enemy, game) {
         const bullet = game.pool.getBullet();
         if (!bullet) return;
         
-        bullet.x = this.x;
-        bullet.y = this.y + 15;
+        bullet.x = enemy.x;
+        bullet.y = enemy.y + 15;
         bullet.vx = 0;
         bullet.vy = 300;
         bullet.damage = 10;
@@ -175,11 +171,11 @@ export class LA_EnemyFactory {
         game.enemyBullets.push(bullet);
     }
     
-    shootAimedBurst(game) {
+    static shootAimedBurst(enemy, game) {
         // Shoot 3 bullets in a small spread aimed at player
         const player = game.player;
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
+        const dx = player.x - enemy.x;
+        const dy = player.y - enemy.y;
         const baseAngle = Math.atan2(dy, dx);
         
         const spread = 0.2;
@@ -190,8 +186,8 @@ export class LA_EnemyFactory {
             if (!bullet) continue;
             
             const speed = 350;
-            bullet.x = this.x;
-            bullet.y = this.y + 10;
+            bullet.x = enemy.x;
+            bullet.y = enemy.y + 10;
             bullet.vx = Math.cos(angle) * speed;
             bullet.vy = Math.sin(angle) * speed;
             bullet.damage = 15;
@@ -202,7 +198,7 @@ export class LA_EnemyFactory {
         }
     }
     
-    shootSpread(game) {
+    static shootSpread(enemy, game) {
         // Shoot 5 bullets in a wide spread
         const bulletCount = 5;
         const spreadAngle = Math.PI / 3; // 60 degrees
@@ -215,8 +211,8 @@ export class LA_EnemyFactory {
             const angle = baseAngle + spreadAngle * ((i / (bulletCount - 1)) - 0.5);
             const speed = 300;
             
-            bullet.x = this.x;
-            bullet.y = this.y + 15;
+            bullet.x = enemy.x;
+            bullet.y = enemy.y + 15;
             bullet.vx = Math.cos(angle) * speed;
             bullet.vy = Math.sin(angle) * speed;
             bullet.damage = 12;
@@ -227,11 +223,11 @@ export class LA_EnemyFactory {
         }
     }
     
-    shootHoming(game) {
+    static shootHoming(enemy, game) {
         // Shoot 2 bullets that slightly track player
         const player = game.player;
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
+        const dx = player.x - enemy.x;
+        const dy = player.y - enemy.y;
         const angle = Math.atan2(dy, dx);
         
         for (let i = 0; i < 2; i++) {
@@ -242,8 +238,8 @@ export class LA_EnemyFactory {
             const bulletAngle = angle + offset;
             const speed = 280;
             
-            bullet.x = this.x + (i === 0 ? -10 : 10);
-            bullet.y = this.y + 12;
+            bullet.x = enemy.x + (i === 0 ? -10 : 10);
+            bullet.y = enemy.y + 12;
             bullet.vx = Math.cos(bulletAngle) * speed;
             bullet.vy = Math.sin(bulletAngle) * speed;
             bullet.damage = 18;
