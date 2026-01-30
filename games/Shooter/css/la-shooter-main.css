@@ -224,113 +224,20 @@ body {
 }
 
 /* ================================================
-   Touch Controls
+   Touch Controls - Direct Touch Area
    ================================================ */
 
-.la-shooter-controls {
+.la-shooter-touch-area {
     position: absolute;
-    bottom: 0;
+    top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     z-index: var(--la-shooter-z-controls);
-    pointer-events: none;
-}
-
-/* Joysticks */
-.la-shooter-joystick {
-    position: absolute;
-    bottom: max(env(safe-area-inset-bottom), var(--la-shooter-spacing-lg));
-    pointer-events: auto;
-}
-
-.la-shooter-joystick-left {
-    left: var(--la-shooter-spacing-lg);
-}
-
-.la-shooter-joystick-right {
-    right: var(--la-shooter-spacing-lg);
-}
-
-.la-shooter-joystick-base {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(0, 212, 255, 0.1) 0%, rgba(26, 31, 58, 0.8) 100%);
-    border: 2px solid rgba(0, 212, 255, 0.3);
-    backdrop-filter: blur(10px);
-    box-shadow: inset 0 0 20px rgba(0, 212, 255, 0.2);
-    position: relative;
-}
-
-.la-shooter-joystick-stick {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    background: radial-gradient(circle, var(--la-shooter-accent-primary) 0%, rgba(0, 212, 255, 0.6) 100%);
-    border: 3px solid rgba(255, 255, 255, 0.5);
-    box-shadow: 0 0 20px var(--la-shooter-accent-primary), inset 0 0 10px rgba(255, 255, 255, 0.3);
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    transition: transform 0.1s ease-out;
-}
-
-.la-shooter-joystick.active .la-shooter-joystick-base {
-    border-color: var(--la-shooter-accent-primary);
-    box-shadow: inset 0 0 30px rgba(0, 212, 255, 0.4), 0 0 20px rgba(0, 212, 255, 0.3);
-}
-
-/* Action Buttons */
-.la-shooter-action-buttons {
-    position: absolute;
-    bottom: max(env(safe-area-inset-bottom), var(--la-shooter-spacing-lg));
-    right: calc(var(--la-shooter-spacing-lg) + 140px);
-    display: flex;
-    flex-direction: column;
-    gap: var(--la-shooter-spacing-md);
-    pointer-events: auto;
-}
-
-.la-shooter-btn-action {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    border: 3px solid rgba(255, 255, 255, 0.2);
-    background: radial-gradient(circle, rgba(255, 0, 110, 0.9) 0%, rgba(255, 0, 110, 0.6) 100%);
-    color: var(--la-shooter-text-primary);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s ease;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 4px 16px rgba(255, 0, 110, 0.4);
-    -webkit-tap-highlight-color: transparent;
-}
-
-.la-shooter-btn-action:active {
-    transform: scale(0.95);
-    box-shadow: 0 0 30px var(--la-shooter-accent-secondary), inset 0 0 20px rgba(0, 0, 0, 0.3);
-}
-
-.la-shooter-btn-fire {
-    background: radial-gradient(circle, var(--la-shooter-accent-secondary) 0%, rgba(255, 0, 110, 0.6) 100%);
-}
-
-.la-shooter-btn-dash {
-    background: radial-gradient(circle, var(--la-shooter-accent-primary) 0%, rgba(0, 212, 255, 0.6) 100%);
-    box-shadow: 0 4px 16px rgba(0, 212, 255, 0.4);
-}
-
-.la-shooter-btn-dash:active {
-    box-shadow: 0 0 30px var(--la-shooter-accent-primary), inset 0 0 20px rgba(0, 0, 0, 0.3);
-}
-
-.la-shooter-btn-dash.cooldown {
-    opacity: 0.5;
-    pointer-events: none;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 /* ================================================
