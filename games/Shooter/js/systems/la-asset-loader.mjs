@@ -11,9 +11,7 @@ export class LA_AssetLoader {
         this.enemySprites = {};
         this.backgrounds = {};
         this.playerSkins = {};
-        this.bossSpr
-
-ites = {};
+        this.bossSprites = {};
         
         // Loading state
         this.isLoaded = false;
