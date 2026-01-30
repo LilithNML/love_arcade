@@ -1,5 +1,6 @@
 /**
  * LA_MODE_Infinite - Infinite arcade mode
+ 
  * Spawns waves of enemies with increasing difficulty
  */
 
