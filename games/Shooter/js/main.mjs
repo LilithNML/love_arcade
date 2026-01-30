@@ -9,6 +9,7 @@ import { LA_CORE_Input } from './core/la-core-input.mjs';
 import { LA_CORE_Pool } from './core/la-core-pool.mjs';
 import { LA_UI } from './systems/la-ui.mjs';
 import { LA_Sound } from './systems/la-sound.mjs';
+import { LA_AssetLoader } from './systems/la-asset-loader.mjs';
 import { LA_Player } from './entities/la-player.mjs';
 import { LA_EnemyFactory } from './entities/la-enemy-factory.mjs';
 import { LA_MODE_Infinite } from './modes/la-mode-infinite.mjs';
@@ -32,6 +33,7 @@ class LA_SHOOTER_Game {
         this.pool = null;
         this.ui = null;
         this.sound = null;
+        this.assets = null;
         
         // Game entities
         this.player = null;
@@ -59,6 +61,10 @@ class LA_SHOOTER_Game {
             // Load configuration
             const response = await fetch('./js/config/la-config.json');
             this.config = await response.json();
+            
+            // Initialize asset loader
+            this.assets = new LA_AssetLoader(this);
+            await this.assets.load(); // Load assets (fallback to procedural if not found)
             
             // Setup canvas
             this.canvas = document.getElementById('la-shooter-canvas');
@@ -540,8 +546,8 @@ class LA_SHOOTER_Game {
         // Clear canvas
         this.renderer.clear();
         
-        // Draw starfield background
-        this.renderer.drawStarfield();
+        // Draw themed background or starfield
+        this.renderer.drawBackground(this.loop.fixedDt);
         
         // Draw particles
         for (const particle of this.particles) {
