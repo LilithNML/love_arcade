@@ -7,9 +7,10 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Space Shooter</title>
+    <title>Space Shooter - Love Arcade</title>
     <link rel="stylesheet" href="css/la-shooter-main.css">
     <!-- Love Arcade Core System - REQUIRED -->
+    <script src="../../js/app.js"></script>
 </head>
 <body>
     <div class="la-shooter-container">
@@ -42,35 +43,8 @@
             </div>
         </div>
 
-        <!-- Touch Controls -->
-        <div class="la-shooter-controls" id="la-shooter-controls">
-            <!-- Left Joystick (Movement) -->
-            <div class="la-shooter-joystick la-shooter-joystick-left" id="la-shooter-joystick-move">
-                <div class="la-shooter-joystick-base"></div>
-                <div class="la-shooter-joystick-stick"></div>
-            </div>
-
-            <!-- Right Joystick (Aim) -->
-            <div class="la-shooter-joystick la-shooter-joystick-right" id="la-shooter-joystick-aim">
-                <div class="la-shooter-joystick-base"></div>
-                <div class="la-shooter-joystick-stick"></div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="la-shooter-action-buttons">
-                <button class="la-shooter-btn-action la-shooter-btn-fire" id="la-shooter-btn-fire">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <circle cx="12" cy="12" r="3" fill="currentColor"/>
-                    </svg>
-                </button>
-                <button class="la-shooter-btn-action la-shooter-btn-dash" id="la-shooter-btn-dash">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M5 12h14M12 5l7 7-7 7"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
+        <!-- Touch Control Overlay (Direct Touch) -->
+        <div class="la-shooter-touch-area" id="la-shooter-touch-area"></div>
 
         <!-- Game Over Screen -->
         <div class="la-shooter-gameover" id="la-shooter-gameover" style="display: none;">
