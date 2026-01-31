@@ -85,17 +85,17 @@
     "bossWaves": [5, 10, 15, 20, 25, 30]
   },
   "rewards": {
-    "scoreToCoins": 1,
-    "waveCompletion": 2,
+    "scoreToCoins": 50,
+    "waveCompletion": 10,
     "milestones": [
       { "score": 500, "coins": 10, "id": "score_500" },
-      { "score": 1000, "coins": 15, "id": "score_1000" },
-      { "score": 2500, "coins": 20, "id": "score_2500" },
-      { "score": 5000, "coins": 25, "id": "score_5000" },
-      { "score": 10000, "coins": 40, "id": "score_10000" },
-      { "score": 25000, "coins": 50, "id": "score_25000" },
-      { "score": 50000, "coins": 60, "id": "score_50000" },
-      { "score": 100000, "coins": 100, "id": "score_100000" }
+      { "score": 1000, "coins": 20, "id": "score_1000" },
+      { "score": 2500, "coins": 40, "id": "score_2500" },
+      { "score": 5000, "coins": 80, "id": "score_5000" },
+      { "score": 10000, "coins": 200, "id": "score_10000" },
+      { "score": 25000, "coins": 500, "id": "score_25000" },
+      { "score": 50000, "coins": 1000, "id": "score_50000" },
+      { "score": 100000, "coins": 2500, "id": "score_100000" }
     ]
   },
   "particles": {
