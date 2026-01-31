@@ -63,7 +63,7 @@
       "pattern": "homing_slow",
       "fireRate": 1.2,
       "score": 100,
-      "coins": 10,
+      "coins": 4,
       "collisionRadius": 22
     },
     "boss": {
@@ -72,7 +72,7 @@
       "pattern": "boss_pattern",
       "fireRate": 0.8,
       "score": 500,
-      "coins": 50,
+      "coins": 15,
       "collisionRadius": 40
     }
   },
@@ -85,8 +85,8 @@
     "bossWaves": [5, 10, 15, 20, 25, 30]
   },
   "rewards": {
-    "scoreToCoins": 2,
-    "waveCompletion": 4,
+    "scoreToCoins": 1,
+    "waveCompletion": 2,
     "milestones": [
       { "score": 500, "coins": 10, "id": "score_500" },
       { "score": 1000, "coins": 15, "id": "score_1000" },
