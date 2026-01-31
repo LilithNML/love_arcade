@@ -143,7 +143,7 @@ export class LA_MODE_Infinite {
             vx: 0,
             vy: 80, // Slow fall
             size: 16,
-            healAmount: 15,
+            healAmount: 5,
             collected: false
         };
         
