@@ -85,18 +85,18 @@ export class LA_Player {
             const dy = targetPos.y - this.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            if (distance > 10) { // Dead zone
+            if (distance > 5) { // Dead zone reducido para mejor respuesta
                 const speed = this.config.speed;
                 const moveX = (dx / distance) * speed;
                 const moveY = (dy / distance) * speed;
                 
-                // Smooth movement
+                // Aceleración instantánea para respuesta inmediata
                 this.vx = moveX;
                 this.vy = moveY;
             } else {
                 // Close enough, slow down
-                this.vx *= 0.8;
-                this.vy *= 0.8;
+                this.vx *= 0.7;
+                this.vy *= 0.7;
             }
         } else if (targetPos.keyboard) {
             // Keyboard fallback
@@ -107,8 +107,8 @@ export class LA_Player {
             this.vy = input.y * this.config.speed * sensitivity;
         } else {
             // No input, decelerate
-            this.vx *= 0.9;
-            this.vy *= 0.9;
+            this.vx *= 0.85;
+            this.vy *= 0.85;
             
             if (Math.abs(this.vx) < 1) this.vx = 0;
             if (Math.abs(this.vy) < 1) this.vy = 0;
