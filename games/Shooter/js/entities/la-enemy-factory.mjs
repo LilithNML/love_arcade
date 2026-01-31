@@ -167,6 +167,7 @@ export class LA_EnemyFactory {
         bullet.damage = 10;
         bullet.size = 5;
         bullet.isCharged = false;
+        bullet.enemyType = enemy.type; // Mark bullet type for sprite
         
         game.enemyBullets.push(bullet);
     }
@@ -193,6 +194,7 @@ export class LA_EnemyFactory {
             bullet.damage = 15;
             bullet.size = 5;
             bullet.isCharged = false;
+            bullet.enemyType = enemy.type; // Mark bullet type for sprite
             
             game.enemyBullets.push(bullet);
         }
@@ -218,6 +220,7 @@ export class LA_EnemyFactory {
             bullet.damage = 12;
             bullet.size = 6;
             bullet.isCharged = false;
+            bullet.enemyType = enemy.type; // Mark bullet type for sprite
             
             game.enemyBullets.push(bullet);
         }
@@ -245,6 +248,7 @@ export class LA_EnemyFactory {
             bullet.damage = 18;
             bullet.size = 6;
             bullet.isCharged = false;
+            bullet.enemyType = enemy.type; // Mark bullet type for sprite
             
             game.enemyBullets.push(bullet);
         }
