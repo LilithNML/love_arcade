@@ -369,41 +369,110 @@ export class LA_CORE_Renderer {
     
     drawPlayerBullet(bullet) {
         const ctx = this.ctx;
+        const sprite = this.game.assets.getBulletSprite('player');
         
-        if (bullet.isCharged) {
-            // Charged shot with glow
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = '#ff00aa';
-            ctx.fillStyle = '#ff00aa';
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
-            
-            ctx.beginPath();
-            ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            
-            ctx.shadowBlur = 0;
+        if (sprite) {
+            // Draw sprite
+            const size = bullet.size * 2.5;
+            ctx.save();
+            ctx.translate(bullet.x, bullet.y);
+            if (bullet.isCharged) {
+                ctx.scale(1.5, 1.5); // Larger for charged
+            }
+            ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
+            ctx.restore();
         } else {
-            // Normal shot
-            ctx.fillStyle = '#00d4ff';
-            ctx.beginPath();
-            ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
-            ctx.fill();
+            // Fallback to procedural
+            if (bullet.isCharged) {
+                // Charged shot with glow
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#ff00aa';
+                ctx.fillStyle = '#ff00aa';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                
+                ctx.shadowBlur = 0;
+            } else {
+                // Normal shot
+                ctx.fillStyle = '#00d4ff';
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
     }
     
     drawEnemyBullet(bullet) {
         const ctx = this.ctx;
+        // Get sprite based on bullet's enemyType (if available)
+        const enemyType = bullet.enemyType || 'scout';
+        const sprite = this.game.assets.getBulletSprite(enemyType);
         
-        ctx.fillStyle = '#ff3366';
-        ctx.strokeStyle = '#ffaa00';
-        ctx.lineWidth = 1;
+        if (sprite) {
+            // Draw sprite
+            const size = bullet.size * 2.5;
+            ctx.save();
+            ctx.translate(bullet.x, bullet.y);
+            ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
+            ctx.restore();
+        } else {
+            // Fallback to procedural
+            ctx.fillStyle = '#ff3366';
+            ctx.strokeStyle = '#ffaa00';
+            ctx.lineWidth = 1;
+            
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+    }
+    
+    drawPowerup(item) {
+        const ctx = this.ctx;
+        const sprite = this.game.assets.getItemSprite(item.type);
         
-        ctx.beginPath();
-        ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        if (sprite) {
+            // Draw sprite
+            const size = item.size * 2;
+            ctx.save();
+            ctx.translate(item.x, item.y);
+            
+            // Pulsating effect
+            const pulse = Math.sin(Date.now() * 0.005) * 0.15 + 1;
+            ctx.scale(pulse, pulse);
+            
+            ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
+            ctx.restore();
+        } else {
+            // Fallback to procedural health cross
+            ctx.save();
+            ctx.translate(item.x, item.y);
+            
+            // Pulsating effect
+            const pulse = Math.sin(Date.now() * 0.005) * 0.2 + 1;
+            ctx.scale(pulse, pulse);
+            
+            // Red cross
+            ctx.fillStyle = '#ff0055';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            
+            // Horizontal bar
+            ctx.fillRect(-item.size / 2, -item.size / 6, item.size, item.size / 3);
+            ctx.strokeRect(-item.size / 2, -item.size / 6, item.size, item.size / 3);
+            
+            // Vertical bar
+            ctx.fillRect(-item.size / 6, -item.size / 2, item.size / 3, item.size);
+            ctx.strokeRect(-item.size / 6, -item.size / 2, item.size / 3, item.size);
+            
+            ctx.restore();
+        }
     }
     
     drawParticle(particle) {
