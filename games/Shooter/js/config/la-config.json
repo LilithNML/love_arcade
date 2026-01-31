@@ -85,7 +85,7 @@
     "bossWaves": [5, 10, 15, 20, 25, 30]
   },
   "rewards": {
-    "scoreToCoins": 50,
+    "scoreToCoins": 12,
     "waveCompletion": 10,
     "milestones": [
       { "score": 500, "coins": 10, "id": "score_500" },
