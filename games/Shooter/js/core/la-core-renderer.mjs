@@ -373,7 +373,7 @@ export class LA_CORE_Renderer {
         
         if (sprite) {
             // Draw sprite
-            const size = bullet.size * 2.5;
+            const size = bullet.size * 4.5;
             ctx.save();
             ctx.translate(bullet.x, bullet.y);
             if (bullet.isCharged) {
