@@ -35,7 +35,7 @@
     "id": 5,
     "name": "Goku Ultra Instinto",
     "desc": "Goku con el pelo plateado para que tu teléfono se vea con más nivel.",
-    "price": 250,
+    "price": 450,
     "stock": 1,
     "image": "assets/product-thumbs/goku_ultra_instinto_f089881b_thumbs.webp"
   },
@@ -43,7 +43,7 @@
     "id": 6,
     "name": "Furina",
     "desc": "Toda la estética de la Arconte Hydro para decorar tu laptop.",
-    "price": 530,
+    "price": 1050,
     "stock": 1,
     "image": "assets/product-thumbs/furina_d9040eb4_thumbs.webp"
   },
@@ -51,7 +51,7 @@
     "id": 7,
     "name": "Chuck",
     "desc": "El pájaro más rápido de la isla directo para el monitor de tu computadora.",
-    "price": 530,
+    "price": 1050,
     "stock": 1,
     "image": "assets/product-thumbs/chuck_49168af7_thumbs.webp"
   },
@@ -99,7 +99,7 @@
     "id": 13,
     "name": "Gogeta",
     "desc": "Resultado de la danza de la fusión para que luzca en tu teléfono.",
-    "price": 530,
+    "price": 750,
     "stock": 1,
     "image": "assets/product-thumbs/gogeta_d68cb043_thumbs.webp"
   },
@@ -115,7 +115,7 @@
     "id": 15,
     "name": "Kaoruko Waguri",
     "desc": "Un wallpaper con la estética del anime para tu pantalla móvil.",
-    "price": 530,
+    "price": 630,
     "stock": 1,
     "image": "assets/product-thumbs/kaoruko_waguri_96348cb3_thumbs.webp"
   },
@@ -123,7 +123,7 @@
     "id": 16,
     "name": "Hitori Gotou",
     "desc": "Bocchi la roca, perfecto para el fondo de tu PC.",
-    "price": 530,
+    "price": 630,
     "stock": 1,
     "image": "assets/product-thumbs/hitori_gotou_69e25c56_thumbs.webp"
   },
@@ -155,7 +155,7 @@
     "id": 20,
     "name": "Lanzaguisantes de Hielo",
     "desc": "Un clásico de PvZ para que mantengas tu celular bien fresco.",
-    "price": 1050,
+    "price": 1500,
     "stock": 1,
     "image": "assets/product-thumbs/lanzaguisantes_de_hielo_7041b0cf_thumbs.webp"
   },
@@ -163,7 +163,7 @@
     "id": 21,
     "name": "Astra Yao",
     "desc": "Estética estelar y moderna para que tu teléfono se vea impecable.",
-    "price": 1050,
+    "price": 1500,
     "stock": 1,
     "image": "assets/product-thumbs/astra_yao_ec9bcd48_thumbs.webp"
   },
@@ -171,7 +171,7 @@
     "id": 22,
     "name": "Xilonen",
     "desc": "La herrera de Natlan para el fondo de tu PC.",
-    "price": 530,
+    "price": 1300,
     "stock": 1,
     "image": "assets/product-thumbs/xilonen_c4f2a9d1_thumbs.webp"
   },
@@ -187,7 +187,7 @@
     "id": 24,
     "name": "Mavuika",
     "desc": "La Arconte Pyro para el fondo de tu PC.",
-    "price": 530,
+    "price": 730,
     "stock": 1,
     "image": "assets/product-thumbs/mavuika_9e41d6b2_thumbs.webp"
   },
@@ -211,7 +211,7 @@
     "id": 27,
     "name": "Goku x Vegeta",
     "desc": "Goku y Vegeta juntos para el fondo de tu celular.",
-    "price": 700,
+    "price": 900,
     "stock": 1,
     "image": "assets/product-thumbs/gokuxvegeta_8f3b6c1a_thumbs.webp"
   },
@@ -219,7 +219,7 @@
     "id": 28,
     "name": "Hatsune Miku",
     "desc": "Fondo de Hatsune Miku para decorar tu PC.",
-    "price": 1500,
+    "price": 1800,
     "stock": 1,
     "image": "assets/product-thumbs/hatsunemiku_b2e7a94f_thumbs.webp"
   }
