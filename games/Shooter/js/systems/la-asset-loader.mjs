@@ -12,6 +12,8 @@ export class LA_AssetLoader {
         this.backgrounds = {};
         this.playerSkins = {};
         this.bossSprites = {};
+        this.bulletSprites = {};
+        this.itemSprites = {};
         
         // Loading state
         this.isLoaded = false;
@@ -33,15 +35,26 @@ export class LA_AssetLoader {
                 boss3: 'assets/sprites/bosses/boss3.png'
             },
             backgrounds: {
-                space: 'assets/backgrounds/space.webp',
-                nebula: 'assets/backgrounds/nebula.webp',
-                stars: 'assets/backgrounds/stars.webp'
+                space: 'assets/backgrounds/space.png',
+                nebula: 'assets/backgrounds/nebula.png',
+                stars: 'assets/backgrounds/stars.png'
             },
             playerSkins: {
                 default: 'assets/sprites/player/default.png',
                 red: 'assets/sprites/player/red.png',
                 blue: 'assets/sprites/player/blue.png',
                 gold: 'assets/sprites/player/gold.png'
+            },
+            bullets: {
+                player: 'assets/sprites/bullets/player.png',
+                scout: 'assets/sprites/bullets/scout.png',
+                shooter: 'assets/sprites/bullets/shooter.png',
+                tank: 'assets/sprites/bullets/tank.png',
+                elite: 'assets/sprites/bullets/elite.png',
+                boss: 'assets/sprites/bullets/boss.png'
+            },
+            items: {
+                health: 'assets/sprites/items/health.png'
             }
         };
         
@@ -58,14 +71,18 @@ export class LA_AssetLoader {
             Object.keys(this.assetConfig.enemies).length +
             Object.keys(this.assetConfig.bosses).length +
             Object.keys(this.assetConfig.backgrounds).length +
-            Object.keys(this.assetConfig.playerSkins).length;
+            Object.keys(this.assetConfig.playerSkins).length +
+            Object.keys(this.assetConfig.bullets).length +
+            Object.keys(this.assetConfig.items).length;
         
         // Load all asset categories
         await Promise.all([
             this.loadEnemySprites(),
             this.loadBossSprites(),
             this.loadBackgrounds(),
-            this.loadPlayerSkins()
+            this.loadPlayerSkins(),
+            this.loadBulletSprites(),
+            this.loadItemSprites()
         ]);
         
         this.isLoaded = true;
@@ -73,7 +90,9 @@ export class LA_AssetLoader {
             enemies: Object.keys(this.enemySprites).length,
             bosses: Object.keys(this.bossSprites).length,
             backgrounds: Object.keys(this.backgrounds).length,
-            playerSkins: Object.keys(this.playerSkins).length
+            playerSkins: Object.keys(this.playerSkins).length,
+            bullets: Object.keys(this.bulletSprites).length,
+            items: Object.keys(this.itemSprites).length
         });
     }
     
@@ -137,6 +156,36 @@ export class LA_AssetLoader {
         }
     }
     
+    async loadBulletSprites() {
+        for (const [type, path] of Object.entries(this.assetConfig.bullets)) {
+            try {
+                const sprite = await this.loadImage(path);
+                this.bulletSprites[type] = sprite;
+                console.log(`[LA_ASSET_LOADER] Loaded bullet sprite: ${type}`);
+            } catch (error) {
+                console.warn(`[LA_ASSET_LOADER] Failed to load bullet ${type}, using procedural rendering`);
+                this.bulletSprites[type] = null;
+            }
+            this.assetsLoaded++;
+            this.updateProgress();
+        }
+    }
+    
+    async loadItemSprites() {
+        for (const [type, path] of Object.entries(this.assetConfig.items)) {
+            try {
+                const sprite = await this.loadImage(path);
+                this.itemSprites[type] = sprite;
+                console.log(`[LA_ASSET_LOADER] Loaded item sprite: ${type}`);
+            } catch (error) {
+                console.warn(`[LA_ASSET_LOADER] Failed to load item ${type}, using procedural rendering`);
+                this.itemSprites[type] = null;
+            }
+            this.assetsLoaded++;
+            this.updateProgress();
+        }
+    }
+    
     loadImage(src) {
         return new Promise((resolve, reject) => {
             const img = new Image();
@@ -166,6 +215,14 @@ export class LA_AssetLoader {
     
     getCurrentPlayerSkin() {
         return this.playerSkins[this.currentPlayerSkin] || null;
+    }
+    
+    getBulletSprite(type) {
+        return this.bulletSprites[type] || null;
+    }
+    
+    getItemSprite(type) {
+        return this.itemSprites[type] || null;
     }
     
     setBackground(name) {
