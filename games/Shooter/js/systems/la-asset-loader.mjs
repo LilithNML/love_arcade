@@ -35,9 +35,9 @@ export class LA_AssetLoader {
                 boss3: 'assets/sprites/bosses/boss3.png'
             },
             backgrounds: {
-                space: 'assets/backgrounds/space.png',
-                nebula: 'assets/backgrounds/nebula.png',
-                stars: 'assets/backgrounds/stars.png'
+                space: 'assets/backgrounds/space.webp',
+                nebula: 'assets/backgrounds/nebula.webp',
+                stars: 'assets/backgrounds/stars.webp'
             },
             playerSkins: {
                 default: 'assets/sprites/player/default.png',
