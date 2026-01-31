@@ -415,7 +415,7 @@ export class LA_CORE_Renderer {
         
         if (sprite) {
             // Draw sprite
-            const size = bullet.size * 2.5;
+            const size = bullet.size * 3.5;
             ctx.save();
             ctx.translate(bullet.x, bullet.y);
             ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
