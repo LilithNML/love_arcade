@@ -64,8 +64,8 @@ export class LA_MODE_Infinite {
             this.spawnTimer = this.spawnInterval;
         }
         
-        // Random health item spawn (5% chance every 3 seconds)
-        if (Math.random() < 0.05 && this.game.powerups.length < 3) {
+        // Random health item spawn (5% chance every 1 seconds)
+        if (Math.random() < 0.05 && this.game.powerups.length < 1) {
             this.spawnHealthItem();
         }
     }
