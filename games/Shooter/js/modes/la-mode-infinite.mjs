@@ -1,6 +1,5 @@
 /**
  * LA_MODE_Infinite - Infinite arcade mode
- 
  * Spawns waves of enemies with increasing difficulty
  */
 
@@ -20,6 +19,10 @@ export class LA_MODE_Infinite {
         this.spawnInterval = this.config.baseSpawnInterval;
         this.waveTransitionTimer = 0;
         this.isTransitioning = false;
+        
+        // Boss state
+        this.bossSpawned = false;
+        this.bossWaves = this.config.bossWaves || [5, 10, 15, 20, 25, 30];
     }
     
     start() {
@@ -31,6 +34,7 @@ export class LA_MODE_Infinite {
         this.spawnInterval = this.config.baseSpawnInterval;
         this.waveTransitionTimer = 0;
         this.isTransitioning = false;
+        this.bossSpawned = false;
     }
     
     update(dt) {
@@ -46,12 +50,28 @@ export class LA_MODE_Infinite {
             return;
         }
         
+        // Check if this is a boss wave
+        if (this.isBossWave() && !this.bossSpawned) {
+            this.spawnBoss();
+            this.bossSpawned = true;
+            return; // Don't spawn regular enemies during boss wave
+        }
+        
         // Spawn enemies
         this.spawnTimer -= dt;
         if (this.spawnTimer <= 0) {
             this.spawnEnemy();
             this.spawnTimer = this.spawnInterval;
         }
+        
+        // Random health item spawn (5% chance every 3 seconds)
+        if (Math.random() < 0.05 && this.game.powerups.length < 3) {
+            this.spawnHealthItem();
+        }
+    }
+    
+    isBossWave() {
+        return this.bossWaves.includes(this.wave);
     }
     
     updateDifficulty() {
@@ -90,6 +110,46 @@ export class LA_MODE_Infinite {
         }
     }
     
+    spawnBoss() {
+        console.log(`[LA_MODE_INFINITE] Spawning boss for wave ${this.wave}`);
+        
+        // Spawn at center top
+        const x = this.game.viewport.width / 2;
+        const y = -50;
+        
+        const boss = this.game.enemyFactory.createEnemy('boss', x, y);
+        if (boss) {
+            // Bosses get extra HP based on wave
+            const waveMultiplier = 1 + (this.wave / 10);
+            boss.hp *= waveMultiplier;
+            boss.maxHp = boss.hp;
+            
+            this.game.enemies.push(boss);
+            
+            // Show boss notification
+            this.game.ui.showNotification('⚠️ ¡JEFE APARECIDO!', 3000);
+            this.game.sound.play('milestone'); // Use milestone sound for boss
+        }
+    }
+    
+    spawnHealthItem() {
+        const x = 50 + Math.random() * (this.game.viewport.width - 100);
+        const y = -20;
+        
+        const item = {
+            type: 'health',
+            x: x,
+            y: y,
+            vx: 0,
+            vy: 80, // Slow fall
+            size: 16,
+            healAmount: 15,
+            collected: false
+        };
+        
+        this.game.powerups.push(item);
+    }
+    
     chooseEnemyType() {
         const rand = Math.random();
         
@@ -116,8 +176,14 @@ export class LA_MODE_Infinite {
     onEnemyKilled(enemy) {
         this.enemiesKilled++;
         
+        // If boss killed, complete wave immediately
+        if (enemy.type === 'boss') {
+            this.completeWave();
+            return;
+        }
+        
         // Check if wave is complete
-        if (this.enemiesKilled >= this.enemiesPerWave) {
+        if (this.enemiesKilled >= this.enemiesPerWave && !this.isBossWave()) {
             this.completeWave();
         }
     }
@@ -126,8 +192,23 @@ export class LA_MODE_Infinite {
         this.isTransitioning = true;
         this.waveTransitionTimer = this.config.waveTransitionDelay;
         
+        // Award wave completion bonus
+        const waveBonus = this.game.config.rewards.waveCompletion;
+        if (typeof window.GameCenter !== 'undefined' && 
+            typeof window.GameCenter.completeLevel === 'function') {
+            try {
+                window.GameCenter.completeLevel(
+                    this.game.config.game.id,
+                    `wave_${this.wave}`,
+                    waveBonus
+                );
+            } catch (error) {
+                console.error('[LA_MODE_INFINITE] Error awarding wave bonus:', error);
+            }
+        }
+        
         // Show notification
-        this.game.ui.showNotification(`¡Oleada ${this.wave} Completada!`, 2000);
+        this.game.ui.showNotification(`¡Oleada ${this.wave} Completada! +${waveBonus} monedas`, 2000);
     }
     
     startNextWave() {
@@ -135,11 +216,16 @@ export class LA_MODE_Infinite {
         this.enemiesKilled = 0;
         this.enemiesPerWave += 5; // Increase enemies per wave
         this.isTransitioning = false;
+        this.bossSpawned = false; // Reset boss flag
         
         // Update UI
         this.game.ui.updateWave(this.wave);
         
         // Show new wave notification
-        this.game.ui.showNotification(`Oleada ${this.wave}`, 1500);
+        if (this.isBossWave()) {
+            this.game.ui.showNotification(`⚔️ Oleada ${this.wave} - ¡JEFE!`, 2000);
+        } else {
+            this.game.ui.showNotification(`Oleada ${this.wave}`, 1500);
+        }
     }
 }
