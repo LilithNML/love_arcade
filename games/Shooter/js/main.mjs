@@ -351,6 +351,9 @@ class LA_SHOOTER_Game {
         // Update enemies
         this.updateEnemies(dt);
         
+        // Update powerups
+        this.updatePowerups(dt);
+        
         // Update particles
         this.updateParticles(dt);
         
@@ -410,6 +413,47 @@ class LA_SHOOTER_Game {
             if (particle.life <= 0) {
                 this.particles.splice(i, 1);
                 this.pool.releaseParticle(particle);
+            }
+        }
+    }
+    
+    updatePowerups(dt) {
+        for (let i = this.powerups.length - 1; i >= 0; i--) {
+            const item = this.powerups[i];
+            
+            // Update position
+            item.x += item.vx * dt;
+            item.y += item.vy * dt;
+            
+            // Remove if off screen
+            if (item.y > this.viewport.height + 50) {
+                this.powerups.splice(i, 1);
+                continue;
+            }
+            
+            // Check collision with player
+            const dx = item.x - this.player.x;
+            const dy = item.y - this.player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < (item.size + this.player.config.collisionRadius)) {
+                // Collect item
+                if (item.type === 'health') {
+                    const healAmount = item.healAmount || 15;
+                    const oldHealth = this.player.health;
+                    this.player.health = Math.min(this.player.config.maxHealth, this.player.health + healAmount);
+                    const actualHeal = this.player.health - oldHealth;
+                    
+                    // Show notification
+                    this.ui.showNotification(`+${actualHeal} ❤️ Vida`, 1500);
+                    this.sound.play('milestone'); // Reuse milestone sound
+                    
+                    // Update UI
+                    this.ui.updateHealth(this.player.health, this.player.config.maxHealth);
+                }
+                
+                // Remove collected item
+                this.powerups.splice(i, 1);
             }
         }
     }
@@ -552,6 +596,11 @@ class LA_SHOOTER_Game {
         // Draw particles
         for (const particle of this.particles) {
             this.renderer.drawParticle(particle);
+        }
+        
+        // Draw powerups
+        for (const item of this.powerups) {
+            this.renderer.drawPowerup(item);
         }
         
         // Draw bullets
