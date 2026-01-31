@@ -87,12 +87,13 @@ export class LA_Player {
             
             if (distance > 5) { // Dead zone reducido para mejor respuesta
                 const speed = this.config.speed;
-                const moveX = (dx / distance) * speed;
-                const moveY = (dy / distance) * speed;
+                const targetVx = (dx / distance) * speed;
+                const targetVy = (dy / distance) * speed;
                 
-                // Aceleración instantánea para respuesta inmediata
-                this.vx = moveX;
-                this.vy = moveY;
+                // Interpolación suave para eliminar temblor
+                const smoothing = 25; // Factor de suavizado (más alto = más suave)
+                this.vx += (targetVx - this.vx) * smoothing * dt;
+                this.vy += (targetVy - this.vy) * smoothing * dt;
             } else {
                 // Close enough, slow down
                 this.vx *= 0.7;
@@ -106,7 +107,7 @@ export class LA_Player {
             this.vx = input.x * this.config.speed * sensitivity;
             this.vy = input.y * this.config.speed * sensitivity;
         } else {
-            // No input, decelerate
+            // No input, decelerate smoothly
             this.vx *= 0.85;
             this.vy *= 0.85;
             
