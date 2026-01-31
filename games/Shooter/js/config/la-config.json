@@ -67,7 +67,7 @@
       "collisionRadius": 22
     },
     "boss": {
-      "hp": 800,
+      "hp": 700,
       "speed": 10,
       "pattern": "boss_pattern",
       "fireRate": 0.8,
@@ -85,7 +85,7 @@
     "bossWaves": [3, 10, 15, 20, 25, 30]
   },
   "rewards": {
-    "scoreToCoins": 25,
+    "scoreToCoins": 23,
     "waveCompletion": 10,
     "milestones": [
       { "score": 500, "coins": 10, "id": "score_500" },
