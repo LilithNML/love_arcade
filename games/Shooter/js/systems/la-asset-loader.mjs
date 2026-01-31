@@ -47,11 +47,11 @@ export class LA_AssetLoader {
             },
             bullets: {
                 player: 'assets/sprites/bullets/player.png',
-                scout: 'assets/sprites/bullets/scout.png',
-                shooter: 'assets/sprites/bullets/shooter.png',
-                tank: 'assets/sprites/bullets/tank.png',
-                elite: 'assets/sprites/bullets/elite.png',
-                boss: 'assets/sprites/bullets/boss.png'
+                scout: 'assets/sprites/bullets/scout-.png',
+                shooter: 'assets/sprites/bullets/shooter-.png',
+                tank: 'assets/sprites/bullets/tank-.png',
+                elite: 'assets/sprites/bullets/elite-.png',
+                boss: 'assets/sprites/bullets/boss-.png'
             },
             items: {
                 health: 'assets/sprites/items/health.png'
