@@ -82,7 +82,7 @@
     "maxDifficulty": 5,
     "scorePerEnemy": 10,
     "waveTransitionDelay": 3.0,
-    "bossWaves": [5, 10, 15, 20, 25, 30]
+    "bossWaves": [3, 10, 15, 20, 25, 30]
   },
   "rewards": {
     "scoreToCoins": 14,
