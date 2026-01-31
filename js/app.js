@@ -19,7 +19,8 @@ const PROMO_CODES = {
     'RAIDEN': 1200,
     'FIX': 100,
     'TAO250': 250,
-    'UIKA250': 250
+    'UIKA250': 250,
+    'SHADOW777: 777
 };
 
 const defaultState = {
