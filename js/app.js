@@ -20,7 +20,13 @@ const PROMO_CODES = {
     'FIX': 100,
     'TAO250': 250,
     'UIKA250': 250,
-    'SHADOW777': 777
+    'SHADOW777': 777,
+    'ANIMULA CHORAGI': 500,
+    'SOLINVICTUS': 500,
+    'PAPILIOCHARONTIS': 500,
+    'IMPERATRIXUMBROSA': 500,
+    'EKATERINI': 500,
+    'KATHAROS': 500
 };
 
 const defaultState = {
