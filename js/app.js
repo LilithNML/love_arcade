@@ -26,7 +26,29 @@ const PROMO_CODES = {
     'PAPILIO CHARONTIS': 500,
     'IMPERATRIX UMBROSA': 500,
     'EKATERINI': 500,
-    'KATHAROS': 500
+    'KATHAROS': 500,
+    'GOUL50': 50,
+    'AMRO50': 50,
+    'GOVE50': 50,
+    'FU50': 50,
+    'GO50': 50,
+    'GOBR50': 50,
+    'CH50': 50,
+    'ASYA50': 50,
+    'MINA50': 50,
+    'SA50': 50,
+    'TRFU50': 50,
+    'VEZA50': 50,
+    'JADO50': 50,
+    'JADOUNO50': 50,
+    'JADODOS50': 50,
+    'JADOTRES50': 50,
+    'HAMI50': 50,
+    'MA50': 50,
+    'XI50': 50,
+    'LADEHI50': 50,
+    'HIGO50': 50,
+    'KAWA50': 50
 };
 
 const defaultState = {
