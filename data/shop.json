@@ -222,5 +222,69 @@
     "price": 1800,
     "stock": 1,
     "image": "assets/product-thumbs/hatsunemiku_b2e7a94f_thumbs.webp"
+  },
+   {
+    "id": 29,
+    "name": "Jane Doe",
+    "desc": "Wallpaper de Jane Doe para tu teléfono.",
+    "price": 700,
+    "stock": 1,
+    "image": "assets/product-thumbs/jane_doe_5c8a1f2e_thumbs.webp"
+  },
+  {
+    "id": 30,
+    "name": "Jane Doe Chibi",
+    "desc": "Versión chibi de Jane Doe.",
+    "price": 90,
+    "stock": 3,
+    "image": "assets/product-thumbs/jane_doe_chibi_1_9d3f7b4a_thumbs.webp"
+  },
+  {
+    "id": 31,
+    "name": "Miku Nakano",
+    "desc": "Miku Nakano para el fondo de tu celular.",
+    "price": 700,
+    "stock": 1,
+    "image": "assets/product-thumbs/miku_nakano_3e9d2a6c_thumbs.webp"
+  },
+  {
+    "id": 32,
+    "name": "Sacarosa",
+    "desc": "Wallpaper de Sacarosa.",
+    "price": 1500,
+    "stock": 1,
+    "image": "assets/product-thumbs/sacarosa_8b1f4d9e_thumbs.webp"
+  },
+  {
+    "id": 33,
+    "name": "Trunks del Futuro",
+    "desc": "Fondo de Trunks del Futuro para tu teléfono.",
+    "price": 700,
+    "stock": 1,
+    "image": "assets/product-thumbs/trunks_del_futuro_6a0c3f8d_thumbs.webp"
+  },
+  {
+    "id": 34,
+    "name": "Gogeta vs Broly",
+    "desc": "La batalla de Gogeta contra Broly en tu pantalla.",
+    "price": 800,
+    "stock": 1,
+    "image": "assets/product-thumbs/gogeta_vs_broly_2d9a7e4c_thumbs.webp"
+  },
+  {
+    "id": 35,
+    "name": "Vegetto vs Zamasu",
+    "desc": "Wallpaper del combate contra Zamasu para tu celular.",
+    "price": 530,
+    "stock": 1,
+    "image": "assets/product-thumbs/vegetto_vs_zamasu_b5c8f1a3_thumbs.webp"
+  },
+  {
+    "id": 36,
+    "name": "Amy Rose",
+    "desc": "Wallpaper de Amy Rose para tu teléfono.",
+    "price": 2000,
+    "stock": 1,
+    "image": "assets/product-thumbs/amy_rose_7e3d9c2b_thumbs.webp"
   }
 ]
