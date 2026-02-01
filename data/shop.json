@@ -163,7 +163,7 @@
     "id": 21,
     "name": "Astra Yao",
     "desc": "Estética estelar y moderna para que tu teléfono se vea impecable.",
-    "price": 1500,
+    "price": 2000,
     "stock": 1,
     "image": "assets/product-thumbs/astra_yao_ec9bcd48_thumbs.webp"
   },
@@ -227,7 +227,7 @@
     "id": 29,
     "name": "Jane Doe",
     "desc": "Wallpaper de Jane Doe para tu teléfono.",
-    "price": 700,
+    "price": 800,
     "stock": 1,
     "image": "assets/product-thumbs/jane_doe_5c8a1f2e_thumbs.webp"
   },
@@ -275,7 +275,7 @@
     "id": 35,
     "name": "Vegetto vs Zamasu",
     "desc": "Wallpaper del combate contra Zamasu para tu celular.",
-    "price": 530,
+    "price": 800,
     "stock": 1,
     "image": "assets/product-thumbs/vegetto_vs_zamasu_b5c8f1a3_thumbs.webp"
   },
