@@ -178,5 +178,140 @@
     "rewardCoins": 320,
     "description": "El cierre perfecto",
     "timeLimit": 960
+  },
+    {
+    "id": "lvl_21",
+    "image": "./assets/Nivel21.webp",
+    "thumbnail": "./assets/thumbnails/Nivel21_thumb.webp",
+    "pieces": 16,
+    "rewardCoins": 80,
+    "description": "Nuevo amanecer",
+    "timeLimit": 360
+  },
+  {
+    "id": "lvl_22",
+    "image": "./assets/Nivel22.webp",
+    "thumbnail": "./assets/thumbnails/Nivel22_thumb.webp",
+    "pieces": 25,
+    "rewardCoins": 125,
+    "description": "Perspectiva clara",
+    "timeLimit": 495
+  },
+  {
+    "id": "lvl_23",
+    "image": "./assets/Nivel23.webp",
+    "thumbnail": "./assets/thumbnails/Nivel23_thumb.webp",
+    "pieces": 36,
+    "rewardCoins": 180,
+    "description": "Camino sinuoso",
+    "timeLimit": 660
+  },
+  {
+    "id": "lvl_24",
+    "image": "./assets/Nivel24.webp",
+    "thumbnail": "./assets/thumbnails/Nivel24_thumb.webp",
+    "pieces": 49,
+    "rewardCoins": 245,
+    "description": "Fragmentos del alma",
+    "timeLimit": 855
+  },
+  {
+    "id": "lvl_25",
+    "image": "./assets/Nivel25.webp",
+    "thumbnail": "./assets/thumbnails/Nivel25_thumb.webp",
+    "pieces": 16,
+    "rewardCoins": 80,
+    "description": "Respiro táctico",
+    "timeLimit": 360
+  },
+  {
+    "id": "lvl_26",
+    "image": "./assets/Nivel26.webp",
+    "thumbnail": "./assets/thumbnails/Nivel26_thumb.webp",
+    "pieces": 64,
+    "rewardCoins": 320,
+    "description": "Gran maestro I",
+    "timeLimit": 1080
+  },
+  {
+    "id": "lvl_27",
+    "image": "./assets/Nivel27.webp",
+    "thumbnail": "./assets/thumbnails/Nivel27_thumb.webp",
+    "pieces": 36,
+    "rewardCoins": 180,
+    "description": "Ilusión óptica",
+    "timeLimit": 660
+  },
+  {
+    "id": "lvl_28",
+    "image": "./assets/Nivel28.webp",
+    "thumbnail": "./assets/thumbnails/Nivel28_thumb.webp",
+    "pieces": 25,
+    "rewardCoins": 125,
+    "description": "Simetría oculta",
+    "timeLimit": 495
+  },
+  {
+    "id": "lvl_29",
+    "image": "./assets/Nivel29.webp",
+    "thumbnail": "./assets/thumbnails/Nivel29_thumb.webp",
+    "pieces": 49,
+    "rewardCoins": 245,
+    "description": "Desafío de medianoche",
+    "timeLimit": 855
+  },
+  {
+    "id": "lvl_30",
+    "image": "./assets/Nivel30.webp",
+    "thumbnail": "./assets/thumbnails/Nivel30_thumb.webp",
+    "pieces": 36,
+    "rewardCoins": 180,
+    "description": "Laberinto mental",
+    "timeLimit": 660
+  },
+  {
+    "id": "lvl_31",
+    "image": "./assets/Nivel31.webp",
+    "thumbnail": "./assets/thumbnails/Nivel31_thumb.webp",
+    "pieces": 64,
+    "rewardCoins": 320,
+    "description": "Cerca del límite",
+    "timeLimit": 1080
+  },
+  {
+    "id": "lvl_32",
+    "image": "./assets/Nivel32.webp",
+    "thumbnail": "./assets/thumbnails/Nivel32_thumb.webp",
+    "pieces": 49,
+    "rewardCoins": 245,
+    "description": "Espejismo total",
+    "timeLimit": 855
+  },
+  {
+    "id": "lvl_33",
+    "image": "./assets/Nivel33.webp",
+    "thumbnail": "./assets/thumbnails/Nivel33_thumb.webp",
+    "pieces": 25,
+    "rewardCoins": 125,
+    "description": "Claridad necesaria",
+    "timeLimit": 495
+  },
+  {
+    "id": "lvl_34",
+    "image": "./assets/Nivel34.webp",
+    "thumbnail": "./assets/thumbnails/Nivel34_thumb.webp",
+    "pieces": 36,
+    "rewardCoins": 180,
+    "description": "Prueba de fe",
+    "timeLimit": 660
+  },
+  {
+    "id": "lvl_35",
+    "image": "./assets/Nivel35.webp",
+    "thumbnail": "./assets/thumbnails/Nivel35_thumb.webp",
+    "pieces": 64,
+    "rewardCoins": 320,
+    "description": "El muro de cristal",
+    "timeLimit": 1080
   }
 ]
