@@ -290,6 +290,216 @@ window.LA_WS_LEVELS = [
         gridSize: 12,
         words: ["MARIO", "LINK", "ZELDA", "KIRBY", "SAMUS", "DONKEY", "YOSHI", "FOX", "SNAKE", "CLOUD"],
         rewardCoins: 100
+    },
+        {
+        id: "lvl_41",
+        title: "Genshin: Liyue",
+        gridSize: 11,
+        words: ["XIAO", "GANU", "KEQING", "BEIDOU", "QIQI", "XINGQIU", "CHUNYUN"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_42",
+        title: "ZZZ: Hollow Zero",
+        gridSize: 10,
+        words: ["ZETH", "PHAETHON", "PROXY", "ETHEREAL", "BANGBOO"],
+        rewardCoins: 50
+    },
+    {
+        id: "lvl_43",
+        title: "NieR: Desierto",
+        gridSize: 10,
+        words: ["ARENA", "RUINAS", "CHASIS", "NIVEL", "NUCLEO", "MEMORIA"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_44",
+        title: "Dragon Ball: Villanos",
+        gridSize: 12,
+        words: ["CELL", "MAJINBUU", "COOLER", "BABIDI", "DABURA", "ZAMASU", "MORO"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_45",
+        title: "FNAF: Objetos",
+        gridSize: 10,
+        words: ["PIZZA", "GLOBO", "CAJA", "POSTER", "RELOJ", "RADIO", "CUPCAKE"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_46",
+        title: "Steven: Fusiones",
+        gridSize: 12,
+        words: ["OPALO", "SUGILITE", "SARDONYX", "STEVONNIE", "MALACHITE", "SMOKY"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_47",
+        title: "Bocchi: Musica",
+        gridSize: 10,
+        words: ["BAJO", "SOLO", "RITMO", "NOTAS", "CANTO", "BANDA", "AUDI"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_48",
+        title: "Sonic: Zonas",
+        gridSize: 11,
+        words: ["GREEN", "HILL", "CASINO", "ICE", "VOLCANO", "JUNGLE", "METRO"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_49",
+        title: "Angry Birds: Cerdos",
+        gridSize: 10,
+        words: ["REY", "CASCO", "CHEF", "BIGOTE", "MINERO", "CABO"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_50",
+        title: "Filosofia: Existencia",
+        gridSize: 12,
+        words: ["SER", "NADA", "TIEMPO", "ESPACIO", "MUNDO", "SUJETO", "OBJETO", "AZAR"],
+        rewardCoins: 80
+    },
+    {
+        id: "lvl_51",
+        title: "Aves del Mundo",
+        gridSize: 10,
+        words: ["AGUILA", "HALCON", "BUHO", "LORO", "CISNE", "CUERVO"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_52",
+        title: "Geometria",
+        gridSize: 11,
+        words: ["PUNTO", "RECTA", "PLANO", "ANGULO", "CIRCULO", "ROMBO", "ESFERA"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_53",
+        title: "Genshin: Inazuma",
+        gridSize: 12,
+        words: ["AYAKA", "YOIMIYA", "ITTO", "KOKOMI", "SAYU", "SARA", "GOROU", "KAZUHA"],
+        rewardCoins: 80
+    },
+    {
+        id: "lvl_54",
+        title: "ZZZ: Agentes",
+        gridSize: 10,
+        words: ["KOLEDA", "ANTON", "BEN", "GRACE", "RIINA", "CORIN"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_55",
+        title: "NieR: Emociones",
+        gridSize: 10,
+        words: ["DOLOR", "CULPA", "ESPERA", "IRA", "CALMA", "VACIO"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_56",
+        title: "Dragon Ball Super",
+        gridSize: 12,
+        words: ["BEERUS", "WHIS", "HIT", "JIREN", "TOPPO", "CABBA", "KALE", "CAULIFLA"],
+        rewardCoins: 80
+    },
+    {
+        id: "lvl_57",
+        title: "FNAF: Pizzaplex",
+        gridSize: 11,
+        words: ["ROXY", "MONTY", "CHICA", "FREDDY", "VANNY", "GREGORY"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_58",
+        title: "Steven: Planeta Madre",
+        gridSize: 11,
+        words: ["BLANCO", "AZUL", "AMARILLO", "ROSA", "DIAMANTE", "CORTE"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_59",
+        title: "Bocchi: Instrumentos",
+        gridSize: 10,
+        words: ["PEDAL", "CABLE", "AMPLI", "MICRO", "CUERDA", "BAQUETA"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_60",
+        title: "Sonic: Aliados",
+        gridSize: 10,
+        words: ["ROUGE", "CREAM", "BIG", "VECTOR", "ESPIO", "CHARMY"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_61",
+        title: "Angry Birds: Poderes",
+        gridSize: 10,
+        words: ["VELOZ", "BOMBA", "DIVIDIR", "PESO", "EMPUJE", "VUELO"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_62",
+        title: "Fisica Particulas",
+        gridSize: 12,
+        words: ["ATOMO", "PROTON", "NEUTRON", "ELECTRON", "QUARK", "FOTON", "BOSON"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_63",
+        title: "Quimica Organica",
+        gridSize: 11,
+        words: ["CARBONO", "GAS", "ENLACE", "ALCOHOL", "ESTER", "AMINA", "ACIDO"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_64",
+        title: "Biologia Celular",
+        gridSize: 12,
+        words: ["ADN", "NUCLEO", "MEMBRANA", "CELULA", "TEJIDO", "ORGANO", "VIDA"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_65",
+        title: "Artistas Renacimiento",
+        gridSize: 12,
+        words: ["LEONARDO", "RAFAEL", "DONATELLO", "MIGUEL", "ANGEL", "TIZIANO"],
+        rewardCoins: 60
+    },
+    {
+        id: "lvl_66",
+        title: "Arqueologia",
+        gridSize: 10,
+        words: ["FOSIL", "TUMBA", "VASO", "HUESO", "RUINA", "MAPA", "PALEO"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_67",
+        title: "Mitologia Egipcia",
+        gridSize: 11,
+        words: ["ANUBIS", "OSIRIS", "HORUS", "ISIS", "RA", "THOT", "SET", "BASTET"],
+        rewardCoins: 80
+    },
+    {
+        id: "lvl_68",
+        title: "Generos Cine",
+        gridSize: 11,
+        words: ["TERROR", "ACCION", "DRAMA", "COMEDIA", "SCIFI", "OESTE", "MUSICAL"],
+        rewardCoins: 70
+    },
+    {
+        id: "lvl_69",
+        title: "Programacion: Web",
+        gridSize: 12,
+        words: ["HTML", "CSS", "REACT", "DOM", "ESTILO", "MARCO", "ENLACE", "WEB", "RED", "NODO", "API", "JSON"],
+        rewardCoins: 100
+    },
+    {
+        id: "lvl_70",
+        title: "Gaming Retro",
+        gridSize: 10,
+        words: ["PACMAN", "TETRIS", "PONG", "ZELDA", "METROID", "DOOM", "QUAKE"],
+        rewardCoins: 70
     }
 ];
 
