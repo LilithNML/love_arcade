@@ -165,15 +165,25 @@ export class PuzzleEngine {
     }
 
     clampPosition(p) {
-        let x = Math.max(0, Math.min(p.currentX, this.logicalWidth - this.pieceWidth));
-        let y = Math.max(0, Math.min(p.currentY, this.logicalHeight - this.pieceHeight));
+    let x = Math.max(0, Math.min(p.currentX, this.logicalWidth - this.pieceWidth));
+    let y = Math.max(0, Math.min(p.currentY, this.logicalHeight - this.pieceHeight));
 
-        if (this.isInRestrictedArea(x + this.pieceWidth/2, y + this.pieceHeight/2)) {
-            y = this.logicalHeight - 170 - this.pieceHeight;
-        }
-        p.currentX = x;
-        p.currentY = y;
+    // 1. Calculamos la distancia de la pieza a su lugar correcto
+    const distToCorrect = Math.hypot(x - p.correctX, y - p.correctY);
+    
+    // 2. Definimos un umbral de "intención de encajar" (por ejemplo, el ancho de una pieza)
+    // Si la pieza está cerca de su destino, permitimos que entre al área restringida.
+    const isTryingToSnap = distToCorrect < this.pieceWidth * 0.8;
+
+    if (!isTryingToSnap && this.isInRestrictedArea(x + this.pieceWidth/2, y + this.pieceHeight/2)) {
+        // Solo aplicar la repulsión si la pieza NO está intentando encajar
+        y = this.logicalHeight - 170 - this.pieceHeight;
     }
+
+    p.currentX = x;
+    p.currentY = y;
+}
+
 
     /* --- RENDER --- */
     render() {
