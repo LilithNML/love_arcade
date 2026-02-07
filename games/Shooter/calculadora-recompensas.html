@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Recompensas - Space Shooter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            color: #ffffff;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(26, 31, 58, 0.9);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        
+        h1 {
+            color: #00d4ff;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #a8b2d1;
+            margin-bottom: 2rem;
+        }
+        
+        .section {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .section-title {
+            color: #00d4ff;
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid rgba(0, 212, 255, 0.3);
+            padding-bottom: 0.5rem;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            color: #a8b2d1;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 0.75rem;
+            color: #ffffff;
+            font-size: 1rem;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #00d4ff;
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.2);
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 1rem;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(0, 212, 255, 0.4);
+        }
+        
+        .result {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(255, 0, 110, 0.2) 100%);
+            border: 2px solid #00d4ff;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .result-title {
+            font-size: 1.5rem;
+            color: #00d4ff;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .result-value {
+            font-size: 3rem;
+            font-weight: 700;
+            color: #00ff88;
+            text-align: center;
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+        }
+        
+        .breakdown {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        
+        .breakdown-item {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+        
+        .breakdown-label {
+            color: #a8b2d1;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .breakdown-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #ffffff;
+        }
+        
+        .preset-buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        
+        .preset-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            color: #ffffff;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .preset-btn:hover {
+            background: rgba(0, 212, 255, 0.2);
+            border-color: #00d4ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Calculadora de Recompensas</h1>
+        <p class="subtitle">Space Shooter - Love Arcade</p>
+        
+        <!-- Presets -->
+        <div class="section">
+            <div class="section-title">Presets Rápidos</div>
+            <div class="preset-buttons">
+                <button class="preset-btn" onclick="loadPreset('casual')">Casual</button>
+                <button class="preset-btn" onclick="loadPreset('balanced')">Balanceado</button>
+                <button class="preset-btn" onclick="loadPreset('generous')">Generoso</button>
+                <button class="preset-btn" onclick="loadPreset('extreme')">Extremo</button>
+            </div>
+        </div>
+        
+        <!-- Configuración de Enemigos -->
+        <div class="section">
+            <div class="section-title">Monedas por Enemigo</div>
+            <div class="grid">
+                <div class="input-group">
+                    <label>Scout (básico)</label>
+                    <input type="number" id="scoutCoins" value="8" min="0">
+                </div>
+                <div class="input-group">
+                    <label>Shooter (medio)</label>
+                    <input type="number" id="shooterCoins" value="20" min="0">
+                </div>
+                <div class="input-group">
+                    <label>Tank (tanque)</label>
+                    <input type="number" id="tankCoins" value="40" min="0">
+                </div>
+                <div class="input-group">
+                    <label>Elite (difícil)</label>
+                    <input type="number" id="eliteCoins" value="80" min="0">
+                </div>
+                <div class="input-group">
+                    <label>Boss (jefe)</label>
+                    <input type="number" id="bossCoins" value="400" min="0">
+                </div>
+            </div>
+        </div>
+        
+        <!-- Configuración de Recompensas -->
+        <div class="section">
+            <div class="section-title">Bonificaciones</div>
+            <div class="grid">
+                <div class="input-group">
+                    <label>Score → Monedas (cada X puntos = 1 moneda)</label>
+                    <input type="number" id="scoreToCoins" value="12" min="1">
+                </div>
+                <div class="input-group">
+                    <label>Bonus por Oleada</label>
+                    <input type="number" id="waveBonus" value="40" min="0">
+                </div>
+            </div>
+        </div>
+        
+        <!-- Hitos -->
+        <div class="section">
+            <div class="section-title">Hitos (suma total de hitos alcanzables)</div>
+            <div class="input-group">
+                <label>Total de monedas en hitos (suma de todos los que puedas alcanzar)</label>
+                <input type="number" id="milestones" value="1480" min="0" placeholder="Ej: 80+200+400+800 = 1480">
+            </div>
+        </div>
+        
+        <!-- Estadísticas de Partida -->
+        <div class="section">
+            <div class="section-title">Tu Partida Típica</div>
+            <div class="grid">
+                <div class="input-group">
+                    <label>Scouts eliminados</label>
+                    <input type="number" id="scoutsKilled" value="60" min="0">
+                </div>
+                <div class="input-group">
+                    <label>Shooters eliminados</label>
+                    <input type="number" id="shootersKilled" value="20" min="0">
+                </div>
+                <div class="input-group">
+                    <label>Tanks eliminados</label>
+                    <input type="number" id="tanksKilled" value="5" min="0">
+                </div>
+                <div class="input-group">
+                    <label>Elites eliminados</label>
+                    <input type="number" id="elitesKilled" value="1" min="0">
+                </div>
+                <div class="input-group">
+                    <label>Bosses eliminados</label>
+                    <input type="number" id="bossesKilled" value="0" min="0">
+                </div>
+                <div class="input-group">
+                    <label>Score Final</label>
+                    <input type="number" id="finalScore" value="8000" min="0">
+                </div>
+                <div class="input-group">
+                    <label>Oleadas Completadas</label>
+                    <input type="number" id="wavesCompleted" value="5" min="0">
+                </div>
+            </div>
+        </div>
+        
+        <button class="btn" onclick="calculate()">Calcular Recompensas</button>
+        
+        <!-- Resultados -->
+        <div class="result" id="result" style="display: none;">
+            <div class="result-title">Total de Monedas</div>
+            <div class="result-value" id="totalCoins">0</div>
+            
+            <div class="breakdown">
+                <div class="breakdown-item">
+                    <div class="breakdown-label">Scouts</div>
+                    <div class="breakdown-value" id="scoutTotal">0</div>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-label">Shooters</div>
+                    <div class="breakdown-value" id="shooterTotal">0</div>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-label">Tanks</div>
+                    <div class="breakdown-value" id="tankTotal">0</div>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-label">Elites</div>
+                    <div class="breakdown-value" id="eliteTotal">0</div>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-label">Bosses</div>
+                    <div class="breakdown-value" id="bossTotal">0</div>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-label">Score</div>
+                    <div class="breakdown-value" id="scoreTotal">0</div>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-label">Oleadas</div>
+                    <div class="breakdown-value" id="waveTotal">0</div>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-label">Hitos</div>
+                    <div class="breakdown-value" id="milestoneTotal">0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const presets = {
+            casual: {
+                scoutCoins: 1, shooterCoins: 3, tankCoins: 8, eliteCoins: 15, bossCoins: 75,
+                scoreToCoins: 100, waveBonus: 5, milestones: 185
+            },
+            balanced: {
+                scoutCoins: 3, shooterCoins: 8, tankCoins: 15, eliteCoins: 30, bossCoins: 150,
+                scoreToCoins: 50, waveBonus: 15, milestones: 500
+            },
+            generous: {
+                scoutCoins: 8, shooterCoins: 20, tankCoins: 40, eliteCoins: 80, bossCoins: 400,
+                scoreToCoins: 12, waveBonus: 40, milestones: 1480
+            },
+            extreme: {
+                scoutCoins: 15, shooterCoins: 40, tankCoins: 80, eliteCoins: 150, bossCoins: 800,
+                scoreToCoins: 5, waveBonus: 100, milestones: 5200
+            }
+        };
+        
+        function loadPreset(name) {
+            const preset = presets[name];
+            document.getElementById('scoutCoins').value = preset.scoutCoins;
+            document.getElementById('shooterCoins').value = preset.shooterCoins;
+            document.getElementById('tankCoins').value = preset.tankCoins;
+            document.getElementById('eliteCoins').value = preset.eliteCoins;
+            document.getElementById('bossCoins').value = preset.bossCoins;
+            document.getElementById('scoreToCoins').value = preset.scoreToCoins;
+            document.getElementById('waveBonus').value = preset.waveBonus;
+            document.getElementById('milestones').value = preset.milestones;
+            
+            calculate();
+        }
+        
+        function calculate() {
+            // Get config values
+            const scoutCoins = parseInt(document.getElementById('scoutCoins').value) || 0;
+            const shooterCoins = parseInt(document.getElementById('shooterCoins').value) || 0;
+            const tankCoins = parseInt(document.getElementById('tankCoins').value) || 0;
+            const eliteCoins = parseInt(document.getElementById('eliteCoins').value) || 0;
+            const bossCoins = parseInt(document.getElementById('bossCoins').value) || 0;
+            const scoreToCoins = parseInt(document.getElementById('scoreToCoins').value) || 1;
+            const waveBonus = parseInt(document.getElementById('waveBonus').value) || 0;
+            const milestones = parseInt(document.getElementById('milestones').value) || 0;
+            
+            // Get game stats
+            const scoutsKilled = parseInt(document.getElementById('scoutsKilled').value) || 0;
+            const shootersKilled = parseInt(document.getElementById('shootersKilled').value) || 0;
+            const tanksKilled = parseInt(document.getElementById('tanksKilled').value) || 0;
+            const elitesKilled = parseInt(document.getElementById('elitesKilled').value) || 0;
+            const bossesKilled = parseInt(document.getElementById('bossesKilled').value) || 0;
+            const finalScore = parseInt(document.getElementById('finalScore').value) || 0;
+            const wavesCompleted = parseInt(document.getElementById('wavesCompleted').value) || 0;
+            
+            // Calculate
+            const scoutTotal = scoutsKilled * scoutCoins;
+            const shooterTotal = shootersKilled * shooterCoins;
+            const tankTotal = tanksKilled * tankCoins;
+            const eliteTotal = elitesKilled * eliteCoins;
+            const bossTotal = bossesKilled * bossCoins;
+            const scoreTotal = Math.floor(finalScore / scoreToCoins);
+            const waveTotal = wavesCompleted * waveBonus;
+            const milestoneTotal = milestones;
+            
+            const total = scoutTotal + shooterTotal + tankTotal + eliteTotal + bossTotal + scoreTotal + waveTotal + milestoneTotal;
+            
+            // Display
+            document.getElementById('scoutTotal').textContent = scoutTotal.toLocaleString();
+            document.getElementById('shooterTotal').textContent = shooterTotal.toLocaleString();
+            document.getElementById('tankTotal').textContent = tankTotal.toLocaleString();
+            document.getElementById('eliteTotal').textContent = eliteTotal.toLocaleString();
+            document.getElementById('bossTotal').textContent = bossTotal.toLocaleString();
+            document.getElementById('scoreTotal').textContent = scoreTotal.toLocaleString();
+            document.getElementById('waveTotal').textContent = waveTotal.toLocaleString();
+            document.getElementById('milestoneTotal').textContent = milestoneTotal.toLocaleString();
+            document.getElementById('totalCoins').textContent = total.toLocaleString();
+            
+            document.getElementById('result').style.display = 'block';
+        }
+        
+        // Calculate on page load
+        window.onload = () => calculate();
+    </script>
+</body>
+</html>
