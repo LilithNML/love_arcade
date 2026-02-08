@@ -11,18 +11,6 @@ const CONFIG = {
 // Formato: 'CODIGO': Cantidad_Monedas
 const PROMO_CODES = {
     'AMOR2024': 60,
-    'TEAMO': 45,
-    'YEKATERINA': 50,
-    'LUNA100': 100,
-    'BOCCHI': 1300,
-    'ALBONDIGA': 400,
-    'RAIDEN': 1200,
-    'FIX': 100,
-    'TAO250': 250,
-    'UIKA250': 250,
-    'SHADOW777': 777,
-    'ANIMULA CHORAGI': 500,
-    'SOL INVICTUS': 500,
     'PAPILIO CHARONTIS': 500,
     'IMPERATRIX UMBROSA': 500,
     'EKATERINI': 500,
@@ -48,7 +36,9 @@ const PROMO_CODES = {
     'XI50': 50,
     'LADEHI50': 50,
     'HIGO50': 50,
-    'KAWA50': 50
+    'KAWA50': 50,
+    'SACAME': 60,
+    'SAMUEL1000': 1000
 };
 
 const defaultState = {
