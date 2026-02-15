@@ -10,11 +10,6 @@ const CONFIG = {
 // --- LISTA DE CÓDIGOS SECRETOS ---
 // Formato: 'CODIGO': Cantidad_Monedas
 const PROMO_CODES = {
-    'AMOR2024': 60,
-    'PAPILIO CHARONTIS': 500,
-    'IMPERATRIX UMBROSA': 500,
-    'EKATERINI': 500,
-    'KATHAROS': 500,
     'GOUL50': 50,
     'AMRO50': 50,
     'GOVE50': 50,
@@ -38,7 +33,9 @@ const PROMO_CODES = {
     'HIGO50': 50,
     'KAWA50': 50,
     'SACAME': 60,
-    'SAMUEL1000': 1000
+    'SAMUEL1000': 1000,
+    'FEB14': 500,
+    'SOFYEK300': 300
 };
 
 const defaultState = {
