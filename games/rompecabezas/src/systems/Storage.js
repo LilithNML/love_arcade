@@ -82,5 +82,47 @@ export const Storage = {
     isUnlocked: (levelId) => {
         const unlocked = Storage.get('unlocked', ['lvl_1']);
         return unlocked.includes(levelId);
+    },
+
+    /**
+     * NUEVA FUNCIÓN: Valida que todos los niveles que deberían estar desbloqueados lo estén.
+     * Esto soluciona el problema cuando se agregan nuevos niveles después de que el usuario
+     * ya completó todos los niveles anteriores.
+     * 
+     * @param {Array} allLevels - Array completo de niveles del juego (de levels.json)
+     */
+    validateUnlockedLevels: (allLevels) => {
+        if (!allLevels || allLevels.length === 0) return;
+
+        const progress = Storage.get('progress', {});
+        const currentlyUnlocked = Storage.get('unlocked', ['lvl_1']);
+        let needsUpdate = false;
+
+        // Recorrer todos los niveles en orden
+        for (let i = 0; i < allLevels.length; i++) {
+            const currentLevel = allLevels[i];
+            const currentLevelId = currentLevel.id;
+            
+            // Si este nivel tiene estrellas (fue completado)
+            if (progress[currentLevelId] && progress[currentLevelId] > 0) {
+                // El siguiente nivel debería estar desbloqueado
+                if (i + 1 < allLevels.length) {
+                    const nextLevelId = allLevels[i + 1].id;
+                    
+                    // Si el siguiente nivel NO está en la lista de desbloqueados
+                    if (!currentlyUnlocked.includes(nextLevelId)) {
+                        console.log(`[Storage] Desbloqueando nivel ${nextLevelId} (siguiente a ${currentLevelId} completado)`);
+                        currentlyUnlocked.push(nextLevelId);
+                        needsUpdate = true;
+                    }
+                }
+            }
+        }
+
+        // Guardar cambios si hubo actualizaciones
+        if (needsUpdate) {
+            Storage.set('unlocked', currentlyUnlocked);
+            console.log('[Storage] Validación de niveles completada. Niveles desbloqueados actualizados.');
+        }
     }
 };
