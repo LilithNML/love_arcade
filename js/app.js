@@ -35,7 +35,8 @@ const PROMO_CODES = {
     'SACAME': 60,
     'SAMUEL1000': 1000,
     'FEB14': 500,
-    'SOFYEK300': 300
+    'SOFYEK300': 300, 
+    'ERRORRC': 200
 };
 
 const defaultState = {
