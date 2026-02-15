@@ -4,6 +4,7 @@
  * Orquesta la lógica entre el Motor (PuzzleEngine), UI, Almacenamiento y Economía.
  * Actualizado Fase 2: Lógica de Estrellas, Recompensas Dinámicas y PWA.
  * Actualizado Fase 3: Haptic Feedback.
+ * Actualizado: Fix para niveles nuevos agregados después de completar niveles anteriores.
  */
 
 import { LevelManager } from './core/LevelManager.js';
@@ -28,6 +29,12 @@ async function init() {
     
     // Cargar configuración de niveles (JSON)
     await levelManager.loadLevels();
+    
+    // --- FIX CRÍTICO: Validar niveles desbloqueados ---
+    // Esto soluciona el problema cuando se agregan nuevos niveles después
+    // de que el usuario ya completó niveles anteriores.
+    // La función revisa todos los niveles completados y desbloquea sus siguientes niveles.
+    Storage.validateUnlockedLevels(levelManager.levels);
     
     // Configurar listeners de botones
     setupNavigation();
