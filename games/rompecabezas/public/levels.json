@@ -5,7 +5,7 @@
     "thumbnail": "./assets/thumbnails/Nivel1_thumb.webp",
     "pieces": 16,
     "rewardCoins": 100,
-    "description": "Introducción básica",
+    "description": "Introducción",
     "timeLimit": 250
   },
   {
