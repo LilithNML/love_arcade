@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d2b1a">
+    <title>Jungle Dash</title>
+    <style>
+        /* ── Reset y base ──────────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #050d07;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* ── Contenedor principal ──────────────────────────────────────────── */
+        /* Sin box-shadow ni border: en fullscreen generan gaps blancos y
+           consumen GPU de forma innecesaria.                                  */
+        #jd-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ── Canvas (posicionado absolutamente por JD_Renderer) ────────────── */
+        #JD_canvas {
+            position: absolute;
+            display: block;
+            cursor: pointer;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        /* ── HUD flotante ──────────────────────────────────────────────────── */
+        #jd-hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1vh 1.5vw;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.72), transparent);
+            pointer-events: none; /* El HUD no bloquea el canvas */
+        }
+
+        /* Todos los hijos del HUD recuperan eventos de puntero */
+        #jd-hud > * { pointer-events: all; }
+
+        /* ── Botón de retorno ──────────────────────────────────────────────── */
+        #jd-back-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5vw;
+            color: rgba(255,255,255,0.85);
+            text-decoration: none;
+            font-size: clamp(11px, 1.2vw, 14px);
+            font-weight: 600;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            padding: 0.6vh 1vw;
+            transition: background 0.2s;
+        }
+        #jd-back-btn:hover,
+        #jd-back-btn:active { background: rgba(40,40,40,0.7); }
+        #jd-back-btn svg { flex-shrink: 0; }
+
+        /* ── Info de sesión (puntos) ───────────────────────────────────────── */
+        #jd-session-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5vw;
+            color: rgba(255,255,255,0.88);
+            font-size: clamp(11px, 1.2vw, 14px);
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            padding: 0.6vh 1vw;
+        }
+        #jd-session-info svg { flex-shrink: 0; }
+        #jd-pts-label { font-weight: 600; font-size: clamp(10px, 1vw, 12px); opacity: 0.7; }
+        #jd-score-display { font-weight: 700; font-size: clamp(11px, 1.2vw, 14px); color: #ffd700; letter-spacing: 1px; }
+
+        /* ── HUD inferior: récord (solo visible en PLAYING) ────────────────── */
+        #jd-hud-bottom {
+            position: fixed;
+            bottom: 1.5vh;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            gap: 2vw;
+            pointer-events: none;
+        }
+        .jd-badge {
+            background: rgba(0,0,0,0.45);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 8px;
+            padding: 0.5vh 1.5vw;
+            color: rgba(255,255,255,0.72);
+            font-size: clamp(10px, 1.1vw, 13px);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .jd-badge span {
+            color: #ffd700;
+            margin-left: 4px;
+        }
+
+        /* ── Botón de mute (solo visible en pantallas START y GAMEOVER) ─────── */
+        /* Se separa del HUD superior para evitar activaciones accidentales
+           con los pulgares durante el juego.                                   */
+        #jd-mute-container {
+            position: fixed;
+            bottom: 4vh;
+            right: 2vw;
+            z-index: 200;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        #jd-mute-container.jd-hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        #jd-mute-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            padding: 0.6vh 0.8vw;
+            cursor: pointer;
+            color: rgba(255,255,255,0.85);
+            transition: background 0.2s;
+            width: clamp(32px, 3.5vw, 44px);
+            height: clamp(32px, 3.5vw, 44px);
+        }
+        #jd-mute-btn:hover,
+        #jd-mute-btn:active { background: rgba(40,40,40,0.75); }
+        .jd-sound-off { display: none; color: rgba(255,100,100,0.85); }
+
+        /* ── Overlay "Gira tu dispositivo" ─────────────────────────────────── */
+        /* Oculto por defecto. JD_Core lo activa mediante JS solo cuando
+           orientation.lock falla y el dispositivo sigue en portrait.
+           Sin @media portrait: la pantalla START permanece visible en cualquier
+           orientación antes de la primera interacción, permitiendo que el
+           primer toque desbloquee Fullscreen API y orientation.lock. */
+        #jd-rotate-overlay {
+            display: none;              /* activado exclusivamente por JS */
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: #050d07;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            color: rgba(255,255,255,0.85);
+            text-align: center;
+            padding: 24px;
+        }
+        #jd-rotate-overlay svg {
+            animation: jd-rotate-icon 2s ease-in-out infinite;
+            opacity: 0.75;
+        }
+        @keyframes jd-rotate-icon {
+            0%, 100% { transform: rotate(-15deg); }
+            50%       { transform: rotate(15deg);  }
+        }
+        #jd-rotate-overlay p {
+            font-size: clamp(16px, 4vw, 22px);
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        #jd-rotate-overlay small {
+            font-size: clamp(12px, 2.5vw, 15px);
+            opacity: 0.55;
+        }
+
+        /* ── Scrollbar oculta ──────────────────────────────────────────────── */
+        ::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body>
+
+<!-- ── Overlay de orientación portrait ──────────────────────────────────── -->
+<!-- Activado por JS (glue script v2.0.0) solo si orientation.lock falla y el
+     dispositivo sigue en portrait. No se activa por CSS (@media). -->
+<div id="jd-rotate-overlay" aria-live="polite" role="alert">
+    <svg width="64" height="64" viewBox="0 0 24 24" fill="none"
+         stroke="rgba(255,255,255,0.75)" stroke-width="1.5"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="4" y="2" width="16" height="20" rx="2" ry="2"/>
+        <line x1="12" y1="18" x2="12.01" y2="18"/>
+        <path d="M8 2h8"/>
+        <!-- flecha indicando rotación -->
+        <path d="M17 9l3 3-3 3" stroke="rgba(255,200,0,0.85)" stroke-width="2"/>
+        <path d="M20 12H10" stroke="rgba(255,200,0,0.85)" stroke-width="2"/>
+    </svg>
+    <p>Gira tu dispositivo</p>
+    <small>Jungle Dash requiere orientación horizontal</small>
+</div>
+
+<!-- ── Contenedor del juego ──────────────────────────────────────────────── -->
+<div id="jd-container">
+    <canvas id="JD_canvas" role="img" aria-label="Jungle Dash — juego de carrera infinita"></canvas>
+</div>
+
+<!-- ── HUD superior ─────────────────────────────────────────────────────── -->
+<!-- El botón de mute se ha retirado de aquí para evitar pulsaciones
+     accidentales durante el juego. Ahora reside en #jd-mute-container.      -->
+<header id="jd-hud" role="toolbar" aria-label="Controles del juego">
+
+    <!-- Botón de retorno al hub — ruta obligatoria: ../../index.html -->
+    <a id="jd-back-btn" href="../../index.html" aria-label="Volver a Love Arcade">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+            <path d="M11 17.2l-6.3-6.3c-.4-.4-.4-1 0-1.4L11 3.2M7 10.1h13"/>
+        </svg>
+        Love Arcade
+    </a>
+
+    <!-- Info de sesión: puntuación actual -->
+    <div id="jd-session-info" role="status" aria-live="polite" aria-atomic="true"
+         aria-label="Puntuación actual">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span id="jd-pts-label">PUNTOS</span>
+        <span id="jd-score-display">000000</span>
+    </div>
+
+</header>
+
+<!-- ── HUD inferior: récord ──────────────────────────────────────────────── -->
+<div id="jd-hud-bottom" role="status" aria-label="Récord personal">
+    <div class="jd-badge" id="jd-record-badge">
+        RÉCORD <span id="jd-highscore-display">000000</span>
+    </div>
+</div>
+
+<!-- ── Botón de mute (pantallas START / GAMEOVER únicamente) ─────────────── -->
+<!-- Desacoplado del HUD superior. JD_Core.js gestiona su visibilidad. -->
+<div id="jd-mute-container" aria-label="Control de audio">
+    <button id="jd-mute-btn" type="button" aria-label="Activar/desactivar audio">
+        <!-- Ícono sonido activo -->
+        <svg class="jd-sound-on" width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+        </svg>
+        <!-- Ícono mute -->
+        <svg class="jd-sound-off" width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <line x1="23" y1="9" x2="17" y2="15"/>
+            <line x1="17" y1="9" x2="23" y2="15"/>
+        </svg>
+    </button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Scripts — orden de carga: dependencias primero, núcleo al final.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script src="js/JD_Audio.js"></script>
+<script src="js/JD_Physics.js"></script>
+<script src="js/JD_Entities.js"></script>
+<script src="js/JD_Renderer.js"></script>
+<script src="js/JD_Core.js"></script>
+
+<!-- Glue: Fullscreen/Orientación + sincronización del HUD HTML ────────────
+     v2.1.0 — Corrección de causa raíz: touchstart.preventDefault() suprime click.
+
+     PROBLEMA RESUELTO (v2.1.0):
+     El canvas tiene un listener 'touchstart' con e.preventDefault() y
+     passive:false (necesario para evitar el scroll durante el juego). En Android
+     Chrome/Samsung Internet, preventDefault() en touchstart CANCELA la generación
+     del evento 'click' sintético. Por eso el trigger registrado solo en 'click'
+     nunca disparaba cuando el tap caía sobre JD_canvas — el click nunca se generaba.
+
+     SOLUCIÓN — DOS RUTAS PARA EL MISMO TRIGGER:
+
+     RUTA TÁCTIL · touchend (capture: true, passive: true)
+       → Se genera SIEMPRE aunque touchstart haya llamado a preventDefault().
+       → Ruta principal para Android. Filtra swipes por drift (≤ 10 px).
+       → startGame() puede haber sido llamado ya por _onActionStart(); el guard
+         (state === 'START') evita duplicados.
+
+     RUTA CLICK · click (capture: true)
+       → Respaldo para desktop y Safari iOS.
+       → stopPropagation evita que JD_Core reciba este primer click.
+
+     Ambas rutas comparten JD_doImmersion() y se auto-eliminan mutuamente.
+     orientation.lock se encadena dentro del .then() de requestFullscreen.      -->
+<script>
+(function () {
+    'use strict';
+
+    const JD_container     = document.getElementById('jd-container');
+    const JD_canvas        = document.getElementById('JD_canvas');
+    const JD_overlay       = document.getElementById('jd-rotate-overlay');
+    const JD_hsDisplay     = document.getElementById('jd-highscore-display');
+    const JD_scoreDisplay  = document.getElementById('jd-score-display');
+    const JD_muteContainer = document.getElementById('jd-mute-container');
+
+    // ── FASE 1: pointerdown → desbloquear AudioContext ───────────────────────
+    // Se registra en captura para máxima prioridad, pero con passive:true para
+    // no penalizar el rendimiento de scroll en la pantalla START.
+    // No se llama a requestFullscreen aquí: pointerdown puede ser el inicio de
+    // un swipe, y Android revoca el token de FS API si el gesto resulta ser un
+    // movimiento. Solo se invoca JD_Audio.init(), que es liviano (crea el
+    // AudioContext en estado 'suspended' sin emitir sonido).
+    const JD_audioUnlocker = () => {
+        if (typeof JD_Audio !== 'undefined') JD_Audio.init();
+        window.removeEventListener('pointerdown', JD_audioUnlocker, { capture: true });
+        window.removeEventListener('touchstart',  JD_audioUnlocker, { capture: true });
+    };
+    window.addEventListener('pointerdown', JD_audioUnlocker, { capture: true, passive: true });
+    // touchstart como respaldo para navegadores que no soporten Pointer Events
+    window.addEventListener('touchstart',  JD_audioUnlocker, { capture: true, passive: true });
+
+    // ── FASE 2: inmersión completa ────────────────────────────────────────────
+    // PROBLEMA RAÍZ (Android): el listener 'touchstart' del canvas en JD_Core.js
+    // llama a e.preventDefault() con passive:false. Esto cancela la generación
+    // del evento 'click' sintético en Android Chrome/Samsung Internet. Por eso
+    // el trigger registrado solo en 'click' nunca disparaba cuando el tap caía
+    // sobre JD_canvas — el click nunca se generaba.
+    //
+    // SOLUCIÓN — DOS RUTAS PARA EL MISMO TRIGGER:
+    //   · 'touchend' (capture): se genera SIEMPRE aunque touchstart haya llamado
+    //     a preventDefault(). Es la ruta principal para dispositivos táctiles.
+    //     Se filtra por drift (≤ JD_TAP_DRIFT px) para ignorar swipes.
+    //   · 'click'    (capture): ruta de respaldo para desktop y navegadores que
+    //     no suprimen click tras preventDefault en touchstart (Safari iOS).
+    //
+    // Ambos listeners se auto-eliminan mutuamente al primer disparo válido.
+    // orientation.lock se encadena dentro del .then() de requestFullscreen:
+    // Android rechaza el lock si el SO no ha concedido aún fullscreen.
+
+    const JD_TAP_DRIFT   = 10; // px máximos de desplazamiento para considerar tap
+    let   JD_touchStartX = 0;
+    let   JD_touchStartY = 0;
+
+    const JD_removeTriggers = () => {
+        window.removeEventListener('touchstart', JD_trackTouchStart, { capture: true });
+        window.removeEventListener('touchend',   JD_touchTrigger,   { capture: true });
+        window.removeEventListener('click',      JD_clickTrigger,   { capture: true });
+    };
+
+    // Registra la posición inicial del toque para calcular drift en touchend
+    const JD_trackTouchStart = (e) => {
+        if (e.touches && e.touches.length > 0) {
+            JD_touchStartX = e.touches[0].clientX;
+            JD_touchStartY = e.touches[0].clientY;
+        }
+    };
+
+    // Lógica común de inmersión, invocada desde cualquiera de las dos rutas
+    const JD_doImmersion = (fsTarget) => {
+        JD_removeTriggers();
+
+        // Ocultar overlay de rotación si estuviera visible
+        if (JD_overlay) JD_overlay.style.display = 'none';
+
+        // Arrancar la partida si aún estamos en pantalla START.
+        // Para la ruta touchend JD_Core ya habrá llamado a startGame() vía
+        // _onActionStart(); este guard evita una llamada duplicada.
+        if (typeof JD_Core !== 'undefined' && JD_Core.state === 'START') {
+            JD_Core.startGame();
+        }
+
+        // requestFullscreen sobre el elemento que recibió la interacción.
+        // Se llama DESPUÉS de startGame() para no retrasar el inicio del juego.
+        const JD_fsReq = fsTarget && (
+            fsTarget.requestFullscreen       ||
+            fsTarget.webkitRequestFullscreen ||
+            fsTarget.mozRequestFullScreen    ||
+            fsTarget.msRequestFullscreen
+        );
+
+        if (JD_fsReq) {
+            JD_fsReq.call(fsTarget)
+                .then(() => {
+                    // DENTRO del .then(): el SO ya concedió fullscreen.
+                    // orientation.lock() solo tiene éxito en este contexto.
+                    if (screen.orientation && typeof screen.orientation.lock === 'function') {
+                        return screen.orientation.lock('landscape');
+                    }
+                })
+                .catch(() => {
+                    // Fullscreen denegado (iframe sin allow="fullscreen", política
+                    // de usuario, etc.). El juego continúa en modo ventana.
+                });
+        }
+    };
+
+    // Ruta táctil: touchend (funciona aunque touchstart haya llamado preventDefault)
+    const JD_touchTrigger = (e) => {
+        // Filtrar swipes: solo disparar si el dedo no se movió más de JD_TAP_DRIFT px
+        if (e.changedTouches && e.changedTouches.length > 0) {
+            const dx = Math.abs(e.changedTouches[0].clientX - JD_touchStartX);
+            const dy = Math.abs(e.changedTouches[0].clientY - JD_touchStartY);
+            if (dx > JD_TAP_DRIFT || dy > JD_TAP_DRIFT) return; // swipe, ignorar
+        }
+        // Determinar el elemento tocado para pasarlo a requestFullscreen
+        const JD_touched = e.target;
+        const JD_fsTarget = (JD_touched === JD_canvas || JD_touched === JD_container)
+            ? JD_touched
+            : JD_container;
+        JD_doImmersion(JD_fsTarget);
+    };
+
+    // Ruta click: respaldo para desktop y Safari iOS
+    const JD_clickTrigger = (e) => {
+        e.stopPropagation(); // Evitar que JD_Core reciba este primer click
+        const JD_fsTarget = (e.target === JD_canvas || e.target === JD_container)
+            ? e.target
+            : JD_container;
+        JD_doImmersion(JD_fsTarget);
+    };
+
+    window.addEventListener('touchstart', JD_trackTouchStart, { capture: true, passive: true });
+    window.addEventListener('touchend',   JD_touchTrigger,   { capture: true, passive: true });
+    window.addEventListener('click',      JD_clickTrigger,   { capture: true });
+
+    // ── Respaldo fullscreenchange: reintento de orientation.lock ─────────────
+    // Samsung Internet y algunos WebViews de Android disparan fullscreenchange
+    // de forma diferida (hasta 600 ms después de que requestFullscreen resuelva).
+    // Este listener captura esa señal tardía y reintenta el lock de orientación.
+    // Es idempotente: si el lock ya está activo, la llamada es un no-op.
+    const JD_onFSChange = () => {
+        const JD_inFS = document.fullscreenElement || document.webkitFullscreenElement;
+        if (JD_inFS && screen.orientation && typeof screen.orientation.lock === 'function') {
+            screen.orientation.lock('landscape').catch(() => {});
+        }
+    };
+    document.addEventListener('fullscreenchange',       JD_onFSChange);
+    document.addEventListener('webkitfullscreenchange', JD_onFSChange);
+
+    // ── Listener resize: ocultar overlay de rotación ─────────────────────────
+    // Cuando el usuario gira el dispositivo manualmente (iOS/Safari no soporta
+    // orientation.lock), el overlay desaparece sin requerir un nuevo toque.
+    window.addEventListener('resize', () => {
+        if (JD_overlay && window.innerWidth >= window.innerHeight) {
+            JD_overlay.style.display = 'none';
+        }
+    });
+
+    // ── Ticker de UI: score, récord y visibilidad del mute (~10 fps) ─────────
+    setInterval(() => {
+        // Puntuación en tiempo real (PLAYING / GAMEOVER)
+        if (JD_scoreDisplay && typeof JD_Core !== 'undefined') {
+            const JD_s = (JD_Core.state === 'PLAYING' || JD_Core.state === 'GAMEOVER')
+                ? Math.floor(JD_Core.score)
+                : 0;
+            JD_scoreDisplay.textContent = JD_s.toString().padStart(6, '0');
+        }
+
+        // Récord personal en el badge inferior
+        if (JD_hsDisplay) {
+            const JD_hs = parseInt(localStorage.getItem('JD_highscore') || '0', 10);
+            JD_hsDisplay.textContent = JD_hs.toString().padStart(6, '0');
+        }
+
+        // Botón de mute: oculto durante PLAYING para evitar toques accidentales
+        if (JD_muteContainer && typeof JD_Core !== 'undefined') {
+            JD_muteContainer.classList.toggle('jd-hidden', JD_Core.state === 'PLAYING');
+        }
+
+    }, 100);
+
+})();
+</script>
+
+<!-- Motor central de Love Arcade — DEBE ir al final del body ────────────── -->
+<script src="../../js/app.js"></script>
+
+</body>
+</html>

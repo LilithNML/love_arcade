@@ -1,0 +1,2957 @@
+/* ================================================================
+   LOVE ARCADE — Design System v3.1 "Arcade Solid"
+   Aesthetic: Solid Premium / Tactical Arcade Hardware
+   Typography: Exo 2 (display/numbers) + DM Sans (body)
+   Ratio: 90% Solid / 10% Glass (toasts, modals, coin badge only)
+   v3.1: Corner accents removed. View transitions anti-golpe added.
+         GPU-only animations: opacity + transform exclusively.
+   ================================================================ */
+
+/* ── Google Fonts: display=swap ya está incluido en la URL para reducir FOIT ── */
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+/*
+ * Fuentes de sistema con métricas ajustadas para reducir el "salto" visible
+ * mientras Google Fonts carga (técnica "size-adjust fallback").
+ * size-adjust escala la fuente de sistema al mismo tamaño óptico que Exo 2/DM Sans,
+ * minimizando el reflow entre la fuente fallback y la web font final.
+ */
+@font-face {
+    font-family: 'Exo 2';
+    src: local('Arial');
+    font-style: normal;
+    font-weight: 400 900;
+    size-adjust: 104%;
+    ascent-override: 90%;
+    descent-override: 22%;
+    line-gap-override: 0%;
+}
+@font-face {
+    font-family: 'DM Sans';
+    src: local('Arial');
+    font-style: normal;
+    font-weight: 400 700;
+    size-adjust: 100%;
+    ascent-override: 92%;
+    descent-override: 24%;
+    line-gap-override: 0%;
+}
+
+/* ── Prevent text autosizing & horizontal overflow ── */
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+/* ================================================================
+   DESIGN TOKENS
+   ================================================================ */
+:root {
+    /* ── Backgrounds ── */
+    --bg-main:       #07070d;
+    --bg-surface:    #0f1018;
+    --bg-elevated:   #161924;
+    --bg-overlay:    rgba(7, 7, 13, 0.95);
+
+    /* ── Solid Surface System (Arcade Solid 3.0) ── */
+    /* Base: subtle panels — solid dark */
+    --solid-surface-base:    #0f1018;
+    --solid-surface-float:   #141620;
+    --solid-surface-hi:      #1a1d2e;
+    --solid-surface-deep:    #0a0b12;
+
+    /* Hard-Edge borders — replaces glass borders */
+    --border-subtle:   rgba(255, 255, 255, 0.06);
+    --border-mid:      rgba(255, 255, 255, 0.1);
+    --border-bright:   rgba(255, 255, 255, 0.18);
+
+    /* ── Legacy aliases kept for backward-compat with JS that may read them ── */
+    --glass-base-bg:      #0f1018;
+    --glass-base-border:  rgba(255, 255, 255, 0.06);
+    --glass-base-blur:    none;
+    --glass-float-bg:     #141620;
+    --glass-float-border: rgba(255, 255, 255, 0.1);
+    --glass-float-blur:   none;
+    --glass-hi-bg:        #1a1d2e;
+    --glass-hi-border:    rgba(255, 255, 255, 0.18);
+    --glass-hi-blur:      none;
+
+    /* ── Accent (overridden by applyTheme) ── */
+    --accent:       #9b59ff;
+    --accent-dim:   rgba(155, 89, 255, 0.55);
+    --accent-glow:  rgba(155, 89, 255, 0.35);
+    --accent-soft:  rgba(155, 89, 255, 0.12);
+    --accent-border: rgba(155, 89, 255, 0.35);
+
+    /* ── Text Scale ── */
+    --text-high: #f0f0f8;
+    --text-med:  #b4b4c8;
+    --text-low:  #6a6a82;
+    --text-mute: #3d3d52;
+
+    /* ── Semantic ── */
+    --success:        #22d07a;
+    --success-glow:   rgba(34, 208, 122, 0.3);
+    --success-soft:   rgba(34, 208, 122, 0.1);
+    --error:          #ff4266;
+    --error-soft:     rgba(255, 66, 102, 0.1);
+    --gold:           #fbbf24;
+    --gold-glow:      rgba(251, 191, 36, 0.3);
+    --gold-soft:      rgba(251, 191, 36, 0.1);
+    --moon:           #c084fc;
+    --moon-soft:      rgba(192, 132, 252, 0.12);
+
+    /* ── Layout ── */
+    --radius-xs:  6px;
+    --radius-sm:  10px;
+    --radius-md:  14px;
+    --radius-lg:  20px;
+    --radius-xl:  28px;
+    --nav-height: 68px;
+    --bottom-nav-height: 62px;
+
+    /* ── Typography ── */
+    --font-display: 'Exo 2', Arial, system-ui, sans-serif;
+    --font-body:    'DM Sans', Arial, system-ui, sans-serif;
+    --font-mono:    'JetBrains Mono', 'Courier New', monospace;
+
+    /* ── Shadows ── */
+    --shadow-sm:  0 2px 12px rgba(0,0,0,0.4);
+    --shadow-md:  0 8px 30px rgba(0,0,0,0.5);
+    --shadow-lg:  0 16px 50px rgba(0,0,0,0.65);
+    --shadow-glow: 0 0 20px var(--accent-glow);
+}
+
+/* ── WCAG AA contrast fixes for bright themes ── */
+[data-theme="pink"],
+[data-theme="cyan"] {
+    --text-med: #d0d0e0;
+    --text-low: #9898b0;
+}
+[data-theme="gold"] {
+    --text-med: #cacacc;
+    --text-low: #8888a0;
+}
+
+/* ================================================================
+   RESET & BASE
+   ================================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background-color: var(--bg-main);
+    background-image:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(155, 89, 255, 0.06), transparent),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(0, 100, 200, 0.04), transparent);
+    color: var(--text-high);
+    font-family: var(--font-body);
+    font-size: 16px;
+    min-height: 100vh;
+    width: 100%;
+    max-width: 100vw;
+    position: relative;
+    padding-top: var(--nav-height);
+    padding-bottom: var(--bottom-nav-height);
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+a { text-decoration: none; color: inherit; }
+ul { list-style: none; }
+.hidden { display: none !important; }
+button { font-family: var(--font-body); }
+
+/* ================================================================
+   VIEW TRANSITIONS — Anti-Golpe (v10.1)
+   GPU-only: opacity + translateY. No height/width/margin animations.
+   Regla de los 300ms: duración máx 0.25s para que la app se sienta
+   reactiva. contain:paint limita el área de repaint al propio nodo.
+   El scroll reset se ejecuta ANTES de que empiece la transición
+   de entrada (ver spa-router.js _applyView).
+
+   NOTA will-change: se declara aquí de forma permanente porque las
+   dos vistas SPA (home y shop) están SIEMPRE presentes en el DOM.
+   Promover ambas capas desde el inicio evita el coste de cálculo del
+   compositor justo en el momento de la transición, donde cualquier
+   jank es más perceptible. El coste de memoria (2 capas, sin texturas
+   de imagen) es despreciable y justificado por la suavidad obtenida.
+   ================================================================ */
+.view-section {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+    will-change: opacity, transform;
+    contain: paint;
+}
+.view-section:not(.hidden) {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Fine scanline texture overlay for depth — desktop only.
+ * This fixed pseudo-element forces an additional GPU compositor layer.
+ * Disabled on touch devices (pointer:coarse) where the effect is barely
+ * perceptible but the compositor overhead is measurable on <2 GB RAM devices. */
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.03) 2px,
+        rgba(0, 0, 0, 0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+@media (pointer: coarse) {
+    /* Disable scanline overlay on mobile/touch hardware to eliminate
+       the permanent fixed compositor layer it creates. */
+    body::before { display: none; }
+}
+
+/* ================================================================
+   SOLID SURFACE ELEVATION SYSTEM (Arcade Solid 3.0)
+   90% solid / 10% glass — backdrop-filter banned from panel classes.
+   Depth is achieved through hard-edge borders & layered box-shadows,
+   not transparency and blur. GPU overdraw eliminated.
+   ================================================================ */
+.glass-panel {
+    background: var(--solid-surface-base);
+    border: 1px solid var(--border-subtle);
+    position: relative;
+    z-index: 1;
+}
+
+.glass-float {
+    background: var(--solid-surface-float);
+    border: 1px solid var(--border-mid);
+    position: relative;
+    z-index: 1;
+}
+
+.glass-highlight {
+    background: var(--solid-surface-hi);
+    border: 1px solid var(--border-bright);
+    position: relative;
+    z-index: 1;
+}
+
+/* ================================================================
+   BUTTONS
+   ================================================================ */
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+    color: white;
+    border: none;
+    padding: 11px 22px;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    font-size: 0.9rem;
+    font-family: var(--font-body);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease-out, opacity 0.2s ease-out;
+    position: relative;
+    overflow: hidden;
+    letter-spacing: 0.01em;
+}
+
+.btn-primary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px var(--accent-glow), 0 0 0 1px var(--accent-border);
+}
+.btn-primary:hover::before { opacity: 1; }
+.btn-primary:active { transform: translateY(0); }
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text-med);
+    border: 1px solid var(--border-subtle);
+    padding: 9px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    font-family: var(--font-body);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.btn-ghost:hover {
+    background: var(--solid-surface-float);
+    color: var(--text-high);
+    border-color: var(--border-mid);
+}
+
+/* ================================================================
+   NAVBAR SUPERIOR
+   ================================================================ */
+.navbar {
+    position: fixed; top: 0; left: 0; width: 100%;
+    height: var(--nav-height);
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 18px;
+    z-index: 1000;
+    /* Solid 3.0: no backdrop-filter, deep solid panel with hard-edge border */
+    background: #0d0e15;
+    border-bottom: 1px solid var(--border-subtle);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04), 0 4px 24px rgba(0,0,0,0.6);
+}
+
+.navbar::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent-dim), transparent);
+    opacity: 0.6;
+}
+
+.nav-brand {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 1.35rem;
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--text-high);
+}
+.nav-brand span {
+    color: var(--accent);
+    display: inline;
+    text-shadow: 0 0 20px var(--accent-glow);
+}
+
+.nav-links { display: none; gap: 28px; }
+.nav-link {
+    color: var(--text-low);
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: 0.2s;
+    position: relative;
+}
+.nav-link:hover, .nav-link.active { color: var(--text-high); }
+.nav-link.active::after {
+    content: '';
+    position: absolute;
+    bottom: -26px; left: 0;
+    width: 100%; height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+    border-radius: 2px;
+}
+.nav-user { display: flex; align-items: center; gap: 12px; }
+
+/* ── Coin Badge — 10% Glass exception: subtle translucent crystal on solid metal ── */
+.coin-badge {
+    background: rgba(20, 22, 32, 0.85);
+    border: 1px solid var(--accent-border);
+    padding: 6px 13px;
+    border-radius: 20px;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--gold);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 0 12px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.06);
+    /* v9.2: oculto hasta que GameCenter sincroniza el saldo formateado */
+    opacity: 0;
+    transition: opacity 150ms ease;
+}
+/* Clase añadida por app.js tras la sincronización inicial */
+.coin-badge--visible {
+    opacity: 1;
+}
+
+/* ── Avatar — Power Ring (Arcade Solid 3.0) ── */
+.avatar-container { position: relative; cursor: pointer; }
+.avatar {
+    width: 38px; height: 38px; border-radius: 50%;
+    background-color: var(--bg-elevated);
+    background-size: cover; background-position: center;
+    border: 2px solid var(--accent-border);
+    transition: border-color 0.2s, transform 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-low);
+    box-shadow: 0 0 14px var(--accent-glow);
+}
+.avatar:hover { border-color: var(--accent); transform: scale(1.05); }
+.avatar-edit-icon {
+    position: absolute; bottom: -2px; right: -2px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    width: 14px; height: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; pointer-events: none;
+    box-shadow: 0 0 6px var(--accent-glow);
+}
+
+/* ── Moon blessing badge ── */
+.moon-blessing-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    filter: drop-shadow(0 0 8px rgba(192, 132, 252, 0.9));
+    animation: moonPulse 2.5s ease-in-out infinite;
+}
+@keyframes moonPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.75; transform: scale(1.18); }
+}
+
+/* ================================================================
+   BOTTOM NAV (mobile)
+   ================================================================ */
+.bottom-nav {
+    display: flex;
+    position: fixed; bottom: 0; left: 0; width: 100%;
+    height: var(--bottom-nav-height);
+    /* Solid 3.0: deepest surface layer, no blur */
+    background: #050508;
+    border-top: 1px solid var(--border-subtle);
+    box-shadow: 0 -1px 0 rgba(255,255,255,0.04), 0 -4px 20px rgba(0,0,0,0.7);
+    z-index: 1000;
+    justify-content: space-around; align-items: center;
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+.bottom-nav::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent-dim), transparent);
+    opacity: 0.5;
+}
+
+.b-nav-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: var(--text-mute);
+    font-size: 0.65rem;
+    font-weight: 600;
+    gap: 4px;
+    flex: 1; height: 100%;
+    transition: 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.b-nav-item.active { color: var(--accent); }
+.b-nav-item i { transition: 0.2s; }
+.b-nav-item.active i {
+    transform: translateY(-2px);
+    filter: drop-shadow(0 0 6px var(--accent-glow));
+}
+
+/* ================================================================
+   LAYOUT
+   ================================================================ */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 16px;
+    width: 100%;
+}
+
+.section-title {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--text-high);
+    letter-spacing: -0.3px;
+}
+.section-subtitle {
+    color: var(--text-low);
+    font-size: 0.88rem;
+    margin-top: 4px;
+}
+.section-header {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* ================================================================
+   PLAYER HUD — Dashboard Header
+   ================================================================ */
+.player-hud {
+    background: var(--solid-surface-float);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xl);
+    padding: 18px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 2px 0 rgba(255,255,255,0.04), 0 8px 32px rgba(0,0,0,0.5);
+    /*
+     * v9.3: oculto durante el setup síncrono.
+     */
+    opacity: 0;
+    transition: opacity 150ms ease;
+}
+/* Clase añadida por revealUI() en app.js tras el init síncrono completo */
+.player-hud.is-ready {
+    opacity: 1;
+}
+
+.hud-top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.hud-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+    /* v9.3: oculto hasta que app.js haya aplicado el avatar real (o placeholder).
+       Evita el destello del avatar por defecto antes de que JS corrija la imagen. */
+    opacity: 0;
+    transition: opacity 100ms ease;
+}
+/* Clase añadida por revealUI() en app.js tras el init síncrono */
+.hud-avatar-wrap.is-ready {
+    opacity: 1;
+}
+
+.hud-avatar {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 2px solid var(--accent-border);
+    background-size: cover; background-position: center;
+    background-color: var(--bg-elevated);
+    box-shadow: 0 0 20px var(--accent-glow);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-low);
+    transition: 0.25s;
+}
+.hud-avatar:hover { transform: scale(1.05); border-color: var(--accent); }
+
+/* ── HUD Avatar — Power Ring (Arcade Solid 3.0)
+   Uses conic-gradient on a pseudo-element layer for a GPU-composited
+   energy ring. Hover triggers speed-up + stronger glow.
+   transform: rotate() runs on the GPU compositor thread — zero repaints.
+   ── */
+.hud-avatar-ring {
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 0deg,
+        var(--accent) 0%,
+        var(--accent-dim) 30%,
+        transparent 50%,
+        transparent 70%,
+        var(--accent-dim) 85%,
+        var(--accent) 100%
+    );
+    -webkit-mask:
+        radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px));
+    mask:
+        radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px));
+    animation: powerRingRotate 3s linear infinite;
+    opacity: 0.75;
+    transition: opacity 0.3s, animation-duration 0.3s;
+    /* GPU layer promotion */
+    will-change: transform;
+}
+/* Hover: ring accelerates + glows brighter */
+.hud-avatar-wrap:hover .hud-avatar-ring,
+.hud-avatar-wrap:focus-within .hud-avatar-ring {
+    animation-duration: 1s;
+    opacity: 1;
+    filter: drop-shadow(0 0 6px var(--accent));
+}
+@keyframes powerRingRotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.hud-info { flex: 1; min-width: 0; }
+.hud-greeting {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 2px;
+}
+.hud-name {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--text-high);
+    letter-spacing: -0.2px;
+    /* v9.4: mínimo para que el contenedor no colapses cuando el nickname
+       todavía no está escrito (durante el init síncrono antes de revealUI) */
+    min-height: 1.3em;
+}
+
+/* Fila que agrupa el nombre y el botón de edición */
+.hud-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 1.3em;   /* mismo min-height que .hud-name para estabilidad de layout */
+}
+
+/* Botón lápiz de edición de identidad */
+.btn-edit-identity {
+    flex-shrink: 0;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--glass-float-border);
+    background: var(--glass-base-bg);
+    color: var(--text-low);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.18s, color 0.18s, background 0.18s, transform 0.18s;
+    padding: 0;
+    line-height: 1;
+}
+.btn-edit-identity:hover {
+    border-color: var(--accent-border);
+    color: var(--accent);
+    background: var(--accent-soft);
+    transform: scale(1.12);
+}
+.hud-status {
+    font-size: 0.72rem;
+    color: var(--text-low);
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.hud-status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success-glow);
+    animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.hud-balance-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.hud-balance {
+    background: var(--solid-surface-deep);
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: relative;
+    overflow: hidden;
+}
+.hud-balance::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--accent), var(--accent-dim));
+    border-radius: 3px 0 0 3px;
+}
+.hud-balance-label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.hud-balance-amount {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: -0.5px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-shadow: 0 0 20px var(--gold-glow);
+}
+
+.hud-daily-btn {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #120900;
+    border: none;
+    border-radius: var(--radius-md);
+    /* Dimensiones fijas para evitar deformación cuando cambia el texto */
+    width: 72px;
+    flex: 0 0 72px;      /* no crece ni se encoge */
+    min-height: 64px;
+    height: 100%;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 0.78rem;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease-out, opacity 0.2s ease-out;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    box-shadow: 0 4px 20px rgba(251, 191, 36, 0.3);
+    position: relative;
+    overflow: hidden;   /* recorta texto que pueda desbordar */
+}
+.hud-daily-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.hud-daily-btn:hover:not(:disabled) {
+    transform: translateY(-2px) scale(1.03);
+    box-shadow: 0 8px 28px rgba(251, 191, 36, 0.5);
+}
+.hud-daily-btn:hover::before { opacity: 1; }
+.hud-daily-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    animation: none; /* asegurar que el pulse se detiene cuando está desactivado */
+}
+
+/* Pulse sutil cuando el bono está disponible — llama la atención sin distraer.
+ * Se detiene automáticamente con :disabled (animation:none arriba).
+ * prefers-reduced-motion lo desactiva para usuarios sensibles al movimiento. */
+@keyframes dailyBtnPulse {
+    0%, 100% { box-shadow: 0 4px 20px rgba(251, 191, 36, 0.30); }
+    50%       { box-shadow: 0 4px 28px rgba(251, 191, 36, 0.60); }
+}
+.hud-daily-btn:not(:disabled) {
+    animation: dailyBtnPulse 2.4s ease-in-out infinite;
+}
+.hud-daily-btn:hover:not(:disabled) {
+    animation: none; /* parar pulse durante hover; la escala ya es suficiente feedback */
+}
+.hud-daily-reward {
+    font-size: 1.05rem;
+    font-weight: 900;
+    color: #120900;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 64px;
+}
+.hud-daily-label {
+    font-size: 0.55rem;
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 64px;
+}
+
+/* Streak bar */
+.hud-streak {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.streak-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    flex-shrink: 0;
+}
+.streak-days {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+}
+.streak-day {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--solid-surface-deep);
+    border: 1px solid var(--border-subtle);
+    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.streak-day.active {
+    background: linear-gradient(90deg, var(--accent), var(--accent-dim));
+    border-color: var(--accent-border);
+    box-shadow: 0 0 8px var(--accent-glow);
+}
+.streak-day.today {
+    animation: streakPulse 1.5s ease-in-out infinite;
+}
+@keyframes streakPulse {
+    0%, 100% { box-shadow: 0 0 6px var(--accent-glow); }
+    50% { box-shadow: 0 0 14px var(--accent-glow); }
+}
+.streak-count {
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+/* Countdown */
+.hud-countdown {
+    font-size: 0.7rem;
+    color: var(--text-low);
+    text-align: center;
+}
+#countdown-display {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--text-med);
+}
+
+/* Daily msg */
+#daily-msg.daily-msg {
+    font-size: 0.76rem;
+    font-weight: 600;
+    min-height: 1rem;
+    transition: opacity 0.4s;
+    opacity: 0;
+}
+
+/* ================================================================
+   GAME CARDS — Mobile: 1 col, Desktop: auto-fill
+   ================================================================ */
+.games-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+}
+
+.game-card {
+    background: #141620;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s, border-color 0.3s;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+/* Solid 3.0: hover brightens border with intense glow, no bg change */
+.game-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 15px var(--accent-glow);
+    border-color: var(--accent-border);
+}
+
+.card-cover {
+    height: 150px;
+    width: 100%;
+    background-size: cover;
+    background-position: center;
+    position: relative;
+    overflow: hidden;
+}
+/* Gradient overlay on cover */
+.card-cover::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to bottom,
+        transparent 40%,
+        rgba(22, 25, 36, 0.85) 100%
+    );
+}
+
+.card-badge {
+    position: absolute;
+    top: 10px; left: 10px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: white;
+    /* Solid 3.0: no backdrop-filter */
+    z-index: 2;
+}
+.badge-new { background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+.badge-hot { background: var(--error); box-shadow: 0 0 10px rgba(255,66,102,0.4); }
+
+/* Reward indicator on cover */
+.card-reward {
+    position: absolute;
+    bottom: 10px; right: 10px;
+    background: rgba(0,0,0,0.8);
+    border: 1px solid rgba(251,191,36,0.4);
+    border-radius: var(--radius-sm);
+    padding: 3px 8px;
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: var(--gold);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    /* Solid 3.0: no backdrop-filter */
+    z-index: 2;
+}
+
+.card-info {
+    padding: 14px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+.card-title {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+    letter-spacing: -0.2px;
+}
+.card-desc {
+    font-size: 0.82rem;
+    color: var(--text-low);
+    margin-bottom: 12px;
+    line-height: 1.4;
+    flex: 1;
+}
+
+/* ================================================================
+   SHOP HERO
+   ================================================================ */
+.shop-hero { display: none; }
+
+/* ================================================================
+   SHOP GRID
+   ================================================================ */
+.shop-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.shop-card {
+    background: #141620;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    width: 100%;
+    /* will-change is NOT set here — it is activated only on hover via CSS
+       to avoid promoting dozens of compositor layers while the grid is idle.
+       See :hover rule below. On pointer:coarse devices (mobile) the :hover
+       rule is also effectively never triggered, so no GPU memory is wasted. */
+}
+/* Solid 3.0: border illumination on hover, no bg change */
+.shop-card:hover {
+    border-color: var(--accent-border);
+    transform: translateY(-2px);
+    box-shadow: 0 0 15px var(--accent-glow), 0 8px 24px rgba(0,0,0,0.4);
+    /* Activate compositor layer only for the duration of the hover interaction */
+    will-change: transform;
+}
+
+.shop-card .card-name {
+    font-family: var(--font-display);
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+    line-height: 1.2;
+    letter-spacing: -0.1px;
+}
+
+.shop-img {
+    width: 100%;
+    height: 110px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    transition: transform 0.25s;
+}
+.shop-card:hover .shop-img { transform: scale(1.02); }
+
+/* ================================================================
+   SHAKE ANIMATION
+   ================================================================ */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    15% { transform: translateX(-6px); }
+    30% { transform: translateX(6px); }
+    45% { transform: translateX(-4px); }
+    60% { transform: translateX(4px); }
+    75% { transform: translateX(-2px); }
+    90% { transform: translateX(2px); }
+}
+.anim-shake { animation: shake 0.45s ease-in-out; }
+
+/* ================================================================
+   WISHLIST
+   ================================================================ */
+.wishlist-btn {
+    position: absolute; top: 8px; left: 8px; z-index: 10;
+    background: rgba(7,7,13,0.9);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 50%;
+    /* Visual size: 28px. Touch area extended via padding for WCAG 2.5.5 compliance.
+       The button is positioned absolute so padding does not affect card layout. */
+    width: 28px; height: 28px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-low);
+    transition: transform 0.18s, color 0.18s, background 0.18s;
+    /* Solid 3.0: no backdrop-filter */
+}
+/* Extend touch area on touch devices without affecting visual size */
+@media (pointer: coarse) {
+    .wishlist-btn {
+        width: 40px; height: 40px;
+    }
+}
+.wishlist-btn:hover { transform: scale(1.2); color: #ff4f7a; }
+.wishlist-btn--active { color: #ff4f7a; background: rgba(255,79,122,0.15); }
+.wishlist-btn--active svg path,
+.wishlist-btn--active svg circle { fill: currentColor !important; }
+
+/* Wishlist cost banner */
+.wishlist-cost-banner {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    background: rgba(255,79,122,0.06);
+    border: 1px solid rgba(255,79,122,0.2);
+    font-size: 0.8rem;
+    color: var(--text-med);
+    margin-bottom: 12px;
+}
+.wishlist-cost-banner strong { color: #ff4f7a; }
+
+/* ================================================================
+   SHOP TABS
+   ================================================================ */
+.shop-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+}
+.shop-tabs::-webkit-scrollbar { display: none; }
+
+.shop-tab {
+    background: var(--solid-surface-base);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-low);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 5px;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    white-space: nowrap;
+}
+.shop-tab:hover { border-color: var(--accent-border); color: var(--text-high); }
+.shop-tab.active {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* ================================================================
+   SHOP TOOLBAR
+   ================================================================ */
+.shop-toolbar { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.search-wrap { position: relative; width: 100%; }
+.search-icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--text-low); pointer-events: none;
+}
+.search-input {
+    width: 100%;
+    background: var(--solid-surface-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-high);
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    padding: 10px 36px 10px 38px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.search-input:focus {
+    border-color: var(--accent-border);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.search-input::placeholder { color: var(--text-low); }
+.search-clear {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: rgba(255,255,255,0.08); border: none; border-radius: 50%;
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--text-low); transition: 0.18s;
+}
+.search-clear:hover { background: rgba(255,255,255,0.16); color: white; }
+.search-count { font-size: 0.78rem; color: var(--text-mute); margin-bottom: 4px; font-style: italic; }
+
+/* Filter pills */
+.filter-pills {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 6px;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+}
+.filter-pills::-webkit-scrollbar { display: none; }
+.filter-pills .pill { flex: 0 0 auto; }
+
+.pill {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border-subtle);
+    background: var(--solid-surface-base);
+    color: var(--text-low);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.18s;
+    display: flex; align-items: center; gap: 4px;
+    font-family: var(--font-body);
+    white-space: nowrap;
+}
+.pill:hover { border-color: var(--accent-border); color: var(--text-high); }
+.pill.active {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+.pill--wishlist.active { background: rgba(255,79,122,0.1); border-color: rgba(255,79,122,0.4); color: #ff4f7a; }
+.pill--wishlist.active svg path { fill: currentColor !important; }
+
+.filter-empty {
+    grid-column: 1/-1;
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-low);
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+
+/* ================================================================
+   TAB PANELS
+   ================================================================ */
+.tab-panel { min-height: 280px; }
+
+/* ================================================================
+   SALE BANNER — Flash Offer Ticket Design
+   ================================================================ */
+.sale-banner {
+    margin-bottom: 16px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    position: relative;
+}
+
+.sale-banner__ticket {
+    background: linear-gradient(135deg, #1a0a00, #2a1000);
+    border: 1px solid rgba(251,191,36,0.5);
+    border-radius: var(--radius-md);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* ── Sale Banner Ticket — Laser Scan Effect (Arcade Solid 3.0)
+   The golden shimmer sweep is replaced by a precise laser scan:
+   a narrow oblique line of intense light that travels left-to-right
+   every 3.5 s. Uses transform: translate3d() on ::after — GPU only,
+   zero repaints. The ticket itself is fully solid with a dot texture.
+   ── */
+
+/* Dot-pattern texture overlay — replaces repeating diagonal gradient */
+.sale-banner__ticket::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(251,191,36,0.08) 1px, transparent 1px);
+    background-size: 14px 14px;
+    pointer-events: none;
+    border-radius: inherit;
+}
+
+/* Laser scan line */
+.sale-banner__ticket::after {
+    content: '';
+    position: absolute;
+    top: -10%;
+    left: -30%;
+    width: 15%;
+    height: 120%;
+    background: linear-gradient(
+        105deg,
+        transparent 0%,
+        rgba(251,191,36,0.06) 30%,
+        rgba(251,191,36,0.35) 50%,
+        rgba(251,191,36,0.06) 70%,
+        transparent 100%
+    );
+    animation: laserScan 3.5s ease-in-out infinite;
+    /* GPU compositor — no repaints */
+    will-change: transform;
+}
+@keyframes laserScan {
+    0%   { transform: translate3d(0, 0, 0);     opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { transform: translate3d(800%, 0, 0);  opacity: 0; }
+}
+
+/* Zigzag border notches */
+.sale-banner__notch-left,
+.sale-banner__notch-right {
+    position: absolute;
+    top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--bg-main);
+    z-index: 2;
+}
+.sale-banner__notch-left { left: -7px; }
+.sale-banner__notch-right { right: -7px; }
+
+.sale-banner__icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    color: #120900;
+    box-shadow: 0 4px 14px rgba(251,191,36,0.4);
+}
+
+.sale-banner__content { flex: 1; min-width: 0; }
+.sale-banner__title {
+    font-family: var(--font-display);
+    font-size: 0.82rem;
+    font-weight: 900;
+    color: var(--gold);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 2px;
+    text-shadow: 0 0 10px var(--gold-glow);
+}
+.sale-banner__desc {
+    font-size: 0.75rem;
+    color: rgba(251,191,36,0.7);
+}
+
+.sale-banner__badge {
+    background: var(--gold);
+    color: #120900;
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+    font-weight: 900;
+    padding: 6px 10px;
+    border-radius: var(--radius-xs);
+    flex-shrink: 0;
+    text-shadow: none;
+}
+
+/* Legacy compatibility */
+.sale-banner.hidden { display: none !important; }
+
+/* ================================================================
+   PROMO CODE SECTION
+   ================================================================ */
+.promo-toggle-wrap { margin-bottom: 18px; }
+.promo-toggle-btn {
+    width: 100%; justify-content: flex-start; gap: 8px;
+    padding: 9px 14px; font-size: 0.82rem; border-radius: var(--radius-sm);
+}
+.promo-chevron { margin-left: auto; transition: transform 0.22s; flex-shrink: 0; }
+.promo-toggle-btn[aria-expanded="true"] .promo-chevron { transform: rotate(180deg); }
+.promo-section--collapsed { display: none; }
+.promo-section--open {
+    display: block; margin-top: 8px;
+    animation: promoFadeIn 0.22s ease;
+}
+@keyframes promoFadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.promo-section { padding: 16px; border-radius: var(--radius-lg); margin-bottom: 18px; }
+.promo-icon-wrap {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    box-shadow: 0 4px 12px var(--accent-glow);
+}
+.promo-input-group { display: flex; flex-direction: column; gap: 8px; }
+.promo-input {
+    width: 100%;
+    background: var(--solid-surface-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-high);
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    padding: 10px 16px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+}
+.promo-input:focus {
+    border-color: var(--accent-border);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+#btn-redeem { width: 100%; justify-content: center; }
+
+/* ================================================================
+   SHOP CARD BADGES & PRICES
+   ================================================================ */
+.owned-badge {
+    position: absolute; top: 8px; left: 8px;
+    background: rgba(34,208,122,0.2);
+    border: 1px solid rgba(34,208,122,0.35);
+    color: var(--success);
+    font-size: 0.6rem; font-weight: 700;
+    padding: 2px 6px; border-radius: 20px;
+    display: flex; align-items: center; gap: 3px;
+    /* Solid 3.0: no backdrop-filter */
+}
+.sale-card-badge {
+    position: absolute; top: 8px; right: 8px;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #120900; font-family: var(--font-display);
+    font-size: 0.58rem; font-weight: 900;
+    padding: 2px 6px; border-radius: 20px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    display: flex; align-items: center; gap: 2px;
+}
+.shop-price {
+    display: flex; align-items: center; justify-content: center;
+    gap: 4px; font-family: var(--font-display); font-size: 0.9rem;
+    font-weight: 800; color: var(--gold); margin: 5px 0;
+}
+.price-original { text-decoration: line-through; color: var(--text-mute); font-size: 0.72rem; font-weight: 400; }
+.price-sale { color: var(--success); font-size: 1rem; font-weight: 900; }
+.sale-pill {
+    background: var(--success-soft);
+    border: 1px solid rgba(34,208,122,0.3);
+    color: var(--success); font-size: 0.58rem; font-weight: 800;
+    text-transform: uppercase; padding: 2px 4px; border-radius: 8px;
+}
+
+.card-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-bottom: 4px; }
+.card-tag {
+    background: var(--solid-surface-base);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-low); font-size: 0.58rem; font-weight: 600;
+    padding: 2px 5px; border-radius: 8px;
+}
+
+.vault-btn {
+    background: linear-gradient(135deg, #22d07a, #16a85e) !important;
+    color: #041a0a !important; font-weight: 800 !important;
+    letter-spacing: 0.01em;
+}
+.vault-btn:hover {
+    background: linear-gradient(135deg, #40e090, #22d07a) !important;
+    box-shadow: 0 0 16px var(--success-glow) !important;
+}
+
+/* ================================================================
+   SYNC — Memory Card Design
+   ================================================================ */
+.sync-card { padding: 1.25rem; border-radius: var(--radius-lg); }
+
+.memory-card {
+    background: linear-gradient(135deg, var(--bg-elevated), #1a1d2e);
+    border: 1px solid var(--glass-float-border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+/* Circuit board pattern */
+.memory-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(var(--glass-base-border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--glass-base-border) 1px, transparent 1px);
+    background-size: 24px 24px;
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+.memory-card__header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 1rem; position: relative; z-index: 1;
+}
+
+.memory-card__chip {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.memory-card__chip--export {
+    background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+    box-shadow: 0 4px 14px var(--accent-glow);
+}
+.memory-card__chip--import {
+    background: linear-gradient(135deg, #22d07a, #16a85e);
+    box-shadow: 0 4px 14px var(--success-glow);
+}
+
+.memory-card__title {
+    font-family: var(--font-display);
+    font-size: 0.9rem; font-weight: 800;
+    color: var(--text-high); margin: 0;
+}
+.memory-card__sub {
+    font-size: 0.72rem; color: var(--text-low); margin: 0;
+}
+
+.sync-textarea {
+    width: 100%;
+    background: var(--solid-surface-deep);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-low);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 10px 12px;
+    resize: vertical;
+    min-height: 72px;
+    outline: none;
+    margin-top: 8px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.sync-textarea:focus {
+    border-color: var(--accent-border);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.sync-separator {
+    display: flex; align-items: center; gap: 8px;
+    margin: 10px 0; font-size: 0.72rem; color: var(--text-mute);
+}
+.sync-separator::before, .sync-separator::after {
+    content: ''; flex: 1; height: 1px; background: var(--glass-base-border);
+}
+
+.file-label { cursor: pointer; width: 100%; justify-content: center; padding: 9px; font-size: 0.84rem; }
+.file-name-display {
+    display: block; font-size: 0.7rem; color: var(--text-low);
+    margin-top: 5px; text-align: center; font-style: italic;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ================================================================
+   SETTINGS — Theme Picker
+   ================================================================ */
+.settings-card { padding: 1.25rem; border-radius: var(--radius-lg); }
+.theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.theme-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    background: var(--solid-surface-base);
+    color: var(--text-low);
+    font-family: var(--font-body);
+    font-size: 0.82rem; font-weight: 600;
+    cursor: pointer; transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease; position: relative;
+}
+.theme-btn:hover { border-color: var(--accent-border); color: var(--text-high); background: var(--solid-surface-float); }
+.theme-btn--active { border-color: var(--accent-border); background: var(--accent-soft); color: var(--text-high); }
+.theme-swatch {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 8px currentColor;
+}
+.theme-name { flex: 1; text-align: left; }
+.theme-check { color: var(--accent); opacity: 0; transition: opacity 0.18s; flex-shrink: 0; }
+.theme-btn--active .theme-check { opacity: 1; }
+
+/* ================================================================
+   BENDICIÓN LUNAR
+   ================================================================ */
+.moon-icon-wrap {
+    background: linear-gradient(135deg, #7c3aed, #db2777) !important;
+    box-shadow: 0 4px 14px rgba(192, 132, 252, 0.3) !important;
+}
+.moon-btn {
+    background: linear-gradient(135deg, #7c3aed, #db2777) !important;
+    box-shadow: 0 4px 16px rgba(192, 132, 252, 0.3) !important;
+}
+.moon-btn:hover {
+    box-shadow: 0 6px 24px rgba(192, 132, 252, 0.5) !important;
+    transform: translateY(-2px);
+}
+.eco-badge--moon {
+    background: rgba(192,132,252,0.12);
+    border-color: rgba(192,132,252,0.35);
+    color: var(--moon);
+}
+.eco-badge--gold {
+    background: var(--gold-soft);
+    border-color: rgba(251,191,36,0.3);
+    color: var(--gold);
+}
+
+/* ================================================================
+   ECONOMY INFO
+   ================================================================ */
+.economy-info { display: flex; flex-direction: column; gap: 8px; }
+.economy-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 9px 0; border-bottom: 1px solid var(--glass-base-border);
+    font-size: 0.85rem;
+}
+.economy-row:last-child { border-bottom: none; }
+.eco-badge {
+    padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700;
+    background: var(--glass-base-bg);
+    border: 1px solid var(--glass-base-border);
+    color: var(--text-low);
+}
+.eco-badge--green { background: var(--success-soft); border-color: rgba(34,208,122,0.3); color: var(--success); }
+.eco-badge--sale { background: var(--error-soft); border-color: rgba(255,66,102,0.3); color: var(--error); }
+
+/* ================================================================
+   HISTORIAL
+   ================================================================ */
+.history-list { display: flex; flex-direction: column; gap: 2px; max-height: 340px; overflow-y: auto; }
+.history-entry {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: var(--radius-sm);
+    background: rgba(255,255,255,0.015); transition: background 0.15s;
+}
+.history-entry:hover { background: rgba(255,255,255,0.04); }
+.history-icon {
+    width: 24px; height: 24px; border-radius: 50%;
+    font-size: 0.75rem; font-weight: 900;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.history-icon--in { background: var(--success-soft); color: var(--success); }
+.history-icon--out { background: var(--error-soft); color: var(--error); }
+.history-detail { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.history-motivo { font-size: 0.78rem; font-weight: 600; color: var(--text-high); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-fecha { font-size: 0.65rem; color: var(--text-low); }
+.history-amount { font-family: var(--font-display); font-size: 0.85rem; font-weight: 800; white-space: nowrap; }
+.history-amount--in { color: var(--success); }
+.history-amount--out { color: var(--error); }
+
+/* ================================================================
+   TOAST — 10% Glass exception: legibility over any background.
+   Reduced blur (12px) + solid 97% base layer = performance-safe.
+   ================================================================ */
+.toast {
+    position: fixed;
+    bottom: calc(var(--bottom-nav-height) + 12px);
+    left: 50%; transform: translateX(-50%) translateY(20px);
+    padding: 12px 18px; border-radius: var(--radius-md);
+    font-size: 0.82rem; font-weight: 600;
+    display: flex; align-items: flex-start; gap: 10px;
+    z-index: 9999; opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    max-width: 92vw; text-align: left;
+    /* 10% glass: minimal blur for text legibility */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-md), 0 0 0 1px rgba(255,255,255,0.04);
+    pointer-events: none;
+    line-height: 1.5;
+}
+.toast--visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast--success {
+    background: rgba(10,20,14,0.97);
+    border: 1px solid rgba(34,208,122,0.35);
+    color: var(--success);
+}
+.toast--error {
+    background: rgba(20,10,10,0.97);
+    border: 1px solid rgba(255,66,102,0.35);
+    color: var(--error);
+}
+
+/* ================================================================
+   FEEDBACK MSG
+   ================================================================ */
+.feedback-msg {
+    margin-top: 8px; font-size: 0.8rem; min-height: 1rem;
+    font-weight: 500; transition: opacity 0.4s;
+}
+
+/* ================================================================
+   CUSTOM CONFIRM MODAL — 10% Glass exception.
+   Max blur: 4px. Solid base layer at 95% opacity ensures readability
+   even on low-end devices where backdrop-filter degrades badly.
+   ================================================================ */
+.modal-overlay {
+    position: fixed; inset: 0; z-index: 10000;
+    background: rgba(0,0,0,0.82);
+    /* 10% glass: maximum 4px blur allowed */
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    animation: modalFadeIn 0.18s ease;
+    /* GPU compositing hint — prevents repaints from bleeding outside the overlay */
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    -webkit-perspective: 1000;
+    perspective: 1000;
+}
+.modal-overlay.hidden { display: none !important; }
+@keyframes modalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.modal-box {
+    width: 100%; max-width: 400px;
+    border-radius: var(--radius-xl);
+    padding: 28px 22px;
+    position: relative;
+    background: #0e1019;
+    border: 1px solid var(--glass-float-border);
+    animation: modalSlideUp 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px var(--accent-border);
+}
+@keyframes modalSlideUp {
+    from { transform: translateY(20px) scale(0.96); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+}
+.modal-title {
+    font-family: var(--font-display);
+    font-size: 1.05rem; font-weight: 900;
+    margin-bottom: 16px; color: var(--text-high);
+    letter-spacing: -0.2px;
+}
+.modal-body { margin-bottom: 20px; }
+.modal-product-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 9px 0; border-bottom: 1px solid var(--glass-base-border);
+    font-size: 0.85rem;
+}
+.modal-product-row:last-child { border-bottom: none; }
+.modal-product-row--total {
+    border-top: 1px solid var(--glass-float-border) !important;
+    margin-top: 4px; padding-top: 12px !important; border-bottom: none !important;
+}
+.modal-label { color: var(--text-low); }
+.modal-value { font-family: var(--font-display); font-weight: 800; color: var(--gold); }
+.modal-strikethrough { text-decoration: line-through; color: var(--text-mute); font-weight: 400; font-size: 0.8rem; }
+.modal-value--sale { color: var(--success); font-size: 1rem; font-family: var(--font-display); font-weight: 800; }
+.modal-value--cashback { color: var(--success); font-family: var(--font-display); font-weight: 800; }
+.modal-value--total { color: var(--text-high); font-size: 1rem; font-family: var(--font-display); font-weight: 900; }
+.modal-warning {
+    background: rgba(255,66,102,0.06);
+    border: 1px solid rgba(255,66,102,0.2);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    font-size: 0.82rem; color: var(--text-med); line-height: 1.5;
+}
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal-actions .btn-ghost { flex: 1; justify-content: center; }
+.modal-actions .btn-primary { flex: 2; justify-content: center; }
+.modal-error { color: var(--error); font-size: 0.8rem; margin-top: 10px; min-height: 1rem; text-align: center; }
+
+/* ================================================================
+   IDENTITY MODAL — v9.4 Identity Update
+   ================================================================ */
+
+/*
+ * Identity modal: 10% glass exception — max 4px blur + strong
+ * dark overlay to maintain the "first access" immersive feeling
+ * without the GPU cost of heavy blur.
+ */
+.identity-modal-overlay {
+    backdrop-filter: blur(4px) brightness(0.4);
+    -webkit-backdrop-filter: blur(4px) brightness(0.4);
+    /* Cubre también el .player-hud que está en opacity:0 durante el primer acceso */
+    z-index: 10500;
+}
+
+.identity-modal-box {
+    max-width: 380px;
+    /* Mobile keyboard: max-height responde al viewport dinámico (dvh).
+       overflow-y permite scroll interno si el teclado encoge la pantalla. */
+    max-height: 90dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+    box-shadow: 0 0 30px var(--accent-glow), 0 24px 80px rgba(0,0,0,0.85);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+.identity-modal-box::-webkit-scrollbar { display: none; }
+
+/* Icono con glow centrado */
+.identity-modal-icon {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-border);
+    box-shadow: 0 0 20px var(--accent-glow);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent);
+    margin: 0 auto 16px;
+    flex-shrink: 0;
+}
+
+.identity-modal-title {
+    text-align: center;
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+}
+
+.identity-modal-sub {
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--text-low);
+    margin-bottom: 22px;
+    line-height: 1.5;
+}
+
+/* Label reutilizable para secciones del modal */
+.identity-label {
+    display: block;
+    font-size: 0.67rem;
+    font-weight: 700;
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    margin-bottom: 8px;
+}
+
+/* ── Chips de género ── */
+.identity-chips {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.identity-chip {
+    padding: 10px 6px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-mid);
+    background: var(--solid-surface-base);
+    color: var(--text-low);
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+    line-height: 1.3;
+    user-select: none;
+}
+.identity-chip strong {
+    font-size: 1.05em;
+    color: inherit;
+}
+.identity-chip:hover {
+    border-color: var(--accent-border);
+    color: var(--text-high);
+    background: var(--solid-surface-float);
+    transform: translateY(-2px);
+}
+.identity-chip--active {
+    border-color: var(--accent-border);
+    background: var(--accent-soft);
+    color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+    transform: translateY(-1px);
+}
+.identity-chip--active strong {
+    color: var(--accent);
+}
+
+/* ── Input de nickname ── */
+.identity-input-wrap {
+    position: relative;
+    margin-bottom: 6px;
+}
+
+.identity-input {
+    width: 100%;
+    padding: 13px 46px 13px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-mid);
+    background: var(--solid-surface-deep);
+    color: var(--text-high);
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+    outline: none;
+    transition: border-color 0.18s, box-shadow 0.18s;
+    -webkit-appearance: none;
+}
+.identity-input::placeholder {
+    color: var(--text-mute);
+    font-weight: 400;
+    font-family: var(--font-body);
+}
+.identity-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft), 0 0 12px var(--accent-glow);
+}
+
+.identity-char-count {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-mute);
+    pointer-events: none;
+    line-height: 1;
+}
+
+.identity-input-error {
+    font-size: 0.75rem;
+    color: var(--error);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 1rem;
+}
+.identity-input-error.hidden { display: none !important; }
+
+/* ── Botón de confirmar ── */
+.identity-confirm-btn {
+    width: 100%;
+    justify-content: center;
+    margin-top: 20px;
+    padding: 14px;
+    font-size: 0.95rem;
+    letter-spacing: 0.03em;
+    /* Margen inferior para que no quede pegado al borde cuando el scroll
+       está al final en pantallas pequeñas */
+    margin-bottom: 2px;
+}
+
+/* ================================================================
+   DAILY BUTTON (legacy — used when not in HUD)
+   ================================================================ */
+.daily-btn {
+    background: linear-gradient(135deg, var(--gold), #f59e0b);
+    color: #120900; font-weight: 800; font-size: 0.86rem;
+    padding: 10px 18px; border-radius: var(--radius-sm);
+    box-shadow: 0 0 16px var(--gold-glow);
+}
+.daily-btn:hover:not(:disabled) {
+    box-shadow: 0 0 24px var(--gold-glow);
+    transform: translateY(-1px);
+}
+.daily-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+.daily-msg { font-size: 0.76rem; font-weight: 600; text-align: right; min-height: 1rem; transition: opacity 0.4s; opacity: 0; }
+.daily-countdown { font-size: 0.72rem; color: var(--text-low); text-align: right; }
+.daily-countdown #countdown-display { font-family: var(--font-mono); font-weight: 600; color: var(--text-med); }
+
+/* ================================================================
+   STREAK CALENDAR (Weekly view)
+   ================================================================ */
+.streak-calendar {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+}
+.streak-cal-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.streak-cal-label {
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: var(--text-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.streak-cal-dot {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: var(--radius-xs);
+    background: var(--solid-surface-deep);
+    border: 1px solid var(--border-subtle);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    font-weight: 800;
+    color: var(--text-mute);
+    transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+.streak-cal-dot.claimed {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+}
+.streak-cal-dot.today {
+    background: var(--gold-soft);
+    border-color: rgba(251,191,36,0.5);
+    color: var(--gold);
+    box-shadow: 0 0 10px var(--gold-glow);
+    animation: calPulse 1.8s ease-in-out infinite;
+}
+@keyframes calPulse {
+    0%, 100% { box-shadow: 0 0 8px var(--gold-glow); }
+    50% { box-shadow: 0 0 18px var(--gold-glow); }
+}
+
+/* ================================================================
+   FAQ
+   ================================================================ */
+.faq-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+details.glass-panel {
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
+    transition: border-color 0.2s;
+    background: var(--solid-surface-base);
+    border: 1px solid var(--border-subtle);
+}
+details.glass-panel[open] { border-color: var(--accent-border); }
+details summary {
+    cursor: pointer; font-weight: 700; font-size: 0.9rem;
+    font-family: var(--font-display);
+    list-style: none; display: flex; justify-content: space-between; align-items: center;
+    gap: 10px;
+}
+details summary::after {
+    content: '+'; font-size: 1.2rem;
+    color: var(--accent); transition: transform 0.2s;
+    flex-shrink: 0;
+}
+details[open] summary::after { transform: rotate(45deg); }
+.faq-content { margin-top: 10px; font-size: 0.84rem; color: var(--text-low); line-height: 1.65; }
+
+/* ================================================================
+   DESKTOP @media (min-width: 768px)
+   ================================================================ */
+@media (min-width: 768px) {
+    body { padding-bottom: 0; }
+
+    .navbar { padding: 0 28px; }
+    .nav-brand span { display: inline; }
+    .nav-links { display: flex; }
+    .bottom-nav { display: none; }
+
+    .container { padding: 36px 24px; }
+    .section-title { font-size: 1.7rem; }
+    .section-header { margin-bottom: 28px; }
+
+    /* HUD horizontal layout */
+    .player-hud { flex-direction: row; align-items: flex-start; flex-wrap: wrap; gap: 20px; }
+    .hud-top { flex: 1; min-width: 240px; }
+    .hud-balance-row { flex: 1; min-width: 240px; }
+    .hud-streak { width: 100%; }
+
+    /* Game cards */
+    .games-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 20px; }
+    .card-cover { height: 155px; }
+    .card-info { padding: 18px; }
+
+    /* Shop */
+    .shop-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    .shop-card { padding: 16px; }
+    .shop-card .card-name { font-size: 0.95rem; }
+    .shop-img { height: 160px; }
+    .wishlist-btn { width: 30px; height: 30px; top: 10px; left: 10px; }
+
+    /* Tabs */
+    .shop-tab { padding: 10px 16px; font-size: 0.85rem; }
+    .shop-tabs { gap: 8px; margin-bottom: 24px; }
+
+    /* Toolbar */
+    .shop-toolbar { flex-direction: row; align-items: center; gap: 16px; margin-bottom: 20px; }
+    .search-wrap { max-width: 400px; flex-shrink: 0; }
+    .filter-pills { gap: 10px; }
+
+    /* Promo */
+    .promo-input-group { flex-direction: row; }
+    #btn-redeem { width: auto; }
+    .promo-section { padding: 22px; }
+
+    /* Settings */
+    .settings-card { padding: 1.5rem; }
+    .theme-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    .sync-card { padding: 1.5rem; }
+    .memory-card { padding: 1.5rem; }
+
+    /* FAQ */
+    .faq-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+
+    /* Toast */
+    .toast { bottom: 28px; font-size: 0.86rem; padding: 14px 20px; }
+
+    /* Sale banner */
+    .sale-banner__ticket { padding: 16px 24px; }
+}
+
+@media (min-width: 1024px) {
+    .shop-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+    .nav-user { gap: 18px; }
+    .games-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+}
+
+/* ================================================================
+   NARROW SCREEN — @media (max-width: 379px)
+   Oculta el icono del mando en el logo para ganar ~30px en pantallas
+   muy pequeñas (iPhone SE, mini) sin romper el glassmorphism de la navbar.
+   ================================================================ */
+@media (max-width: 379px) {
+    .nav-brand > i,
+    .nav-brand > svg {
+        display: none;
+    }
+}
+
+/* ================================================================
+   UTILITY
+   ================================================================ */
+.w-full { width: 100%; }
+
+/* Lucide icon consistent stroke */
+svg { stroke-width: 2; }
+
+/* ================================================================
+   EMAIL MODAL — "Enviar por correo"
+   ================================================================ */
+
+/* Thumbnail + nombre del item en la cabecera del modal */
+.email-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--solid-surface-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    margin-bottom: 18px;
+}
+
+.email-modal-thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--border-mid);
+}
+
+.email-modal-item-name {
+    font-family: var(--font-display);
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: var(--text-high);
+    line-height: 1.2;
+    margin-bottom: 3px;
+}
+
+.email-modal-item-sub {
+    font-size: 0.7rem;
+    color: var(--text-low);
+}
+
+/* Email input field */
+.email-input {
+    width: 100%;
+    background: var(--solid-surface-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-high);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    padding: 11px 14px 11px 40px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    caret-color: var(--accent);
+}
+.email-input:focus {
+    border-color: var(--accent-border);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.email-input::placeholder { color: var(--text-low); }
+.email-input--error {
+    border-color: rgba(255, 66, 102, 0.55) !important;
+    box-shadow: 0 0 0 3px rgba(255, 66, 102, 0.1) !important;
+}
+
+/* Input wrapper with icon */
+.email-input-wrap {
+    position: relative;
+    margin-bottom: 8px;
+}
+.email-input-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-low);
+    pointer-events: none;
+    transition: color 0.2s;
+}
+.email-input-wrap:focus-within .email-input-icon {
+    color: var(--accent);
+}
+
+/* Inline error message */
+.email-error-msg {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--error);
+    min-height: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.2s, transform 0.2s;
+    margin-bottom: 4px;
+}
+.email-error-msg.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* "Guardar correo" checkbox row */
+.email-save-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--solid-surface-base);
+    border: 1px solid var(--border-subtle);
+    cursor: pointer;
+    user-select: none;
+}
+.email-save-row input[type="checkbox"] {
+    accent-color: var(--accent);
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.email-save-row label {
+    font-size: 0.78rem;
+    color: var(--text-med);
+    cursor: pointer;
+    flex: 1;
+}
+
+/* Fallback clipboard section (FR7 — mailto too long) */
+.email-fallback {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    background: rgba(251, 191, 36, 0.06);
+    border: 1px solid rgba(251, 191, 36, 0.25);
+    display: none;
+}
+.email-fallback.visible { display: block; }
+.email-fallback-title {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: var(--gold);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.email-fallback-desc {
+    font-size: 0.75rem;
+    color: var(--text-low);
+    line-height: 1.5;
+    margin-bottom: 10px;
+}
+.email-fallback-url {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-med);
+    background: var(--solid-surface-deep);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    padding: 8px 10px;
+    word-break: break-all;
+    margin-bottom: 10px;
+    display: block;
+}
+
+/* Tip box below the form */
+.email-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-border);
+    margin-top: 14px;
+    font-size: 0.72rem;
+    color: var(--text-med);
+    line-height: 1.5;
+}
+.email-tip svg { flex-shrink: 0; margin-top: 1px; color: var(--accent); }
+
+/* "Send email" button in library cards — secondary accent style */
+.btn-mail {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+    padding: 7px;
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+    font-family: var(--font-body);
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    flex-shrink: 0;
+}
+.btn-mail:hover {
+    background: var(--accent-soft);
+    box-shadow: 0 0 10px var(--accent-glow);
+    transform: translateY(-1px);
+}
+
+/* ================================================================
+   SHOP ERROR STATE — v9.1 (Network failure fallback)
+   ================================================================ */
+.shop-error-state {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-low);
+}
+.shop-error-state.hidden { display: none !important; }
+
+.shop-error-title {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--text-med);
+    margin: 0;
+}
+.shop-error-desc {
+    font-size: 0.82rem;
+    color: var(--text-low);
+    margin: 0;
+    max-width: 280px;
+}
+
+/* ================================================================
+   TREASURY GRID — v9.2 (Mis Tesoros — overflow fix on < 380px)
+   ================================================================ */
+/*
+ * #library-container usa .shop-grid .treasury-grid.
+ * Sobreescribimos el grid-template-columns con auto-fit + minmax para que
+ * la cuadrícula se adapte a cualquier ancho sin desbordarse en móvil pequeño.
+ * box-sizing: border-box ya está global desde el reset.
+ */
+.treasury-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    justify-content: center;
+}
+
+/* En pantallas muy pequeñas (< 380px) forzamos a 1 columna si 140px no cabe */
+@media (max-width: 320px) {
+    .treasury-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ================================================================
+   PREVIEW 2.0 — Dynamic Mockup System
+   Architecture: 3-layer sandwich (Art → Protection → UI)
+   GPU-only animations · contain: paint · translateZ(0) acceleration
+   v10.0: Mobile (9:20) + PC (16:9) frames with live clock & app grid.
+   ================================================================ */
+
+/* ── Modal box overrides for Preview 2.0 ── */
+.preview-modal-box {
+    max-width: 520px;
+    padding: 0;
+    overflow: hidden;
+    background: #07070d;
+    border-radius: var(--radius-xl);
+}
+
+/* Stage: dark surround that holds the mockup slot + close btn */
+.preview-mockup-stage {
+    position: relative;
+    width: 100%;
+    background: #030308;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 140px;
+    padding: 20px 20px 12px;
+}
+
+/* Close button — floats above everything */
+.preview-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 20;
+    background: rgba(7, 7, 13, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border-radius: 50%;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: background 0.18s, border-color 0.18s;
+}
+.preview-close-btn:hover {
+    background: rgba(155, 89, 255, 0.35);
+    border-color: rgba(155, 89, 255, 0.6);
+}
+
+/* ── Mockup container (base for both Mobile & PC) ── */
+.mockup-container {
+    position: relative;
+    overflow: hidden;
+    /* translate3d forces a dedicated GPU compositing layer for this element only.
+     * will-change is intentionally absent here — it is applied dynamically by
+     * openPreviewModal() to the modal itself and removed by closePreviewModal()
+     * to avoid wasting GPU memory on idle composited layers. */
+    transform: translate3d(0, 0, 0);
+    contain: paint;
+    flex-shrink: 0;
+}
+
+/* ── Mobile mockup: 9:20 ratio (tall portrait phone) ── */
+.mockup-mobile {
+    aspect-ratio: 9 / 20;
+    /*
+     * EXPLICIT height required — aspect-ratio only computes a missing dimension
+     * when the other dimension is explicitly set (CSS spec §10.4).
+     * max-height is a constraint, not a sizing value: it cannot seed the
+     * calculation when all children are position:absolute (zero intrinsic size).
+     * With height set, the browser derives: width = height × (9/20).
+     * min() keeps it inside the viewport on small screens.
+     */
+    height: min(58vh, 480px);
+    width: auto;
+    border-radius: 24px;
+    box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.10),
+        0 0 0 4px rgba(0, 0, 0, 0.6),
+        0 24px 60px rgba(0, 0, 0, 0.7);
+}
+
+/* ── PC mockup: 16:9 ratio (landscape desktop) ── */
+.mockup-pc {
+    aspect-ratio: 16 / 9;
+    width: 100%;
+    border-radius: 8px;
+    box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.08),
+        0 0 0 4px rgba(0, 0, 0, 0.5),
+        0 12px 40px rgba(0, 0, 0, 0.65);
+}
+
+/* ── Fallback (no tag): 4:3 neutral ── */
+.mockup-fallback {
+    aspect-ratio: 4 / 3;
+    width: 100%;  /* height derives from width × (3/4) */
+    border-radius: 10px;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.08), 0 12px 40px rgba(0,0,0,0.65);
+}
+
+/* ── Layer 1: Art ── */
+.mockup-layer-art {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    /* Opacity transition for the thumbnail→HiRes swap (Phase 1→2) */
+    transition: filter 0.4s ease, transform 0.4s ease;
+    /* Prevents right-click "Save image as..." — image is a CSS bg, not <img> */
+}
+
+/*
+ * Thumbnail "ghost" — shown immediately while the full wallpaper loads.
+ * The blur + slight scale-up hides the low-res artifacts of the thumbnail.
+ * transform: scale(1.1) compensates for the blur edge softening.
+ */
+.mockup-bg-loading {
+    filter: blur(10px);
+    transform: scale(1.1);
+}
+
+/*
+ * High-res wallpaper ready — transition from blurred thumbnail to sharp image.
+ * 0.4s matches the CSS transition on .mockup-layer-art above.
+ */
+.mockup-bg-ready {
+    filter: blur(0);
+    transform: scale(1);
+}
+
+/*
+ * ::after noise layer — secondary anti-extraction measure on top of the art.
+ * Renders a semi-transparent SVG turbulence pattern that:
+ *  (a) breaks automated pixel-perfect image capture tools
+ *  (b) does not affect perceived visual quality at 3% opacity
+ * pointer-events:none ensures it never intercepts UI interactions.
+ */
+.mockup-layer-art::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23a)' opacity='0.03'/%3E%3C/svg%3E");
+    background-size: 300px 300px;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    z-index: 1;
+}
+
+/* ── Layer 2: Protection (interference overlay) ── */
+.mockup-layer-protection {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    /* Subtle grain noise via SVG data URI — no HTTP request */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+    z-index: 2;
+}
+
+/* ── Layer 3: UI overlay ── */
+.mockup-layer-ui {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── MOBILE UI ELEMENTS ── */
+
+.mockup-statusbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5% 7% 0;
+    color: #fff;
+    /* mix-blend-mode difference adapts to bright/dark wallpapers */
+    mix-blend-mode: difference;
+}
+
+.mockup-clock-text {
+    font-family: var(--font-display);
+    font-size: clamp(8px, 3.8cqw, 15px);
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    line-height: 1;
+}
+
+.mockup-statusbar-icons {
+    display: flex;
+    align-items: center;
+    gap: 3%;
+}
+
+.mockup-statusbar-icons svg {
+    width: clamp(7px, 3cqw, 13px);
+    height: auto;
+    display: block;
+}
+
+/* App grid area: sits in the lower ~55% of the phone screen */
+.mockup-app-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 0 7% 12%;
+}
+
+.mockup-app-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: clamp(3px, 2.5cqw, 10px);
+}
+
+.mockup-app-icon {
+    aspect-ratio: 1;
+    border-radius: clamp(4px, 2cqw, 9px);
+    /*
+     * No background here — each icon's `bgAlpha` (rgba at ~35% opacity) is set
+     * inline by JS so the wallpaper bleeds through visibly while the accent hue
+     * still identifies the app. The border reinforces the shape without opacity.
+     */
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.mockup-app-icon svg {
+    width: 55%;
+    height: 55%;
+    display: block;
+    flex-shrink: 0;
+    /* Drop-shadow keeps glyphs readable over any wallpaper colour */
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+}
+
+/* Glassmorphism opt-in: desktop only (pointer:fine) — adds blur to the
+   semi-transparent bg so underlying wallpaper detail softens nicely. */
+@supports (backdrop-filter: blur(6px)) {
+    @media (pointer: fine) {
+        .mockup-app-icon {
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+    }
+}
+    display: block;
+    flex-shrink: 0;
+}
+
+/* Home indicator bar at the bottom */
+.mockup-home-indicator {
+    position: absolute;
+    bottom: 3%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28%;
+    height: clamp(2px, 1cqw, 5px);
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.55);
+    mix-blend-mode: difference;
+}
+
+/* ── PC UI ELEMENTS ── */
+
+/*
+ * Desktop area: the wallpaper is the star.
+ * A single narrow column of 6 small shortcut icons sits on the LEFT edge,
+ * exactly like a Windows 11 default desktop. 80%+ of the frame is clean
+ * wallpaper — the OS chrome signals "this is a live desktop" without hiding
+ * the art.
+ */
+.mockup-desktop-area {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 3% 0 1% 3%;
+    overflow: hidden;
+    /* pointer-events:none inherited from .mockup-layer-ui */
+}
+
+/* Single column — fixed narrow width so icons never crowd the wallpaper */
+.mockup-desktop-shortcuts {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(3px, 1.5cqw, 8px);
+    width: clamp(20px, 12cqw, 52px);
+}
+
+/* Individual shortcut: small square icon + tiny label */
+.mockup-desktop-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(1px, 0.6cqw, 3px);
+}
+
+.mockup-desktop-icon-img {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: clamp(3px, 1.2cqw, 6px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.mockup-desktop-icon-img svg {
+    width: 55%;
+    height: 55%;
+    display: block;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7));
+}
+
+.mockup-desktop-label {
+    font-size: clamp(3px, 1.4cqw, 6px);
+    color: rgba(255, 255, 255, 0.9);
+    text-align: center;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    line-height: 1;
+    font-family: var(--font-body, sans-serif);
+    letter-spacing: -0.01em;
+}
+
+
+
+.mockup-taskbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2.5%;
+    height: clamp(22px, 7%, 38px);
+    background: rgba(8, 8, 18, 0.78);
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    position: relative;
+}
+
+@supports (backdrop-filter: blur(4px)) {
+    .mockup-taskbar {
+        background: rgba(8, 8, 18, 0.55);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+    }
+}
+
+/* Left side: Start button + Search pill */
+.mockup-taskbar-left {
+    display: flex;
+    align-items: center;
+    gap: clamp(3px, 1.5cqw, 7px);
+    z-index: 1;
+}
+
+/* Windows 11 Start button */
+.mockup-taskbar-start {
+    width: clamp(10px, 3.8cqw, 20px);
+    height: clamp(10px, 3.8cqw, 20px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.mockup-taskbar-start svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Search pill */
+.mockup-taskbar-search {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0 clamp(3px, 1cqw, 6px);
+    width: clamp(28px, 12cqw, 60px);
+    height: clamp(9px, 3.2cqw, 17px);
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.mockup-taskbar-search svg {
+    width: clamp(5px, 2cqw, 9px);
+    height: auto;
+    flex-shrink: 0;
+}
+
+/* Centre: pinned app icons — absolutely centred so left/right never push them */
+.mockup-taskbar-centre {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: clamp(2px, 1cqw, 5px);
+}
+
+.mockup-taskbar-pinned {
+    width: clamp(10px, 3.5cqw, 18px);
+    height: clamp(10px, 3.5cqw, 18px);
+    border-radius: clamp(2px, 0.8cqw, 4px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.mockup-taskbar-pinned svg {
+    width: 60%;
+    height: 60%;
+    display: block;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+}
+
+/* Right side: system tray */
+.mockup-taskbar-right {
+    display: flex;
+    align-items: center;
+    gap: clamp(4px, 1.5cqw, 8px);
+    color: rgba(255, 255, 255, 0.8);
+    z-index: 1;
+}
+
+.mockup-pc-clock {
+    font-family: var(--font-display);
+    font-size: clamp(5px, 2.2cqw, 11px);
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    white-space: nowrap;
+}
+
+.mockup-taskbar-right svg {
+    width: clamp(6px, 2.2cqw, 11px);
+    height: auto;
+    display: block;
+}
+
+/* Legacy unused classes — removed (were display:none dead code) */
+
+
+
+/* ── FALLBACK UI ── */
+.mockup-fallback-watermark {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    user-select: none;
+    z-index: 3;
+}
+
+.mockup-fallback-watermark svg {
+    opacity: 0.25;
+    width: 18%;
+    height: auto;
+}
+
+/* ── Preview info row ── */
+.preview-info-row {
+    padding: 18px 20px;
+}
+
+.preview-name {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 900;
+    margin-bottom: 6px;
+    color: var(--text-high);
+}
+
+.preview-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+/* ── Container query support for fluid icon sizing ── */
+#mockup-slot {
+    container-type: inline-size;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /*
+     * width: 100% is REQUIRED.
+     * #mockup-slot is a flex child of .preview-mockup-stage (align-items: center).
+     * Without an explicit width it auto-sizes to its content. But all mockup
+     * children use position:absolute → zero intrinsic content → slot collapses to 0.
+     * Setting width:100% makes .mockup-pc's "width:100%" resolve correctly and
+     * gives .mockup-mobile a bounded inline-size for the container query.
+     */
+    width: 100%;
+}
+
+/*
+ * 90/10 Rule — Mobile backdrop-filter restriction
+ *
+ * backdrop-filter: blur() is GPU-intensive. On mobile touch devices (detected
+ * via pointer: coarse — the most reliable signal for mobile hardware) it drops
+ * frames at 60fps on low-end CPUs/GPUs. The rule is:
+ *   Desktop: glassmorphism allowed (pointer: fine = mouse/trackpad)
+ *   Mobile:  solid color fallback, zero blur
+ *
+ * This overrides the @supports opt-in blocks for .mockup-app-icon and
+ * .mockup-taskbar to enforce solid rendering on touch hardware.
+ */
+@media (pointer: coarse) {
+    .mockup-app-icon,
+    .mockup-desktop-icon-img,
+    .mockup-taskbar-pinned {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+    .mockup-taskbar {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        background: rgba(8, 8, 18, 0.92) !important;
+    }
+}
+
+
+/* ================================================================
+   TOUCH TARGETS — WCAG 2.5.5
+   Los botones de acción de tarjeta (.shop-buy-btn, .shop-preview-btn)
+   tienen padding visual de 7px, resultando en ~30–32px de alto.
+   En dispositivos táctiles se extiende a 44px mínimo usando min-height,
+   sin alterar el diseño visual en pantallas con cursor (pointer:fine).
+   ================================================================ */
+@media (pointer: coarse) {
+    .shop-buy-btn,
+    .shop-preview-btn {
+        min-height: 44px;
+    }
+}
+
+/* ================================================================
+   PREFERS-REDUCED-MOTION
+   Usuarios que han activado "Reducir movimiento" en su sistema operativo
+   experimentarán animaciones minimizadas: sin pulsos, sin translateY,
+   sin shimmer, con transiciones reducidas a 0.01s (no 0 para evitar
+   que los cambios de display/visibility sean instantáneos y confusos).
+   GPU-only properties (opacity) se mantienen para no eliminar feedback.
+   ================================================================ */
+@media (prefers-reduced-motion: reduce) {
+
+    /* Deshabilitar todas las animaciones @keyframes */
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+
+    /* Reducir transiciones a lo esencial (feedback visual mínimo) */
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+    }
+
+    /* Mantener transiciones de opacity para feedback de carga/reveal (Zero-Flicker) */
+    .coin-badge,
+    .player-hud,
+    .hud-avatar-wrap,
+    .toast {
+        transition-duration: 150ms !important;
+    }
+
+    /* Deshabilitar transform en hover de tarjetas y botones */
+    .shop-card:hover,
+    .btn-primary:hover,
+    .btn-ghost:hover {
+        transform: none !important;
+    }
+
+    /* Deshabilitar translateY en transiciones de vista SPA */
+    .view-section {
+        transform: none !important;
+    }
+}
