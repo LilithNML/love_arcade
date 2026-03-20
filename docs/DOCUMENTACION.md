@@ -1092,7 +1092,7 @@ love_arcade/
 ├── data/
 │   └── shop.json           # Catálogo de wallpapers (sin cambios)
 │
-├── wallpapers/             # Archivos descargables
+├── wallpapers/             # Carpeta local legacy (reemplazada por Cloudinary CDN)
 ├── assets/
 │   ├── default_avatar.png
 │   ├── product-thumbs/
@@ -2147,7 +2147,7 @@ importSave(code)
 
 ### Agregar un wallpaper nuevo
 
-1. Preparar archivos: `assets/product-thumbs/{nombre}_{hash8}_thumbs.webp` y `wallpapers/{nombre}_{hash8}.webp`.
+1. Preparar archivos: `assets/product-thumbs/{nombre}_{hash8}_thumbs.webp` (thumbnail local) y subir el wallpaper a Cloudinary bajo la URL `https://res.cloudinary.com/dyspgn0sw/image/upload/{nombre}_{hash8}.ext`.
 2. Añadir entrada en `data/shop.json` con ID consecutivo único y tags que incluyan al menos `"PC"` o `"Mobile"`.
 3. Subir el commit. No es necesario tocar JS ni HTML.
 

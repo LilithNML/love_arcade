@@ -327,8 +327,8 @@ function _buildMockupHTML(item) {
     // ── Art URL: full wallpaper, NOT the thumbnail ────────────────────────────
     // item.image  → assets/product-thumbs/…_thumbs.webp  (small cropped preview)
     // item.file   → rouge_the_bat_a94a3cca.webp            (full resolution)
-    // wallpapers/ prefix matches CONFIG.wallpapersPath in app.js
-    const wallpaperPath = (window.CONFIG?.wallpapersPath ?? 'wallpapers/') + item.file;
+    // Cloudinary base URL matches CONFIG.wallpapersPath in app.js
+    const wallpaperPath = (window.CONFIG?.wallpapersPath ?? 'https://res.cloudinary.com/dyspgn0sw/image/upload/') + item.file;
     const imgUrl = wallpaperPath.replace(/'/g, "\\'");
 
     const now = _getMockupTimeString();
@@ -471,7 +471,7 @@ function openPreviewModal(itemOrId) {
     // Phase 2 (async):   full-resolution wallpaper loads in a background Image().
     //   → swapped in with a 200ms opacity cross-fade once fully decoded.
     //
-    const wallpaperPath = (window.CONFIG?.wallpapersPath ?? 'wallpapers/') + item.file;
+    const wallpaperPath = (window.CONFIG?.wallpapersPath ?? 'https://res.cloudinary.com/dyspgn0sw/image/upload/') + item.file;
     const artEl         = slot.querySelector('.mockup-layer-art');
 
     // Phase 1 — thumbnail as blurred placeholder

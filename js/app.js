@@ -54,7 +54,7 @@ const CONFIG = {
     dailyReward:   20,     // Monedas base del día 1 (se escala con racha)
     dailyStreakCap: 60,    // Máximo de monedas por bono diario
     dailyStreakStep: 5,    // Incremento por día de racha
-    wallpapersPath: 'wallpapers/'
+    wallpapersPath: 'https://res.cloudinary.com/dyspgn0sw/image/upload/'
 };
 // Exponer globalmente para que shop-logic.js pueda acceder a CONFIG.wallpapersPath
 // sin depender del scope de cierre del bundle (resuelve fragilidad en módulos ES).
