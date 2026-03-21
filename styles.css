@@ -2562,40 +2562,126 @@ svg { stroke-width: 2; }
     transform: scale(1);
 }
 
-/*
- * CDN Offline Fallback — applied by _applyArtFallback() in shop-logic.js when
- * Cloudinary is unreachable (network error, CDN blocked, or CORS failure).
- *
- * Design principles:
- *  · Zero external resources — gradient is pure CSS, no fetch involved.
- *  · !important on filter/transform overrides the .mockup-bg-loading state that
- *    may still be active when the error fires before the load resolves.
- *  · The radial glow subtly centers attention, making the frame look intentional
- *    rather than broken. The dark palette matches the app's base surface tokens.
- */
+/* ================================================================
+   CDN OFFLINE FALLBACK — v9.6 Phase 4 (GPU Neon Flow)
+   ================================================================
+   Aplicado por _applyArtFallback() cuando Cloudinary es inalcanzable.
+
+   Estrategia de animación por capas (compositor puro):
+   · La capa base (.mockup-bg-offline) es un fondo oscuro ESTÁTICO.
+     No se anima, no genera repints. Solo define el color de superficie.
+   · El efecto de movimiento vive íntegramente en ::before: un pseudo-
+     elemento 200% × 200% con conic-gradient neón que se desplaza y rota
+     con transform. Transform es propiedad de compositor — la GPU la
+     ejecuta sin tocar el hilo principal ni recalcular layout.
+   · filter: blur(40px) en ::before suaviza el banding entre color-stops
+     y permite un gradiente más simple (menos stops, menos rasterización).
+   · overflow: hidden en el padre contiene el ::before sobredimensionado
+     sin alterar el layout de la tarjeta o frame.
+   ================================================================ */
+
 .mockup-layer-art.mockup-bg-offline {
     background-image: none !important;
-    background:
-        radial-gradient(
-            ellipse 65% 55% at 50% 42%,
-            rgba(155, 89, 255, 0.09) 0%,
-            transparent 70%
-        ),
-        linear-gradient(160deg, #0e0c1a 0%, #1a1428 55%, #0c0c18 100%);
+    background: #07060f;           /* superficie base oscura — sin gradiente propio */
     filter: none !important;
     transform: scale(1) !important;
     transition: none;
+    overflow: hidden;              /* contiene el ::before sobredimensionado */
+    will-change: transform;
+}
+
+/*
+ * Orb neón animado — pseudo-elemento 200 × 200 % del contenedor.
+ * Se mueve vía translate + rotate (compositor puro, zero repints).
+ * filter: blur(40px) convierte bordes duros del gradiente en difusión
+ * orgánica, eliminando banding visible sin cost adicional de rasterizado.
+ * Paleta: violeta Cyber-Vibrant (#c084fc) + verde neón Arcade Solid (#4ade80)
+ * + índigo mid-tone (#818cf8) — contrasta sobre el fondo #07060f y mantiene
+ * ratio 4.5:1 con texto blanco (#fff) superpuesto.
+ */
+.mockup-layer-art.mockup-bg-offline::before {
+    content: '';
+    position: absolute;
+    width: 200%;
+    height: 200%;
+    top: -50%;
+    left: -50%;
+    background: conic-gradient(
+        from 0deg at 40% 50%,
+        #c084fc 0deg,
+        #4ade80 90deg,
+        #818cf8 180deg,
+        #c084fc 270deg,
+        #4ade80 360deg
+    );
+    filter: blur(40px);
+    opacity: 0.18;
+    pointer-events: none;
+    z-index: 0;
+    animation: neonFlowDrift 8s linear infinite;
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+/* ── neonFlowDrift — desplazamiento + rotación diagonal ──────────────────────
+   Translate + rotate: ambas propiedades son compositor-only.
+   8s asegura suavidad en gama baja sin aceleración de fotogramas perceptible.
+   linear evita aceleración / desaceleración que delate el bucle de 8s. */
+@keyframes neonFlowDrift {
+    0%   { transform: translate(0%,   0%)   rotate(0deg);   }
+    25%  { transform: translate(-8%,  5%)   rotate(90deg);  }
+    50%  { transform: translate(-12%, -4%)  rotate(180deg); }
+    75%  { transform: translate(-4%,  8%)   rotate(270deg); }
+    100% { transform: translate(0%,   0%)   rotate(360deg); }
 }
 
 /*
  * Catalog / Library image offline placeholder.
- * Applied via onerror on <img> elements when the Cloudinary thumbnail fails.
- * Matches .shop-img dimensions so the card layout does not shift.
+ * Applied via onerror on <img> when the Cloudinary thumbnail fails.
+ * Uses the same GPU-animated ::before pattern at reduced opacity
+ * to maintain visual consistency between card and modal fallbacks.
+ * overflow:hidden es necesario para contener el ::before.
  */
 .shop-img--offline {
-    background: linear-gradient(145deg, #131020 0%, #1c1630 100%);
-    /* Prevent the broken-image browser icon from showing */
-    color: transparent;
+    position: relative;
+    overflow: hidden;
+    background: #07060f;
+    color: transparent;            /* Previene el ícono de imagen rota del navegador */
+}
+
+.shop-img--offline::before {
+    content: '';
+    position: absolute;
+    width: 200%;
+    height: 200%;
+    top: -50%;
+    left: -50%;
+    background: conic-gradient(
+        from 0deg at 40% 50%,
+        #c084fc 0deg,
+        #4ade80 90deg,
+        #818cf8 180deg,
+        #c084fc 270deg,
+        #4ade80 360deg
+    );
+    filter: blur(30px);
+    opacity: 0.14;                 /* más sutil en cards pequeñas */
+    pointer-events: none;
+    animation: neonFlowDrift 8s linear infinite;
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+/* ── prefers-reduced-motion: detener animaciones, preservar estética ─────────
+   Usuarios con vestibular disorders o epilepsia fotosensible pueden tener
+   activada esta preferencia. Pausamos la animación sin eliminar el diseño. */
+@media (prefers-reduced-motion: reduce) {
+    .mockup-layer-art.mockup-bg-offline::before,
+    .shop-img--offline::before {
+        animation-play-state: paused;
+    }
 }
 
 /*

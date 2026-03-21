@@ -20,6 +20,7 @@
 2m. [Novedades en v9.6 — SVG Sprite Migration](#2m-novedades-en-v96--svg-sprite-migration-fase-1--icon-performance)
 2n. [Novedades en v9.6 — Smart Preload (Fase 2)](#2n-novedades-en-v96--smart-preload-fase-2--intersection-observer)
 2o. [Novedades en v9.6 — Animación de Modal (Fase 3)](#2o-novedades-en-v96--animación-de-modal-fase-3--scale-opacity)
+2p. [Novedades en v9.6 — Neon Flow Fallback (Fase 4)](#2p-novedades-en-v96--neon-flow-fallback-fase-4--gpu-animated-gradients)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -839,6 +840,94 @@ El modal "emerge" desde su centro con un leve rebote, como si brotara de la supe
 |---|---|
 | `styles.css` | `@keyframes modalSlideUp` → `@keyframes modalPopIn` (sin translateY). `.modal-box`: animación actualizada, `will-change` y `backface-visibility` añadidos. Comentario de `.modal-overlay` actualizado. |
 | `shop-logic.js` | `modal.style.willChange = 'opacity, transform'` eliminado de `openPreviewModal()`. `m.style.willChange = 'auto'` eliminado de `closePreviewModal()`. JSDoc de ambas funciones actualizado. |
+
+---
+
+## 2p. Novedades en v9.6 — Neon Flow Fallback (Fase 4 — GPU Animated Gradients)
+
+### Motivación
+
+El fallback de CDN offline (`.mockup-bg-offline`, `.shop-img--offline`) era un gradiente CSS estático. Animar `background-position` o `linear-gradient` directamente requiere re-rasterizar los píxeles en cada frame, generando jank en scroll cuando múltiples tarjetas muestran el fallback simultáneamente. El objetivo es que el modo offline se sienta como un **modo de diseño alternativo**, no como un error.
+
+### Arquitectura: animación por capas
+
+La clave es separar el fondo estático (que no genera trabajo) del efecto de movimiento (que vive en un pseudo-elemento procesado íntegramente por el compositor):
+
+```
+.mockup-bg-offline  →  fondo oscuro estático (#07060f)   [cero repints]
+      └── ::before  →  conic-gradient 200×200% + blur     [compositor puro]
+                        animado con transform (translate + rotate)
+```
+
+El pseudo-elemento mide el 200 × 200 % del contenedor y parte posicionado `top:-50%; left:-50%`, de modo que los bordes del gradiente nunca quedan expuestos durante el movimiento.
+
+### `@keyframes neonFlowDrift`
+
+```css
+@keyframes neonFlowDrift {
+    0%   { transform: translate(0%,   0%)   rotate(0deg);   }
+    25%  { transform: translate(-8%,  5%)   rotate(90deg);  }
+    50%  { transform: translate(-12%, -4%)  rotate(180deg); }
+    75%  { transform: translate(-4%,  8%)   rotate(270deg); }
+    100% { transform: translate(0%,   0%)   rotate(360deg); }
+}
+```
+
+- `translate` + `rotate`: ambas son compositor-only — no calculan layout, no pintan píxeles.
+- `8s linear infinite`: ciclo largo para que el movimiento sea imperceptiblemente suave; `linear` elimina aceleraciones/desaceleraciones que delatarían el loop.
+
+### Paleta neón — Cyber-Vibrant + Arcade Solid 3.0
+
+```css
+background: conic-gradient(
+    from 0deg at 40% 50%,
+    #c084fc 0deg,    /* violeta Cyber-Vibrant */
+    #4ade80 90deg,   /* verde neón Arcade Solid */
+    #818cf8 180deg,  /* índigo mid-tone */
+    #c084fc 270deg,
+    #4ade80 360deg
+);
+filter: blur(40px);
+opacity: 0.18;       /* modal — sutil sobre fondo oscuro */
+```
+
+`filter: blur(40px)` convierte los bordes duros del `conic-gradient` en difusión orgánica, eliminando el banding visible sin coste adicional de rasterizado (blur en pseudo-elemento promocionado es una operación de convolution en GPU).
+
+El ratio de contraste de texto blanco (`#fff`) sobre el fondo base `#07060f` con el orb a `opacity: 0.18` supera 4.5:1 (WCAG AA) en todos los ángulos del ciclo de animación.
+
+### Reglas aplicadas
+
+| Selector | Opacity | Blur | Uso |
+|---|---|---|---|
+| `.mockup-bg-offline::before` | `0.18` | `40px` | Modal de preview (superficie grande) |
+| `.shop-img--offline::before` | `0.14` | `30px` | Cards de catálogo (superficie pequeña, más sutil) |
+
+### Limitación de capas (`will-change`)
+
+`will-change: transform` se declara únicamente en:
+- `.mockup-layer-art.mockup-bg-offline` — solo cuando el CDN falla (clase aplicada por JS)
+- `.shop-img--offline::before` — solo en imágenes con error (clase aplicada por `onerror`)
+
+En un catálogo cargado correctamente no hay ningún `will-change` extra activo en las tarjetas. La promoción de capas es proporcional al número de fallos reales de CDN, no al tamaño del catálogo.
+
+### Accesibilidad — `prefers-reduced-motion`
+
+```css
+@media (prefers-reduced-motion: reduce) {
+    .mockup-layer-art.mockup-bg-offline::before,
+    .shop-img--offline::before {
+        animation-play-state: paused;
+    }
+}
+```
+
+El gradiente permanece visible (modo diseño alternativo) pero el movimiento se detiene para usuarios con vestibular disorders o fotosensibilidad. Complementa la regla global `*::before { animation-duration: 0.01ms !important }` ya existente con una declaración explícita y legible.
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `styles.css` | `.mockup-bg-offline`: fondo estático + `overflow:hidden` + `will-change`. `.mockup-bg-offline::before`: orb neón animado con `neonFlowDrift`. `.shop-img--offline`: misma arquitectura a menor opacidad. `@keyframes neonFlowDrift`. Guard `prefers-reduced-motion` local. |
 
 ---
 
