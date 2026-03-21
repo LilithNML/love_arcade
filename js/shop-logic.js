@@ -1,8 +1,26 @@
 /**
- * shop-logic.js — Love Arcade v9.5
+ * shop-logic.js — Love Arcade v9.6
  * ─────────────────────────────────────────────────────────────────────────────
  * Contiene toda la lógica de la vista Tienda, extraída del script inline de
  * shop.html como parte de la migración a arquitectura SPA.
+ *
+ * NOVEDADES v9.6 (CDN Offline Resilience):
+ *  - Nueva función privada _applyArtFallback(artEl): aplica un degradado CSS
+ *    puro (sin recursos externos) cuando Cloudinary es inalcanzable. Idempotente:
+ *    segura de llamar desde Phase 1 y Phase 2 simultáneamente.
+ *  - openPreviewModal() — Phase 1: se añade una Image() de prueba en paralelo
+ *    (thumbProbe) para detectar fallos CDN en la thumbnail. Si thumbProbe.onerror
+ *    dispara, cancela el load de Phase 2 y aplica _applyArtFallback inmediatamente.
+ *  - openPreviewModal() — Phase 2: hiRes.onerror ya no se limita a quitar la
+ *    clase de carga; ahora evalúa si la thumbnail cargó correctamente (_thumbOk):
+ *      · _thumbOk = true  → el CDN funciona pero falta el archivo hi-res;
+ *                           degrade a la thumbnail visible (blur→clear).
+ *      · _thumbOk = false → CDN totalmente inaccesible; aplica _applyArtFallback.
+ *  - renderShop() y renderLibrary(): los <img> de catálogo y biblioteca incluyen
+ *    onerror inline que añade .shop-img--offline y limpia el src para suprimir
+ *    el icono de imagen rota del navegador.
+ *  - styles.css: nuevas clases .mockup-layer-art.mockup-bg-offline y
+ *    .shop-img--offline con gradientes CSS puros (sin fetch externo).
  *
  * NOVEDADES v9.5 (Cloudinary CDN Migration):
  *  - assets/product-thumbs/ ELIMINADA. Las thumbnails del catálogo se cargan
@@ -332,6 +350,25 @@ const MOCKUP_SVG = {
 };
 
 /**
+ * Applies a self-contained CSS fallback to the art layer when Cloudinary
+ * is unreachable (network error, blocked CDN, CORS failure, etc.).
+ *
+ * The fallback uses a pure CSS gradient defined in styles.css
+ * (.mockup-bg-offline) — zero external requests are made.
+ *
+ * Idempotent: safe to call from both Phase 1 (thumbProbe.onerror) and
+ * Phase 2 (hiRes.onerror) without producing duplicate side-effects.
+ *
+ * @param {HTMLElement} artEl — .mockup-layer-art element inside #mockup-slot
+ */
+function _applyArtFallback(artEl) {
+    if (!artEl || artEl.classList.contains('mockup-bg-offline')) return;
+    artEl.style.backgroundImage = 'none';
+    artEl.classList.remove('mockup-bg-loading', 'mockup-bg-ready');
+    artEl.classList.add('mockup-bg-offline');
+}
+
+/**
  * Returns the Cloudinary URL for the mockup preview of an item.
  *
  * The transformation is chosen based on the item's tag so the crop
@@ -503,24 +540,53 @@ function openPreviewModal(itemOrId) {
 
     // ── Double-layer progressive image load ───────────────────────────────────
     //
-    // Phase 1 (instant): thumbnail already in browser cache from the catalog grid.
-    //   → shown immediately as blurred/scaled "ghost" to eliminate blank flash.
-    // Phase 2 (async):   mockup-optimised wallpaper loads in a background Image().
+    // Phase 1 (instant): set thumbnail as background immediately for zero-blank
+    //   display, then probe its reachability with a parallel Image() test.
+    //   → If thumbProbe.onload fires: CDN is reachable; Phase 2 proceeds normally.
+    //   → If thumbProbe.onerror fires: CDN is unreachable; cancel Phase 2 and
+    //     apply _applyArtFallback() so the frame shows a CSS gradient instead of
+    //     a blank white/dark void.
+    //
+    // Phase 2 (async): mockup-optimised wallpaper loads in a background Image().
     //   → swapped in with a 200ms opacity cross-fade once fully decoded.
+    //   → On error, decision depends on _thumbOk (local closure variable):
+    //       _thumbOk = true  → thumbnail loaded; file may be missing on CDN.
+    //                          Degrade to visible thumbnail (blur→clear).
+    //       _thumbOk = false → CDN fully unreachable; apply solid CSS fallback.
     //
     // _getMockupUrl() selects the Cloudinary transformation that matches the
     // device frame: 9:20 portrait for Mobile, 16:9 landscape for PC.
     const wallpaperPath = _getMockupUrl(item);
     const artEl         = slot.querySelector('.mockup-layer-art');
 
-    // Phase 1 — thumbnail as blurred placeholder
+    // Phase 1 — set thumbnail immediately (best-case path stays zero-latency)
     artEl.style.backgroundImage = `url('${item.image}')`;
     artEl.classList.add('mockup-bg-loading');
 
     // Cancel any stale load from a previous modal open
     if (_pendingHiResImg) { _pendingHiResImg.onload = _pendingHiResImg.onerror = null; _pendingHiResImg = null; }
 
-    // Phase 2 — high-res load in background
+    // _thumbOk: local closure variable shared between thumbProbe and hiRes handlers.
+    // Tracks whether the Phase 1 thumbnail was reachable. Not module-level to avoid
+    // state contamination across rapid open/close cycles.
+    let _thumbOk = false;
+
+    // Phase 1 probe — runs in parallel with Phase 2 load
+    const thumbProbe = new Image();
+    thumbProbe.onload = () => { _thumbOk = true; };
+    thumbProbe.onerror = () => {
+        // CDN unreachable — thumbnail and hi-res will both fail.
+        // Cancel the in-flight Phase 2 load to avoid a redundant error callback,
+        // then apply the CSS fallback immediately.
+        if (_pendingHiResImg) {
+            _pendingHiResImg.onload = _pendingHiResImg.onerror = null;
+            _pendingHiResImg = null;
+        }
+        _applyArtFallback(artEl);
+    };
+    thumbProbe.src = item.image;
+
+    // Phase 2 — hi-res mockup load in background
     const hiRes    = new Image();
     _pendingHiResImg = hiRes;
     hiRes.onload = () => {
@@ -531,11 +597,17 @@ function openPreviewModal(itemOrId) {
         _pendingHiResImg = null;
     };
     hiRes.onerror = () => {
-        // Wallpaper file missing — keep thumbnail, remove loading state gracefully
         if (_pendingHiResImg !== hiRes) return;
-        artEl.classList.remove('mockup-bg-loading');
-        artEl.classList.add('mockup-bg-ready');
         _pendingHiResImg = null;
+        if (_thumbOk) {
+            // Thumbnail loaded fine — hi-res file may be missing or have a
+            // different public ID. Degrade gracefully: show thumbnail as final.
+            artEl.classList.remove('mockup-bg-loading');
+            artEl.classList.add('mockup-bg-ready');
+        } else {
+            // CDN fully unreachable — both phases failed.
+            _applyArtFallback(artEl);
+        }
     };
     hiRes.src = wallpaperPath;
 
@@ -869,7 +941,8 @@ function renderShop(items) {
                        <i data-lucide="heart" size="12"></i>
                    </button>`
                 : ''}
-            <img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy">
+            <img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy"
+                 onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
             ${isOwned ? '<div class="owned-badge"><i data-lucide="check-circle-2" size="10"></i> Tuyo</div>' : ''}
             ${eco.isSaleActive && !isOwned
                 ? '<div class="sale-card-badge"><i data-lucide="zap" size="9" fill="currentColor" stroke="none"></i> OFERTA</div>'
@@ -968,7 +1041,8 @@ function renderLibrary(items) {
                </button>`;
 
         card.innerHTML =
-            `<img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy">
+            `<img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy"
+                  onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
             <div class="owned-badge"><i data-lucide="check-circle-2" size="10"></i> Tuyo</div>
             <div style="width:100%;">
                 <h3 class="card-name">${item.name}</h3>

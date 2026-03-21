@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v9.5 · Cloudinary CDN Migration · Arcade Solid 3.0
+### Plataforma de Recompensas · v9.6 · CDN Offline Resilience · Arcade Solid 3.0
 
 ---
 
@@ -16,6 +16,7 @@
 2h. [Novedades en v10.0 — Arcade Solid 3.0](#2h-novedades-en-v100--arcade-solid-30)
 2j. [Novedades en v10.2 — Preview 2.0 Sistema de Mockup Dinámico](#2j-novedades-en-v102--preview-20-sistema-de-mockup-dinámico)
 2k. [Novedades en v9.5 — Cloudinary CDN Migration](#2k-novedades-en-v95--cloudinary-cdn-migration)
+2l. [Novedades en v9.6 — CDN Offline Resilience](#2l-novedades-en-v96--cdn-offline-resilience)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -465,6 +466,101 @@ Para **agregar un wallpaper nuevo** a partir de v9.5:
    - `"file"`: nombre del archivo original incluyendo extensión (ej: `rouge_the_bat_a94a3cca.webp`)
    - `"tags"`: debe incluir `"Mobile"` o `"PC"` para que `_getMockupUrl()` seleccione la transformación correcta.
 3. No es necesario generar thumbnails locales ni tocar JS o HTML.
+
+---
+
+## 2l. Novedades en v9.6 — CDN Offline Resilience
+
+### Motivación
+
+Con la migración completa a Cloudinary (v9.5), todas las imágenes de la plataforma dependen de un CDN externo. Ante una caída de Cloudinary o un CDN bloqueado por el usuario (ad-blocker, firewall corporativo, región con restricciones), la interfaz mostraba elementos en blanco o el icono de imagen rota del navegador. Esta entrega garantiza que la plataforma nunca se vea "rota", independientemente del estado del CDN.
+
+---
+
+### Escenarios cubiertos
+
+| Escenario | Comportamiento anterior | Comportamiento v9.6 |
+|---|---|---|
+| CDN caído — modal de preview abierto | Art layer en blanco, shimmer de carga infinito | Gradiente CSS puro (`mockup-bg-offline`) aplicado en <100 ms |
+| CDN caído — catálogo | Icono roto del navegador en cada tarjeta | Fondo sólido `.shop-img--offline`, sin icono roto |
+| CDN caído — biblioteca | Icono roto del navegador en cada tarjeta | Fondo sólido `.shop-img--offline`, sin icono roto |
+| Archivo hi-res faltante, thumbnail OK | Shimmer de carga infinito | Degrada a thumbnail visible (blur → clear) |
+| CDN lento — modal abierto antes de cargar | Thumbnail visible con blur hasta hi-res | Sin cambio — comportamiento correcto preservado |
+
+---
+
+### Arquitectura del fallback
+
+#### `_applyArtFallback(artEl)` — `shop-logic.js`
+
+Función privada e idempotente. Limpia el `backgroundImage` del art layer y aplica la clase `.mockup-bg-offline`. Segura de llamar desde múltiples manejadores de error sin efectos secundarios duplicados.
+
+```javascript
+function _applyArtFallback(artEl) {
+    if (!artEl || artEl.classList.contains('mockup-bg-offline')) return;
+    artEl.style.backgroundImage = 'none';
+    artEl.classList.remove('mockup-bg-loading', 'mockup-bg-ready');
+    artEl.classList.add('mockup-bg-offline');
+}
+```
+
+#### Flujo completo del modal de preview (v9.6)
+
+```
+openPreviewModal(item)
+    │
+    ├── artEl.backgroundImage = thumbnail CDN    ← inmediato (best-case)
+    ├── artEl.classList → 'mockup-bg-loading'
+    │
+    ├── thumbProbe = new Image(item.image)       ← prueba CDN en paralelo
+    │       ├── onload  → _thumbOk = true        ← CDN alcanzable
+    │       └── onerror → cancela Phase 2
+    │                     _applyArtFallback()    ← gradiente CSS inmediato
+    │
+    └── hiRes = new Image(_getMockupUrl(item))   ← Phase 2 (hi-res)
+            ├── onload  → backgroundImage = hi-res URL
+            │             classList → 'mockup-bg-ready'
+            │
+            └── onerror →
+                    ├── _thumbOk = true  → classList remove 'loading', add 'ready'
+                    │                      (thumbnail queda como imagen final)
+                    └── _thumbOk = false → _applyArtFallback()
+```
+
+#### `.mockup-layer-art.mockup-bg-offline` — `styles.css`
+
+Gradiente CSS de doble capa (radial glow + linear base) aplicado sin recursos externos. Los `!important` en `filter` y `transform` anulan los estados `.mockup-bg-loading` que pueden estar activos cuando el error llega antes de que el load resuelva.
+
+```css
+.mockup-layer-art.mockup-bg-offline {
+    background-image: none !important;
+    background:
+        radial-gradient(ellipse 65% 55% at 50% 42%,
+            rgba(155, 89, 255, 0.09) 0%, transparent 70%),
+        linear-gradient(160deg, #0e0c1a 0%, #1a1428 55%, #0c0c18 100%);
+    filter: none !important;
+    transform: scale(1) !important;
+    transition: none;
+}
+```
+
+#### `onerror` en `<img>` de catálogo y biblioteca
+
+Añadido en `renderShop()` y `renderLibrary()`. El manejador se auto-elimina (`this.onerror=null`) para prevenir bucles de error recursivos, elimina el `src` para suprimir el icono de imagen rota del navegador, y añade `.shop-img--offline` para el fondo de relleno CSS.
+
+```html
+<img src="..." class="shop-img"
+     onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
+```
+
+---
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `js/shop-logic.js` | Nueva función `_applyArtFallback(artEl)`. `openPreviewModal()`: Phase 1 añade `thumbProbe` Image + `_thumbOk` closure variable; Phase 2 `onerror` reescrito con lógica condicional. `renderShop()` y `renderLibrary()`: `onerror` inline en `<img>`. |
+| `styles.css` | Nuevas clases `.mockup-layer-art.mockup-bg-offline` y `.shop-img--offline`. |
 
 ---
 
