@@ -726,10 +726,12 @@ function openPreviewModal(itemOrId) {
     };
     hiRes.src = wallpaperPath;
 
-    // ── will-change: active only while modal is open ──────────────────────────
-    // Applying will-change globally wastes GPU memory on composited layers that
-    // are never animated. We add it now and remove it in closePreviewModal().
-    modal.style.willChange = 'opacity, transform';
+    // ── will-change: gestionado en CSS sobre .modal-box (v9.6 Phase 3) ─────────
+    // will-change: opacity, transform está declarado permanentemente en la regla
+    // .modal-box del CSS. Como .modal-overlay.hidden aplica display:none, el
+    // navegador destruye la capa compuesta cuando el modal no está visible,
+    // por lo que no hay coste de memoria en reposo. No es necesario gestionarlo
+    // aquí via JS.
 
     // ── Anti-extraction: contextmenu hardening ────────────────────────────────
     // Guardado en variable de módulo (no en propiedad DOM) para poder hacer
@@ -800,9 +802,12 @@ function openPreviewModal(itemOrId) {
  * Closes the preview modal and performs full resource cleanup:
  *  - Cancels any in-flight high-res image load (prevents stale onload callbacks)
  *  - Clears background-image on the art layer → frees GPU texture buffer
- *  - Removes will-change from the modal element → releases compositor layer
  *  - Clears the clock interval
  *  - Removes the contextmenu blocker from the stage
+ *
+ * [v9.6 Phase 3] will-change ya no se gestiona aquí. Está declarado en CSS
+ * sobre .modal-box y se libera automáticamente cuando el overlay recibe
+ * display:none via .hidden (el navegador descarta la capa compuesta).
  *
  * Public — no arguments needed (resolves DOM refs internally).
  * Also accepts optional explicit refs for internal callers (unchanged API).
@@ -834,10 +839,11 @@ function closePreviewModal(modal, stage) {
     // ── Remove slot contextmenu blocker ───────────────────────────────────────
     if (slot) slot.oncontextmenu = null;
 
-    // ── will-change cleanup ───────────────────────────────────────────────────
-    // Removing will-change after the modal is hidden tells the browser it can
-    // discard the promoted compositor layer, freeing GPU memory.
-    if (m) { m.style.willChange = 'auto'; m.classList.add('hidden'); }
+    // ── Ocultar modal — la capa compuesta se libera automáticamente ───────────
+    // .hidden aplica display:none, lo que destruye la capa GPU creada por
+    // will-change:opacity,transform declarado en .modal-box (CSS). No es
+    // necesario m.style.willChange = 'auto'.
+    if (m) { m.classList.add('hidden'); }
 
     // ── Clock interval ────────────────────────────────────────────────────────
     if (_mockupClockInterval) { clearInterval(_mockupClockInterval); _mockupClockInterval = null; }

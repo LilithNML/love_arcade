@@ -19,6 +19,7 @@
 2l. [Novedades en v9.6 — CDN Offline Resilience](#2l-novedades-en-v96--cdn-offline-resilience)
 2m. [Novedades en v9.6 — SVG Sprite Migration](#2m-novedades-en-v96--svg-sprite-migration-fase-1--icon-performance)
 2n. [Novedades en v9.6 — Smart Preload (Fase 2)](#2n-novedades-en-v96--smart-preload-fase-2--intersection-observer)
+2o. [Novedades en v9.6 — Animación de Modal (Fase 3)](#2o-novedades-en-v96--animación-de-modal-fase-3--scale-opacity)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -760,6 +761,84 @@ En entornos sin `IntersectionObserver` (browsers muy antiguos), `_initPreloadObs
 |---|---|
 | `js/shop-logic.js` | Nuevas funciones `_preloadItemHiRes()` e `_initPreloadObserver()`. Nueva variable de módulo `_preloadObserver`. `renderShop()` llama a `_initPreloadObserver()` tras construir el DOM. `ShopView` añade método `onLeave()` que desconecta el observer. |
 | `js/spa-router.js` | `_applyView()` llama a `onLeave()` de la vista saliente antes de activar la nueva. JSDoc actualizado. |
+
+---
+
+## 2o. Novedades en v9.6 — Animación de Modal (Fase 3 — Scale + Opacity)
+
+### Motivación
+
+La animación de entrada del modal (`@keyframes modalSlideUp`) combinaba `translateY(20px)` con `scale(0.96)`. El desplazamiento en el eje Y obliga al compositor a rasterizar el contenedor en cada frame del trayecto, ya que las áreas del DOM que quedan "al descubierto" durante el movimiento deben repintarse. En GPUs móviles antiguas sobre pantallas OLED/Retina esto producía caídas de FPS visibles.
+
+### Cambios en `styles.css`
+
+#### `@keyframes modalPopIn` — reemplaza `modalSlideUp`
+
+```css
+/* ANTES */
+@keyframes modalSlideUp {
+    from { transform: translateY(20px) scale(0.96); opacity: 0; }
+    to   { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+
+/* AHORA */
+@keyframes modalPopIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1);    }
+}
+```
+
+`scale` es una multiplicación matricial de vértices en la GPU: no cambia la posición del elemento en el layout, no descubre áreas adyacentes, y no genera repints fuera de los límites de la capa compuesta del propio modal.
+
+El timing function `cubic-bezier(0.34, 1.56, 0.64, 1)` (back-out suave) compensa la ausencia de desplazamiento físico con un rebote leve que da dinamismo orgánico a la aparición.
+
+#### Hardening de `.modal-box`
+
+```css
+.modal-box {
+    /* ... */
+    animation: modalPopIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    will-change: opacity, transform;          /* capa compuesta antes de animar */
+    backface-visibility: hidden;              /* previene parpadeo blanco en Safari/iOS */
+    -webkit-backface-visibility: hidden;
+}
+```
+
+- **`will-change`** declarado en CSS sobre `.modal-box`, no en el overlay. La capa compuesta se crea cuando el modal deja de ser `display:none` y se libera automáticamente al volver a `display:none` (vía `.hidden`). No hay coste de memoria en reposo.
+- **`backface-visibility: hidden`** previene el artefacto de "parpadeo blanco" que Safari/iOS introduce durante animaciones de `scale` en pantallas de alta densidad al renderizar el lado trasero de la capa.
+
+### Cambios en `shop-logic.js`
+
+Se elimina la gestión manual de `will-change` en JavaScript:
+
+```javascript
+// ELIMINADO de openPreviewModal():
+modal.style.willChange = 'opacity, transform';
+
+// ELIMINADO de closePreviewModal():
+m.style.willChange = 'auto';
+```
+
+El CSS toma el control completo del ciclo de vida de la capa compuesta. `closePreviewModal()` solo necesita añadir `.hidden` al overlay.
+
+### Resultado visual
+
+El modal "emerge" desde su centro con un leve rebote, como si brotara de la superficie de la pantalla. El efecto encaja con la estética **Arcade Solid** (hardware táctico) y elimina el artefacto de "deslizamiento desde abajo" que no era coherente con una interfaz de superficie rígida.
+
+| Propiedad | Antes | Después |
+|---|---|---|
+| Animación | `translateY(20px) → 0` + `scale(0.96) → 1` | `scale(0.95) → 1` + `opacity` |
+| Repints por frame | Áreas descubiertas durante desplazamiento | Cero — solo multiplicación matricial |
+| `will-change` | Gestionado en JS (set/unset) sobre overlay | Declarado en CSS sobre `.modal-box` |
+| `backface-visibility` | Solo en overlay | Overlay **y** `.modal-box` |
+| Duración | 0.22s | 0.25s (margen para el rebote back-out) |
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `styles.css` | `@keyframes modalSlideUp` → `@keyframes modalPopIn` (sin translateY). `.modal-box`: animación actualizada, `will-change` y `backface-visibility` añadidos. Comentario de `.modal-overlay` actualizado. |
+| `shop-logic.js` | `modal.style.willChange = 'opacity, transform'` eliminado de `openPreviewModal()`. `m.style.willChange = 'auto'` eliminado de `closePreviewModal()`. JSDoc de ambas funciones actualizado. |
 
 ---
 

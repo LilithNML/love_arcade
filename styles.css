@@ -1717,7 +1717,8 @@ body::before {
     display: flex; align-items: center; justify-content: center;
     padding: 20px;
     animation: modalFadeIn 0.18s ease;
-    /* GPU compositing hint — prevents repaints from bleeding outside the overlay */
+    /* backface-visibility en el overlay previene que el repaint del backdrop-filter
+       se filtre fuera de la capa durante la animación del .modal-box hijo. */
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
     -webkit-perspective: 1000;
@@ -1735,12 +1736,34 @@ body::before {
     position: relative;
     background: #0e1019;
     border: 1px solid var(--glass-float-border);
-    animation: modalSlideUp 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: modalPopIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
     box-shadow: 0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px var(--accent-border);
+    /* GPU compositing: will-change declarado en CSS para promover la capa
+       ANTES de que la animación arranque, evitando el promotion jank.
+       Seguro en memoria porque la caja hereda display:none del overlay.hidden,
+       que destruye la capa compuesta cuando el modal no está visible. */
+    will-change: opacity, transform;
+    /* backface-visibility: previene el parpadeo blanco en Safari/iOS durante
+       la animación de scale en pantallas Retina. */
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
 }
-@keyframes modalSlideUp {
-    from { transform: translateY(20px) scale(0.96); opacity: 0; }
-    to { transform: translateY(0) scale(1); opacity: 1; }
+/* ── modalPopIn — v9.6 Phase 3 ────────────────────────────────────────────────
+   Reemplaza modalSlideUp (translateY + scale). El translateY ha sido eliminado:
+   escalar un elemento es una operación de multiplicación matricial para la GPU,
+   no requiere recalcular el layout ni repintar áreas descubiertas adyacentes.
+   cubic-bezier(0.34, 1.56, 0.64, 1) = back-out suave: rebote leve que compensa
+   visualmente la ausencia de desplazamiento físico.
+   ─────────────────────────────────────────────────────────────────────────── */
+@keyframes modalPopIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 .modal-title {
     font-family: var(--font-display);
