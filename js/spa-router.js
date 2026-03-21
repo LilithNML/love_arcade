@@ -9,7 +9,9 @@
  *  - Actualizar el estado visual activo en ambas navbars.
  *  - Llamar a window.GameCenter.syncUI() para sincronizar saldo en todos los
  *    indicadores (Navbar + HUD) inmediatamente tras la transición.
- *  - [v9.6] Eliminada llamada a lucide.createIcons() — iconos servidos como SVG Sprite estático.
+ *  - [v9.6] Añadida llamada a window.ShopView.onLeave() / window.HomeView.onLeave()
+ *           en _applyView() antes de activar la vista entrante, para que las vistas
+ *           puedan liberar recursos (p. ej. IntersectionObserver de precarga).
  *  - Restaurar el scroll a 0,0 ANTES de la animación de entrada (instant),
  *    garantizando que la vista nueva empieza desde arriba sin salto visual.
  *  - Manejar data-anchor para deep-links dentro de la vista Inicio (#games, #faq).
@@ -94,6 +96,12 @@
                 if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
         }
+        
+        // [v9.6] onLeave: notificar a la vista que se abandona antes de activar la nueva.
+        // ShopView.onLeave() desconecta el IntersectionObserver de precarga para liberar
+        // recursos cuando el catálogo no es visible.
+        if (viewId === 'shop') window.HomeView?.onLeave?.();
+        if (viewId === 'home') window.ShopView?.onLeave?.();
         
         if (viewId === 'home') window.HomeView?.refresh?.();
         if (viewId === 'shop') window.ShopView?.onEnter?.();

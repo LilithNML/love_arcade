@@ -173,6 +173,7 @@ function _closeModal(value) {
 
 let _mockupClockInterval = null;   // Cleared on modal close to prevent leaks
 let _pendingHiResImg     = null;   // Tracks in-flight Image() load; cancelled on close
+let _preloadObserver     = null;   // IntersectionObserver for hi-res smart preloading (v9.6)
 
 /**
  * Returns the current time as "HH:MM" using the device locale.
@@ -503,6 +504,108 @@ function _buildMockupHTML(item) {
                 ${uiHTML}
             </div>
         </div>`;
+}
+
+// ── Smart Preload — Intersection Observer (v9.6) ──────────────────────────────
+/**
+ * Precarga silenciosa de la imagen hi-res de un item en background.
+ *
+ * El navegador almacena la imagen en su caché HTTP (disco/memoria). Cuando
+ * openPreviewModal() crea su propio Image() con la misma URL, el navegador
+ * resuelve la petición desde la caché sin tocar la red → latencia ~0 ms.
+ *
+ * Marca el card con data-preloaded="true" una vez finalizado para que el
+ * observer no vuelva a disparar trabajo redundante.
+ *
+ * @param {HTMLElement} cardEl  — Elemento .shop-card que entró en el viewport.
+ * @param {object}      item    — Objeto item completo de allItems[].
+ */
+function _preloadItemHiRes(cardEl, item) {
+    // Evitar doble precarga si la tarjeta ya fue procesada
+    if (cardEl.dataset.preloaded) return;
+    // Marcar ANTES de crear la Image() para evitar condición de carrera si el
+    // observer dispara dos veces rápidamente en el mismo frame
+    cardEl.dataset.preloaded = 'true';
+
+    const url = _getMockupUrl(item);
+    const img = new Image();
+    // fetchpriority="low": no compite con recursos críticos del HUD/UI.
+    // El atributo es soportado en Chrome 101+ y Safari 17.2+. En navegadores
+    // sin soporte se ignora silenciosamente — sin degradación funcional.
+    img.fetchPriority = 'low';
+    img.onload  = () => { /* imagen ya en caché — modal abrirá instantáneamente */ };
+    img.onerror = () => {
+        // CDN inalcanzable: resetear para que openPreviewModal use su fallback CSS.
+        delete cardEl.dataset.preloaded;
+    };
+    img.src = url;
+}
+
+/**
+ * Crea (o recrea) el IntersectionObserver de precarga.
+ *
+ * Configuración:
+ *  - rootMargin: '200px' — empieza a precargar 200 px antes de que la tarjeta
+ *    entre en el viewport, aprovechando el tiempo de lectura/scroll.
+ *  - threshold: 0.1 — dispara cuando el 10 % del card es visible. Evita
+ *    threshold: 0 que dispararía en tarjetas apenas asomadas por un píxel.
+ *
+ * Idempotente: si _preloadObserver ya existe la desconecta antes de crear una
+ * nueva (necesario tras renderShop() que destruye y reconstruye el DOM).
+ *
+ * Solo observa tarjetas de items NO comprados (identificadas por .shop-preview-btn).
+ * Las tarjetas propias no tienen modal de preview y no necesitan precarga.
+ *
+ * @param {HTMLElement} container — #shop-container con las tarjetas ya en el DOM.
+ * @param {object[]}    items     — Arreglo de items en el mismo orden del DOM.
+ */
+function _initPreloadObserver(container, items) {
+    // Desconectar observer anterior si el catálogo se re-renderizó
+    if (_preloadObserver) {
+        _preloadObserver.disconnect();
+        _preloadObserver = null;
+    }
+
+    // Degradación elegante: entornos sin soporte (browsers muy antiguos, SSR)
+    if (!('IntersectionObserver' in window)) return;
+
+    // Construir mapa id → item para O(1) lookup en el callback
+    const itemMap = new Map(items.map(it => [it.id, it]));
+
+    _preloadObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting) return;
+
+            const cardEl = entry.target;
+
+            // Si ya fue procesado en un ciclo anterior, solo dejar de observar
+            if (cardEl.dataset.preloaded) {
+                _preloadObserver?.unobserve(cardEl);
+                return;
+            }
+
+            // Resolver item desde el data-id del botón de preview
+            const previewBtn = cardEl.querySelector('.shop-preview-btn');
+            const rawId      = previewBtn?.dataset?.id;
+            const item       = rawId ? itemMap.get(parseInt(rawId, 10)) : null;
+
+            if (item) {
+                _preloadItemHiRes(cardEl, item);
+            }
+
+            // Dejar de observar — ya no hay trabajo pendiente en este elemento
+            _preloadObserver?.unobserve(cardEl);
+        });
+    }, {
+        rootMargin: '200px',   // Anticipar 200 px antes de entrar al viewport
+        threshold:  0.1        // Disparar con el 10 % del card visible
+    });
+
+    container.querySelectorAll('.shop-card').forEach(card => {
+        if (card.querySelector('.shop-preview-btn')) {
+            _preloadObserver.observe(card);
+        }
+    });
 }
 
 /**
@@ -1001,6 +1104,12 @@ function renderShop(items) {
     // llamada (cada keystroke del buscador, cada cambio de filtro, cada compra).
     // NO añadir lógica costosa dentro del forEach de items sin considerar este ciclo.
     refreshIcons(container);
+
+    // Smart Preload (v9.6): inicializar/reinicializar el observer tras cada render.
+    // renderShop destruye y reconstruye el DOM, así que el observer anterior apunta
+    // a nodos huérfanos. _initPreloadObserver() lo desconecta y crea uno nuevo
+    // observando únicamente los cards con .shop-preview-btn (no comprados).
+    _initPreloadObserver(container, items);
 }
 
 // ── Render: Biblioteca ────────────────────────────────────────────────────────
@@ -1500,6 +1609,19 @@ window.ShopView = {
         // iconos dinámicos que pueden necesitar re-inicialización al volver a la vista.
         const shopView = document.getElementById('view-shop');
         if (shopView) refreshIcons(shopView);
+    },
+
+    /**
+     * Llamado por spa-router.js al SALIR de la vista de Tienda (v9.6).
+     * Desconecta el IntersectionObserver de precarga para liberar recursos
+     * cuando el catálogo no es visible. Se reconecta automáticamente en el
+     * próximo renderShop() al volver a la vista.
+     */
+    onLeave() {
+        if (_preloadObserver) {
+            _preloadObserver.disconnect();
+            _preloadObserver = null;
+        }
     }
 };
 

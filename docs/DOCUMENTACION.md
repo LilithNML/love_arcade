@@ -18,6 +18,7 @@
 2k. [Novedades en v9.5 — Cloudinary CDN Migration](#2k-novedades-en-v95--cloudinary-cdn-migration)
 2l. [Novedades en v9.6 — CDN Offline Resilience](#2l-novedades-en-v96--cdn-offline-resilience)
 2m. [Novedades en v9.6 — SVG Sprite Migration](#2m-novedades-en-v96--svg-sprite-migration-fase-1--icon-performance)
+2n. [Novedades en v9.6 — Smart Preload (Fase 2)](#2n-novedades-en-v96--smart-preload-fase-2--intersection-observer)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -646,6 +647,119 @@ _icon('heart', 12, { cls: 'wishlist-icon' })
 | Round-trips de red para iconos | 1 (CDN Lucide ~90 KB) | 0 |
 | Parpadeo de iconos en transición | Visible (~1 frame) | Eliminado |
 | Nodos del DOM creados/destruidos | Por cada transición | 0 (sprite cachado) |
+
+---
+
+## 2n. Novedades en v9.6 — Smart Preload (Fase 2 — Intersection Observer)
+
+### Motivación
+
+`openPreviewModal()` era un sistema puramente reactivo: la descarga de la imagen hi-res comenzaba únicamente cuando el usuario hacía clic. En conexiones móviles promedio esto producía ~3 segundos de espera con una miniatura pixelada en pantalla, dañando el impacto visual de la estética Cyber-Vibrant y haciendo que la interfaz se sintiese lenta a pesar de ser técnicamente fluida en el resto.
+
+### Solución: Precarga Predictiva
+
+Se implementa un `IntersectionObserver` que aprovecha el tiempo de lectura/scroll del usuario para descargar el arte hi-res en segundo plano. Cuando el usuario abre el modal, el navegador ya tiene la imagen en caché y la sirve instantáneamente.
+
+### Arquitectura
+
+#### `_preloadItemHiRes(cardEl, item)` — precarga unitaria
+
+```javascript
+function _preloadItemHiRes(cardEl, item) {
+    if (cardEl.dataset.preloaded) return;
+    cardEl.dataset.preloaded = 'true';   // Marcar antes de crear Image() — evita carrera
+
+    const img = new Image();
+    img.fetchPriority = 'low';           // No compite con recursos críticos del HUD
+    img.src = _getMockupUrl(item);       // Misma URL que usará openPreviewModal() → cache hit
+}
+```
+
+- `data-preloaded="true"` se escribe en el card **antes** de instanciar `Image()` para evitar una condición de carrera si el observer dispara dos veces en el mismo frame.
+- `fetchPriority = 'low'` (Chrome 101+, Safari 17.2+) asegura que la precarga no compite con el HUD, el saldo ni otros elementos críticos. En navegadores sin soporte se ignora silenciosamente.
+- Si el CDN devuelve error, `onerror` elimina `data-preloaded` para que `openPreviewModal()` ejecute su propio flujo de fallback CSS sin interferencia.
+
+#### `_initPreloadObserver(container, items)` — configuración del observer
+
+| Parámetro | Valor | Razón |
+|---|---|---|
+| `rootMargin` | `'200px'` | Empieza a precargar 200 px antes de que el card entre en pantalla |
+| `threshold` | `0.1` | Dispara con el 10 % del card visible; evita falsos positivos en bordes de pantalla |
+
+```javascript
+_preloadObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const cardEl = entry.target;
+        if (cardEl.dataset.preloaded) { _preloadObserver?.unobserve(cardEl); return; }
+
+        const item = itemMap.get(parseInt(cardEl.querySelector('.shop-preview-btn')?.dataset?.id, 10));
+        if (item) _preloadItemHiRes(cardEl, item);
+
+        _preloadObserver?.unobserve(cardEl);   // Una sola ejecución por card — liberar memoria
+    });
+}, { rootMargin: '200px', threshold: 0.1 });
+```
+
+- **Mapa `id → item`**: construido en `O(n)` una sola vez al inicializar el observer; cada lookup en el callback es `O(1)`.
+- **`unobserve` inmediato**: tras procesar un card, se deja de observar. Esto garantiza que el observer no acumule referencias a elementos que ya fueron tratados.
+- **Solo cards con `.shop-preview-btn`**: las tarjetas ya compradas no tienen modal de preview y no necesitan precarga.
+- **Idempotente**: si `renderShop()` reconstruye el DOM (por un filtro o búsqueda), `_initPreloadObserver()` desconecta el observer anterior antes de crear uno nuevo sobre los nodos frescos.
+
+#### Ciclo de vida del observer (integración con SPA)
+
+```
+navigateTo('shop')
+    └── ShopView.onEnter()
+            └── filterItems() → renderShop()
+                    └── _initPreloadObserver()   ← Observer activo
+
+[Usuario hace scroll — cards entran en viewport]
+    └── _preloadItemHiRes()                      ← Imagen hi-res en caché
+
+[Usuario hace clic en Preview]
+    └── openPreviewModal()                       ← cache hit → swap instantáneo
+
+navigateTo('home')
+    └── ShopView.onLeave()                       ← Observer desconectado
+            └── _preloadObserver.disconnect()
+```
+
+#### Cambios en `spa-router.js`
+
+`_applyView()` ahora llama a `onLeave()` de la vista que se abandona **antes** de activar la nueva, siguiendo el patrón estándar de ciclo de vida:
+
+```javascript
+// Notificar salida a la vista anterior
+if (viewId === 'shop') window.HomeView?.onLeave?.();
+if (viewId === 'home') window.ShopView?.onLeave?.();
+
+// Activar vista nueva
+if (viewId === 'home') window.HomeView?.refresh?.();
+if (viewId === 'shop') window.ShopView?.onEnter?.();
+```
+
+`HomeView.onLeave` es un método opcional (no existe en el inline script actual); el operador `?.` garantiza que no lanzará error si no está definido.
+
+### Eficiencia de datos
+
+A diferencia de una precarga masiva (descargar todo el catálogo al cargar la página), el observer solo descarga imágenes de los cards que el usuario **está viendo o está a punto de ver**. En un catálogo de 30 items y una pantalla móvil que muestra 4 cards a la vez, el máximo de precargas simultáneas en cualquier momento es ~6 (los 4 visibles + los 2 dentro del margen de 200 px).
+
+### Compatibilidad
+
+| API | Soporte |
+|---|---|
+| `IntersectionObserver` | Chrome 51+, Firefox 55+, Safari 12.1+, Edge 15+ |
+| `fetchPriority` | Chrome 101+, Safari 17.2+ (ignorado en otros — sin degradación) |
+
+En entornos sin `IntersectionObserver` (browsers muy antiguos), `_initPreloadObserver()` retorna inmediatamente y el sistema funciona como antes: la imagen hi-res se carga al abrir el modal.
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `js/shop-logic.js` | Nuevas funciones `_preloadItemHiRes()` e `_initPreloadObserver()`. Nueva variable de módulo `_preloadObserver`. `renderShop()` llama a `_initPreloadObserver()` tras construir el DOM. `ShopView` añade método `onLeave()` que desconecta el observer. |
+| `js/spa-router.js` | `_applyView()` llama a `onLeave()` de la vista saliente antes de activar la nueva. JSDoc actualizado. |
 
 ---
 
@@ -1801,6 +1915,19 @@ window.ShopView.onEnter = function() {
 };
 ```
 
+### `window.ShopView.onLeave()` — v9.6
+
+Llamado por `spa-router.js` al abandonar la vista de Tienda. Desconecta el `IntersectionObserver` de precarga para liberar referencias a nodos DOM que pueden ser destruidos por el siguiente `renderShop()`:
+
+```javascript
+window.ShopView.onLeave = function() {
+    if (_preloadObserver) {
+        _preloadObserver.disconnect();
+        _preloadObserver = null;
+    }
+};
+```
+
 ### Optimizaciones de rendimiento
 
 - **`loading="lazy"`** en todos los `<img>` del catálogo y la biblioteca.
@@ -1845,9 +1972,12 @@ Función interna que aplica la transición SIN tocar el historial. Es la que lla
 2. Actualiza clases `.active` en navbar y bottom-nav.
 3. Llama a `window.GameCenter.syncUI()`.
 4. `window.scrollTo({ top: 0, behavior: 'instant' })` o scroll suave al anchor.
-5. Ejecuta el callback de vista: `window.HomeView.refresh()` o `window.ShopView.onEnter()`.
+5. **[v9.6]** Llama a `onLeave()` de la vista que se abandona (`ShopView.onLeave()` al ir a Home, `HomeView.onLeave()` al ir a Shop).
+6. Ejecuta el callback de vista entrante: `window.HomeView.refresh()` o `window.ShopView.onEnter()`.
 
-> **[v9.6]** Se eliminó el paso `lucide.createIcons()` que existía entre los pasos 3 y 4. Los iconos son ahora SVG Sprite estáticos presentes desde el primer frame de la transición.
+> **[v9.6 — SVG Sprite]** Se eliminó el paso `lucide.createIcons()` que existía entre los pasos 3 y 4. Los iconos son ahora SVG Sprite estáticos presentes desde el primer frame de la transición.
+
+> **[v9.6 — Smart Preload]** El paso 5 (`onLeave`) permite a `ShopView` desconectar el `IntersectionObserver` de precarga al abandonar la vista, liberando referencias a nodos DOM que pueden haber cambiado.
 
 ### History API — botón Atrás/Adelante (v9.1)
 
