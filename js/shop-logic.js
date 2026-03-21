@@ -1,8 +1,25 @@
 /**
- * shop-logic.js — Love Arcade v9.4
+ * shop-logic.js — Love Arcade v9.5
  * ─────────────────────────────────────────────────────────────────────────────
  * Contiene toda la lógica de la vista Tienda, extraída del script inline de
  * shop.html como parte de la migración a arquitectura SPA.
+ *
+ * NOVEDADES v9.5 (Cloudinary CDN Migration):
+ *  - assets/product-thumbs/ ELIMINADA. Las thumbnails del catálogo se cargan
+ *    desde Cloudinary con la transformación ar_16:9,c_fill,g_auto,w_640.
+ *    El campo `image` de shop.json ahora apunta directamente a la URL CDN.
+ *  - assets/cover/ ELIMINADA. Las carátulas de los juegos en index.html
+ *    usan Cloudinary con la transformación ar_16:9,c_fill,g_auto,w_1080.
+ *  - _getMockupUrl(item): nueva función privada que construye la URL Cloudinary
+ *    con la transformación correcta según el tag del producto:
+ *      · Mobile → f_auto,q_auto,ar_9:20,c_fill,w_500
+ *      · PC     → f_auto,q_auto,ar_16:9,c_fill,w_1200
+ *  - openPreviewModal(): Phase 2 ahora usa _getMockupUrl() en lugar de
+ *    CONFIG.wallpapersPath + item.file, garantizando que el mockup siempre
+ *    recibe la versión optimizada para el marco del dispositivo.
+ *  - getDownloadUrl() en app.js: la URL de descarga/email usa la estructura
+ *    limpia https://res.cloudinary.com/dyspgn0sw/image/upload/{public_id}
+ *    sin extensión ni parámetros de transformación, sirviendo el master original.
  *
  * NOVEDADES v9.4 (sincronización de versión con app.js):
  *  - Eliminado will-change estático en tarjetas del catálogo y biblioteca.
@@ -315,6 +332,33 @@ const MOCKUP_SVG = {
 };
 
 /**
+ * Returns the Cloudinary URL for the mockup preview of an item.
+ *
+ * The transformation is chosen based on the item's tag so the crop
+ * matches the target device frame:
+ *   Mobile → 9:20 portrait, 500 px wide   (phone screen)
+ *   PC     → 16:9 landscape, 1200 px wide  (desktop screen)
+ *   Other  → falls back to the PC preset
+ *
+ * The public ID is derived from item.file by stripping the file extension,
+ * keeping the URL independent of the original upload format (.webp/.jpg/.png).
+ *
+ * @param {object} item — shop item with .file and .tags[]
+ * @returns {string}    — Cloudinary URL with the appropriate transformation
+ */
+function _getMockupUrl(item) {
+    const CDN_BASE = 'https://res.cloudinary.com/dyspgn0sw/image/upload/';
+    const tags     = Array.isArray(item.tags) ? item.tags : [];
+    const base     = item.file.replace(/\.[^.]+$/, ''); // strip extension → public ID
+
+    if (tags.includes('Mobile')) {
+        return `${CDN_BASE}f_auto,q_auto,ar_9:20,c_fill,w_500/${base}`;
+    }
+    // PC or untagged — 16:9 widescreen
+    return `${CDN_BASE}f_auto,q_auto,ar_16:9,c_fill,w_1200/${base}`;
+}
+
+/**
  * Builds the 3-layer mockup HTML string for a given item.
  * @param {object} item  — shop item with .image and .tags[]
  * @returns {string}     — innerHTML for #mockup-slot
@@ -323,13 +367,6 @@ function _buildMockupHTML(item) {
     const tags  = Array.isArray(item.tags) ? item.tags : [];
     const isMob = tags.includes('Mobile');
     const isPc  = tags.includes('PC');
-
-    // ── Art URL: full wallpaper, NOT the thumbnail ────────────────────────────
-    // item.image  → assets/product-thumbs/…_thumbs.webp  (small cropped preview)
-    // item.file   → rouge_the_bat_a94a3cca.webp            (full resolution)
-    // Cloudinary base URL matches CONFIG.wallpapersPath in app.js
-    const wallpaperPath = (window.CONFIG?.wallpapersPath ?? 'https://res.cloudinary.com/dyspgn0sw/image/upload/') + item.file;
-    const imgUrl = wallpaperPath.replace(/'/g, "\\'");
 
     const now = _getMockupTimeString();
 
@@ -468,10 +505,12 @@ function openPreviewModal(itemOrId) {
     //
     // Phase 1 (instant): thumbnail already in browser cache from the catalog grid.
     //   → shown immediately as blurred/scaled "ghost" to eliminate blank flash.
-    // Phase 2 (async):   full-resolution wallpaper loads in a background Image().
+    // Phase 2 (async):   mockup-optimised wallpaper loads in a background Image().
     //   → swapped in with a 200ms opacity cross-fade once fully decoded.
     //
-    const wallpaperPath = (window.CONFIG?.wallpapersPath ?? 'https://res.cloudinary.com/dyspgn0sw/image/upload/') + item.file;
+    // _getMockupUrl() selects the Cloudinary transformation that matches the
+    // device frame: 9:20 portrait for Mobile, 16:9 landscape for PC.
+    const wallpaperPath = _getMockupUrl(item);
     const artEl         = slot.querySelector('.mockup-layer-art');
 
     // Phase 1 — thumbnail as blurred placeholder

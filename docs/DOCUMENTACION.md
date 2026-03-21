@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v9.3 · Zero-Flicker Initiative · Arcade Solid 3.0
+### Plataforma de Recompensas · v9.5 · Cloudinary CDN Migration · Arcade Solid 3.0
 
 ---
 
@@ -15,6 +15,7 @@
 2g. [Novedades en v9.4 — Identity Update](#2g-novedades-en-v94--identity-update)
 2h. [Novedades en v10.0 — Arcade Solid 3.0](#2h-novedades-en-v100--arcade-solid-30)
 2j. [Novedades en v10.2 — Preview 2.0 Sistema de Mockup Dinámico](#2j-novedades-en-v102--preview-20-sistema-de-mockup-dinámico)
+2k. [Novedades en v9.5 — Cloudinary CDN Migration](#2k-novedades-en-v95--cloudinary-cdn-migration)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -381,6 +382,89 @@ El `.player-hud` permanece en `opacity: 0` en **ambos caminos** hasta el `reveal
 | `app.js` | `migrateState`: +`nickname`, +`gender`. `GameCenter`: +`setIdentity`, +`getIdentity`, +`hasIdentity`. Nueva función `applyIdentity()`. INIT síncrono: llama a `applyIdentity()`. |
 | `index.html` | HUD: `hud-greeting` con `<span id="pref-suffix">`, `hud-name` con `id="display-nickname"`. Identity Modal completo. Inline script: lógica condicional `hasIdentity → revealUI / modal`. |
 | `styles.css` | `.identity-modal-overlay`, `.identity-modal-box`, `.identity-chips`, `.identity-chip`, `.identity-chip--active`, `.identity-input`, `.identity-char-count`, `.identity-input-error`, `.identity-confirm-btn`. `.hud-name`: +`min-height`. |
+
+---
+
+## 2k. Novedades en v9.5 — Cloudinary CDN Migration
+
+### Resumen
+
+Se eliminan las carpetas locales `assets/product-thumbs/` y `assets/cover/` del proyecto. Todas las imágenes de producto y carátulas de juegos se sirven desde Cloudinary, lo que reduce el peso del repositorio, mejora los tiempos de carga con transformaciones on-the-fly y unifica el pipeline de imágenes en un único origen.
+
+### Cambios por archivo
+
+| Archivo | Cambio |
+|---|---|
+| `data/shop.json` | El campo `image` de cada producto ya no apunta a `assets/product-thumbs/`. Ahora es una URL Cloudinary con `ar_16:9,c_fill,g_auto,w_640`. |
+| `index.html` | Las 9 carátulas de juegos (`card-cover`) usan URLs Cloudinary `ar_16:9,c_fill,g_auto,w_1080` en lugar de `assets/cover/`. |
+| `js/app.js` | `getDownloadUrl()` ahora devuelve la URL maestra de Cloudinary sin extensión ni transformaciones: `https://res.cloudinary.com/dyspgn0sw/image/upload/{public_id}`. |
+| `js/shop-logic.js` | Nueva función privada `_getMockupUrl(item)`. `openPreviewModal()` usa `_getMockupUrl()` en lugar de `CONFIG.wallpapersPath + item.file`. |
+
+---
+
+### Estructura de URLs Cloudinary
+
+| Uso | Transformación | Ejemplo |
+|---|---|---|
+| **Thumbnail del catálogo** | `f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640` | `…/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/rouge_the_bat_a94a3cca` |
+| **Carátula de juego** | `f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080` | `…/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/2048_cover_art` |
+| **Mockup Mobile** | `f_auto,q_auto,ar_9:20,c_fill,w_500` | `…/f_auto,q_auto,ar_9:20,c_fill,w_500/rouge_the_bat_a94a3cca` |
+| **Mockup PC** | `f_auto,q_auto,ar_16:9,c_fill,w_1200` | `…/f_auto,q_auto,ar_16:9,c_fill,w_1200/shadow_the_hedgehog_6ff623c4` |
+| **Descarga / Email** | *(ninguna — master original)* | `…/rouge_the_bat_a94a3cca` |
+
+> **Nota:** todas las URLs usan el **public ID sin extensión**. Cloudinary resuelve el formato de entrega automáticamente con `f_auto` (WebP en navegadores compatibles, JPEG/PNG como fallback).
+
+---
+
+### `_getMockupUrl(item)` — Detalles de implementación
+
+```javascript
+function _getMockupUrl(item) {
+    const CDN_BASE = 'https://res.cloudinary.com/dyspgn0sw/image/upload/';
+    const tags     = Array.isArray(item.tags) ? item.tags : [];
+    const base     = item.file.replace(/\.[^.]+$/, ''); // strip extension → public ID
+
+    if (tags.includes('Mobile')) {
+        return `${CDN_BASE}f_auto,q_auto,ar_9:20,c_fill,w_500/${base}`;
+    }
+    return `${CDN_BASE}f_auto,q_auto,ar_16:9,c_fill,w_1200/${base}`;
+}
+```
+
+La función es **self-contained**: no depende de `window.CONFIG` ni de ningún estado externo, lo que la hace segura de llamar en cualquier momento del ciclo de vida del módulo.
+
+---
+
+### Flujo de imágenes en el modal de preview (v9.5)
+
+```
+openPreviewModal(item)
+    │
+    ├── Phase 1 (instant)
+    │     artEl.style.backgroundImage = item.image   ← thumbnail CDN w_640 (ya en caché)
+    │     artEl.classList.add('mockup-bg-loading')   ← estado visual de carga
+    │
+    └── Phase 2 (async — Image() background load)
+          wallpaperPath = _getMockupUrl(item)         ← Mobile:w_500 / PC:w_1200
+          hiRes.src = wallpaperPath
+                │
+                ├─ onload → artEl.backgroundImage = wallpaperPath
+                │           artEl.classList → 'mockup-bg-ready'
+                └─ onerror → graceful degradation (thumbnail persiste)
+```
+
+---
+
+### Guía de mantenimiento actualizada
+
+Para **agregar un wallpaper nuevo** a partir de v9.5:
+
+1. Subir el archivo a Cloudinary. El public ID debe seguir el patrón `{nombre}_{hash8}` (sin extensión en el ID).
+2. Añadir la entrada en `data/shop.json`:
+   - `"image"`: `https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/{public_id}`
+   - `"file"`: nombre del archivo original incluyendo extensión (ej: `rouge_the_bat_a94a3cca.webp`)
+   - `"tags"`: debe incluir `"Mobile"` o `"PC"` para que `_getMockupUrl()` seleccione la transformación correcta.
+3. No es necesario generar thumbnails locales ni tocar JS o HTML.
 
 ---
 
@@ -1094,9 +1178,10 @@ love_arcade/
 │
 ├── wallpapers/             # Carpeta local legacy (reemplazada por Cloudinary CDN)
 ├── assets/
-│   ├── default_avatar.png
-│   ├── product-thumbs/
-│   └── cover/
+│   └── default_avatar.png
+│
+│   # assets/product-thumbs/ → ELIMINADA en v9.5 (Cloudinary CDN Migration)
+│   # assets/cover/          → ELIMINADA en v9.5 (Cloudinary CDN Migration)
 │
 └── games/
     ├── Shooter/
@@ -2147,9 +2232,12 @@ importSave(code)
 
 ### Agregar un wallpaper nuevo
 
-1. Preparar archivos: `assets/product-thumbs/{nombre}_{hash8}_thumbs.webp` (thumbnail local) y subir el wallpaper a Cloudinary bajo la URL `https://res.cloudinary.com/dyspgn0sw/image/upload/{nombre}_{hash8}.ext`.
-2. Añadir entrada en `data/shop.json` con ID consecutivo único y tags que incluyan al menos `"PC"` o `"Mobile"`.
-3. Subir el commit. No es necesario tocar JS ni HTML.
+1. Subir el archivo a Cloudinary. El public ID debe seguir el patrón `{nombre}_{hash8}` (sin extensión).
+2. Añadir entrada en `data/shop.json`:
+   - `"image"`: URL Cloudinary con transformación thumbnail → `f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/{public_id}`
+   - `"file"`: nombre del archivo original con extensión (ej: `rouge_the_bat_a94a3cca.webp`)
+   - `"tags"`: debe incluir `"Mobile"` o `"PC"` para que `_getMockupUrl()` seleccione la transformación correcta.
+3. No es necesario generar thumbnails locales, crear carpetas, ni tocar JS o HTML.
 
 ### Activar una oferta especial
 

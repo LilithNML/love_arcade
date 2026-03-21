@@ -473,9 +473,12 @@ window.GameCenter = {
 
     getDownloadUrl: (itemId, fileName) => {
         if (!fileName) return null;
-        return (store.inventory[itemId] || 0) > 0
-            ? CONFIG.wallpapersPath + fileName
-            : null;
+        if ((store.inventory[itemId] || 0) === 0) return null;
+        // Strip file extension — Cloudinary download URL uses the base public ID
+        // without extension or transformation parameters so the original master
+        // file is served (no crop, no resize, no format override).
+        const base = fileName.replace(/\.[^.]+$/, '');
+        return CONFIG.wallpapersPath + base;
     },
 
     // ── WISHLIST ─────────────────────────────────────────────────────────────
