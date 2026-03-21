@@ -17,6 +17,7 @@
 2j. [Novedades en v10.2 — Preview 2.0 Sistema de Mockup Dinámico](#2j-novedades-en-v102--preview-20-sistema-de-mockup-dinámico)
 2k. [Novedades en v9.5 — Cloudinary CDN Migration](#2k-novedades-en-v95--cloudinary-cdn-migration)
 2l. [Novedades en v9.6 — CDN Offline Resilience](#2l-novedades-en-v96--cdn-offline-resilience)
+2m. [Novedades en v9.6 — SVG Sprite Migration](#2m-novedades-en-v96--svg-sprite-migration-fase-1--icon-performance)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -62,7 +63,7 @@ Love Arcade es una **plataforma de recompensas sin backend** construida con HTML
 | **CSS** | Reescrito con arquitectura Mobile-First. Los estilos base aplican a móvil; los overrides de desktop usan `@media (min-width: 768px)`. |
 | **UI Móvil** | El "Hero Balance" (banner grande de monedas) se oculta en móvil mediante `display: none` en el CSS base. El saldo ya es visible en la Navbar superior. |
 | **UI Móvil** | La grilla de productos en la tienda usa `repeat(2, 1fr)` como base (2 columnas en móvil), en lugar de 1 columna. |
-| **Iconografía** | Todos los emojis funcionales (`🌙`, `⚡`, `♥`) han sido reemplazados por nodos `<i data-lucide="...">` de la librería Lucide ya integrada. |
+| **Iconografía** | Todos los emojis funcionales (`🌙`, `⚡`, `♥`) han sido reemplazados por `<svg class="icon"><use href="#icon-NAME">`. Los iconos se sirven desde un SVG Sprite estático definido en `index.html` (v9.6). |
 | **Filtros** | Los filtros del catálogo se simplifican a: Todos, PC, Mobile y Mis Lista. Se eliminan Anime, Gaming, Sonic, DragonBall y Genshin. |
 | **Wishlist** | Nuevo filtro "Mis Lista" para ver solo los ítems marcados con el corazón. |
 | **Wishlist** | Indicador de coste: muestra cuántas monedas faltan para comprar toda la lista. |
@@ -197,7 +198,7 @@ La "inteligencia" de la página (JavaScript) se ejecutaba demasiado tarde. El na
 **Solución:** Script crítico inline en `<head>`, que se ejecuta síncronamente **antes del primer layout/paint**.
 
 ```html
-<!-- En <head>, justo antes de Lucide -->
+<!-- En <head>, antes del script crítico de tema -->
 <script>
 !function(){
   var KEY='gamecenter_v6_promos';
@@ -564,6 +565,90 @@ Añadido en `renderShop()` y `renderLibrary()`. El manejador se auto-elimina (`t
 
 ---
 
+## 2m. Novedades en v9.6 — SVG Sprite Migration (Fase 1 — Icon Performance)
+
+### Motivación
+
+`lucide.createIcons()` se ejecutaba en cada transición de vista dentro de `_applyView()` y en cada render parcial del catálogo. En dispositivos de gama media/baja esto generaba un pico de CPU de ~200–500 ms que bloqueaba el hilo principal, causaba reflows por reemplazo de nodos SVG, y producía un parpadeo perceptible donde los iconos "aparecían" un instante después que el resto del contenido.
+
+Adicionalmente, la librería Lucide (~90 KB) se cargaba desde `unpkg.com` en el critical path, añadiendo un round-trip de red innecesario.
+
+### Solución: SVG Sprite Estático
+
+Se reemplaza el sistema dinámico de Lucide por un bloque `<svg>` oculto al inicio del `<body>` que contiene 47 símbolos (`<symbol id="icon-NAME">`). Cada icono se referencia con el patrón nativo:
+
+```html
+<!-- Antes (Lucide dinámico) -->
+<i data-lucide="shopping-bag" size="20"></i>
+
+<!-- Ahora (SVG Sprite estático) -->
+<svg class="icon" width="20" height="20" aria-hidden="true">
+    <use href="#icon-shopping-bag"></use>
+</svg>
+```
+
+El navegador clona cada símbolo vía Shadow DOM interno: sin scripting, sin reflow, pintado atómico desde el primer frame de cada transición.
+
+### Clase CSS `.icon`
+
+Se añade en `styles.css` la clase base `.icon` y variantes para casos de fill explícito:
+
+```css
+.icon {
+    display: inline-block;
+    vertical-align: middle;
+    flex-shrink: 0;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+    pointer-events: none;
+}
+
+/* Variantes de fill para iconos con relleno explícito */
+.icon--star-filled  { fill: #fbbf24; stroke: none; }  /* precio, coin-badge */
+.icon--zap-filled   { fill: currentColor; stroke: none; }  /* sale badge */
+.icon--heart-filled { fill: currentColor; stroke: none; }  /* wishlist activo */
+```
+
+> **Nota para desarrollo:** Los iconos generados dinámicamente en templates HTML dentro de `shop-logic.js` deben usar el helper `_icon(name, size, opts)` en lugar de la antigua sintaxis `<i data-lucide>`.
+
+### Helper `_icon()` en `shop-logic.js`
+
+```javascript
+// Genera markup SVG Sprite para usar en innerHTML de templates
+_icon('download', 14)
+// → <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-download"></use></svg>
+
+_icon('star', 13, { fill: '#fbbf24', stroke: 'none' })
+// → <svg class="icon" width="13" height="13" style="fill:#fbbf24;stroke:none" aria-hidden="true">...
+
+_icon('heart', 12, { cls: 'wishlist-icon' })
+// → <svg class="icon wishlist-icon" width="12" height="12" aria-hidden="true">...
+```
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `index.html` | SVG Sprite (47 `<symbol>`) inyectado al inicio del `<body>`. Los 70 nodos `<i data-lucide>` reemplazados por `<svg class="icon"><use>`. `<script src="unpkg.com/lucide">` eliminado. `lucide.createIcons()` inline eliminado. |
+| `spa-router.js` | `lucide.createIcons()` eliminado de `_applyView()`. JSDoc actualizado. Versión actualizada a v9.6. |
+| `app.js` | 3 llamadas a `lucide.createIcons()` eliminadas (DOMContentLoaded + 2 handlers de avatar upload). |
+| `shop-logic.js` | `refreshIcons()` convertida a no-op documentado. Añadido helper `_icon(name, size, opts)`. Todos los `<i data-lucide>` en template strings reemplazados por `<svg><use>`. Llamadas a `lucide.createIcons()` eliminadas. |
+| `styles.css` | Añadida clase `.icon` (stroke base, sin fill) y variantes `.icon--star-filled`, `.icon--zap-filled`, `.icon--heart-filled`. |
+
+### Resultado
+
+| Métrica | Antes | Después |
+|---|---|---|
+| Coste de scripting por transición | ~200–500 ms (CPU) | 0 ms |
+| Round-trips de red para iconos | 1 (CDN Lucide ~90 KB) | 0 |
+| Parpadeo de iconos en transición | Visible (~1 frame) | Eliminado |
+| Nodos del DOM creados/destruidos | Por cada transición | 0 (sprite cachado) |
+
+---
+
 ## 2h. Novedades en v10.0 — Arcade Solid 3.0
 
 ### Visión General
@@ -768,7 +853,7 @@ Ambos mantienen el borde de 1px con `--border-subtle`. Los pseudo-elementos `::b
 │   1. js/app.js          → GameCenter API, store, updateUI            │
 │   2. js/shop-logic.js   → Catálogo, compras, sync, ajustes          │
 │   3. js/spa-router.js   → Navegación SPA sin recargas                │
-│   4. Inline script      → lucide.createIcons(), HomeView lógica      │
+│   4. Inline script      → HomeView lógica (countdown, racha)         │
 │                                                                      │
 │   Persistencia:   localStorage "gamecenter_v6_promos"                │
 │   Web Worker:     js/sync-worker.js  (SHA-256 + Base64)              │
@@ -1378,7 +1463,7 @@ Sin cambios en la lógica de negocio. Las únicas modificaciones en v8.0 son:
 | `'Activar Bendición Lunar (100 🪙)'` | `'Activar Bendición Lunar (100 monedas)'` |
 | Badge title: `'🌙 Bendición Lunar activa hasta…'` | `'Bendición Lunar activa hasta…'` |
 
-La representación visual de la luna es ahora responsabilidad exclusiva del icono Lucide `<i data-lucide="moon">` en el HTML.
+La representación visual de la luna es ahora responsabilidad exclusiva del icono SVG Sprite `<svg class="icon"><use href="#icon-moon"></use></svg>` en el HTML.
 
 La función `updateMoonBlessingUI()` actualiza el `<span class="moon-blessing-badge">` (que ya contiene el icono SVG) mostrándolo u ocultándolo con la clase `hidden`. Ya no modifica el `textContent` del badge porque ese contenido es el icono SVG.
 
@@ -1546,11 +1631,11 @@ Añadido dentro de `#tab-catalog`, inicialmente oculto. Se hace visible cuando `
 
 ```html
 <div id="shop-error-state" class="shop-error-state hidden" role="alert">
-    <i data-lucide="wifi-off" size="40"></i>
+    <svg class="icon" width="40" height="40"><use href="#icon-wifi-off"></use></svg>
     <p class="shop-error-title">No se pudo cargar el catálogo</p>
     <p class="shop-error-desc">Revisa tu conexión e inténtalo de nuevo.</p>
     <button id="btn-retry-shop" class="btn-primary">
-        <i data-lucide="refresh-cw" size="14"></i>
+        <svg class="icon" width="14" height="14"><use href="#icon-refresh-cw"></use></svg>
         Reintentar
     </button>
 </div>
@@ -1591,7 +1676,7 @@ El botón `#btn-retry-shop` es enlazado por `loadCatalog()` en `shop-logic.js`.
   <script src="js/app.js"></script>
   <script src="js/shop-logic.js"></script>
   <script src="js/spa-router.js"></script>
-  <script>/* lucide + HomeView logic */</script>
+  <script>/* HomeView logic (countdown, racha) */</script>
 </body>
 ```
 
@@ -1648,7 +1733,7 @@ Contiene toda la lógica que anteriormente vivía como script inline en `shop.ht
 | `window.ECONOMY` | `js/app.js` |
 | `window.debounce` | `js/app.js` |
 | `window.MailHelper` | `js/app.js` |
-| `window.lucide` | CDN `unpkg.com/lucide` |
+| SVG Sprite (iconos) | `index.html` — sprite estático inline, sin CDN (v9.6) |
 | `window.confetti` | CDN `cdn.jsdelivr.net/canvas-confetti` |
 
 ### API pública expuesta
@@ -1759,9 +1844,10 @@ Función interna que aplica la transición SIN tocar el historial. Es la que lla
 1. Alterna `.hidden` entre `#view-home` y `#view-shop`.
 2. Actualiza clases `.active` en navbar y bottom-nav.
 3. Llama a `window.GameCenter.syncUI()`.
-4. Llama a `lucide.createIcons()`.
-5. `window.scrollTo({ top: 0, behavior: 'instant' })` o scroll suave al anchor.
-6. Ejecuta el callback de vista: `window.HomeView.refresh()` o `window.ShopView.onEnter()`.
+4. `window.scrollTo({ top: 0, behavior: 'instant' })` o scroll suave al anchor.
+5. Ejecuta el callback de vista: `window.HomeView.refresh()` o `window.ShopView.onEnter()`.
+
+> **[v9.6]** Se eliminó el paso `lucide.createIcons()` que existía entre los pasos 3 y 4. Los iconos son ahora SVG Sprite estáticos presentes desde el primer frame de la transición.
 
 ### History API — botón Atrás/Adelante (v9.1)
 
@@ -1933,7 +2019,7 @@ Ambas tienen `will-change: transform` para promoverse a capas GPU antes del prim
 .pill--wishlist.active { background: #ff4f7a; border-color: #ff4f7a; }
 ```
 
-**`.wishlist-btn--active svg path`** — Rellena el corazón SVG de Lucide vía CSS:
+**`.wishlist-btn--active svg path`** — Rellena el corazón SVG Sprite vía CSS:
 ```css
 .wishlist-btn--active svg path,
 .wishlist-btn--active svg circle { fill: currentColor !important; }
@@ -1956,7 +2042,7 @@ Ambas tienen `will-change: transform` para promoverse a capas GPU antes del prim
 .shop-card .card-desc-text { font-size: 0.76rem; -webkit-line-clamp: 2; /* desktop: 0.82rem, clamp 3 */ }
 ```
 
-**`.moon-blessing-badge`** — Actualizado para ser compatible con el icono SVG Lucide:
+**`.moon-blessing-badge`** — Actualizado para ser compatible con el icono SVG Sprite:
 ```css
 .moon-blessing-badge {
     display: inline-flex; align-items: center; justify-content: center;
@@ -2075,14 +2161,14 @@ Esto garantiza que un usuario que reclamó a las **23:59** puede volver a reclam
 
 ## 14. Bendición Lunar
 
-Sin cambios funcionales en v8.0. La representación visual migra de emoji a icono Lucide.
+Sin cambios funcionales en v8.0. La representación visual migra de emoji a icono SVG Sprite (v9.6).
 
 | Parámetro | Valor |
 |---|---|
 | Costo de activación | 100 monedas |
 | Efecto | +90 monedas por cada reclamo diario |
 | Vigencia | 7 días reales desde la activación |
-| Indicador UI | Icono `<i data-lucide="moon">` animado junto al saldo |
+| Indicador UI | Icono `<svg class="icon"><use href="#icon-moon">` animado junto al saldo |
 
 ### Comportamiento v9.6: Bendición Lunar sin dependencia de red
 
@@ -2349,8 +2435,8 @@ Editar el objeto `ECONOMY` en `app.js`. Ver `ECONOMIA.md` para referencia comple
 Si se decide restaurar los filtros eliminados en v8.0, agregar las pills en `shop.html`:
 
 ```html
-<button class="pill" data-filter="Anime"><i data-lucide="sparkles" size="11"></i> Anime</button>
-<button class="pill" data-filter="Gaming"><i data-lucide="gamepad-2" size="11"></i> Gaming</button>
+<button class="pill" data-filter="Anime"><svg class="icon" width="11" height="11"><use href="#icon-sparkles"></use></svg> Anime</button>
+<button class="pill" data-filter="Gaming"><svg class="icon" width="11" height="11"><use href="#icon-gamepad-2"></use></svg> Gaming</button>
 <!-- etc. -->
 ```
 
@@ -2398,7 +2484,7 @@ const filteredTags = item.tags;
 | Edge | 89+ |
 | Hosting | Cualquier servidor estático (GitHub Pages, Netlify) |
 | Backend | Ninguno |
-| Dependencias | Lucide Icons (CDN), canvas-confetti (CDN) |
+| Dependencias | canvas-confetti (CDN) — único CDN externo desde v9.6 |
 
 > La `Clipboard API` (`navigator.clipboard.writeText`) requiere HTTPS o localhost. En entornos sin HTTPS, `handleExport()` tiene un fallback con `document.execCommand('copy')`. Si ambos fallan, el archivo `.txt` igualmente se descarga.
 

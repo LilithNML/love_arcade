@@ -46,7 +46,7 @@
  *    en lugar de reimplementar el patrón navigator.clipboard + execCommand.
  *  - _noCtxHandler movido a variable de cierre del módulo (ya no muta el DOM).
  *  - btn-reset-filters escuchado vía JS en DOMContentLoaded (elimina onclick inline).
- *  - lucide.createIcons() siempre scoped con { nodes: [...] } en renders parciales.
+ *  - [v9.6] lucide.createIcons() eliminado. Iconos servidos como SVG Sprite estático.
  *
  * NOVEDADES v9.1:
  *  - loadCatalog(): función encapsulada con manejo de errores y reintento.
@@ -60,7 +60,7 @@
  *
  * DEPENDENCIAS (deben estar cargadas ANTES en el DOM):
  *  - js/app.js          → window.GameCenter, window.ECONOMY, window.debounce, window.MailHelper
- *  - lucide             → window.lucide
+ *  - [v9.6] lucide eliminado. _icon() helper genera referencias al SVG Sprite.
  *  - canvas-confetti    → window.confetti
  *
  * OPTIMIZACIONES DE RENDIMIENTO:
@@ -71,7 +71,7 @@
  *  - El confetti solo se dispara cuando la pestaña está activa (document.hidden check).
  *  - will-change en tarjetas: gestionado en CSS vía :hover, no en JS. Esto evita
  *    promover N capas GPU simultáneas cuando el catálogo está estático.
- *  - lucide.createIcons() siempre se invoca con { nodes: [container] } en renders
+ *  - [v9.6] lucide.createIcons() eliminado — sin escaneo dinámico del DOM.
  *    parciales para evitar el scan del DOM completo.
  *
  * NOTAS SPA:
@@ -98,28 +98,40 @@ let _stageCtxHandler = null;
 // usuarios de teclado no pierdan su posición en el flujo de la interfaz (WCAG 2.4.3).
 let _lastFocusedElement = null;
 
-// ── Utilidad de iconos ─────────────────────────────────────────────────────────
+// ── Utilidad de iconos (v9.6 — SVG Sprite) ───────────────────────────────────
 /**
- * Inicializa o refresca los iconos Lucide dentro de un contenedor específico.
+ * [v9.6] refreshIcons() es ahora un no-op. Los iconos se sirven como SVG Sprite
+ * estático definido en index.html. No hay escaneo dinámico del DOM, no hay
+ * reflow por reemplazo de nodos, y no hay dependencia de window.lucide.
  *
- * REGLA DE RENDIMIENTO: Nunca llamar lucide.createIcons() sin scope en renders
- * parciales. Un scan global del DOM completo en cada pulsación de teclado del
- * buscador o en cada toggle de wishlist duplica el trabajo en la SPA porque
- * ambas vistas (home + shop) están cargadas simultáneamente.
+ * La función se mantiene declarada para compatibilidad con cualquier llamada
+ * existente en el codebase; su cuerpo está intencionalmente vacío.
  *
- * USO CORRECTO:
- *   refreshIcons(container)  → escanea solo el subárbol del contenedor
- *   refreshIcons()           → scan global — SOLO en init inicial del DOM
- *
- * @param {HTMLElement|null} [container]  Nodo raíz del scan. null = global (solo init).
+ * @param {HTMLElement|null} [container]  Ignorado — parámetro preservado por API.
  */
-function refreshIcons(container) {
-    if (!window.lucide) return;
-    if (container) {
-        lucide.createIcons({ nodes: [container] });
-    } else {
-        lucide.createIcons();
-    }
+// eslint-disable-next-line no-unused-vars
+function refreshIcons(_container) { /* no-op: SVG Sprite estático v9.6 */ }
+
+/**
+ * Helper: genera el markup de un icono SVG Sprite.
+ * Reemplaza el patrón <svg class="icon" aria-hidden="true"><use href="#icon-NAME"></use></svg> eliminado en v9.6.
+ *
+ * @param {string} name      - Nombre del icono (ej: "download", "heart").
+ * @param {number} [size=16] - Ancho y alto en px.
+ * @param {Object} [opts]    - Opciones adicionales.
+ * @param {string} [opts.fill]   - Valor CSS para fill (ej: "#fbbf24", "currentColor").
+ * @param {string} [opts.stroke] - Valor CSS para stroke (ej: "none").
+ * @param {string} [opts.cls]    - Clases CSS adicionales.
+ * @returns {string} Markup SVG listo para insertar en innerHTML.
+ */
+function _icon(name, size = 16, opts = {}) {
+    const w = size;
+    const styleArr = [];
+    if (opts.fill !== undefined)   styleArr.push(`fill:${opts.fill}`);
+    if (opts.stroke !== undefined) styleArr.push(`stroke:${opts.stroke}`);
+    const style = styleArr.length ? ` style="${styleArr.join(';')}"` : '';
+    const cls   = opts.cls ? `icon ${opts.cls}` : 'icon';
+    return `<svg class="${cls}" width="${w}" height="${w}"${style} aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
 }
 
 // ── Confirm Modal ─────────────────────────────────────────────────────────────
@@ -642,10 +654,10 @@ function openPreviewModal(itemOrId) {
         const url = GameCenter.getDownloadUrl(item.id, item.file);
         actionsEl.innerHTML = url
             ? `<a href="${url}" download class="btn-primary vault-btn" style="flex:1; justify-content:center;">
-                   <i data-lucide="download" size="14"></i> Descargar
+                   <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-download"></use></svg> Descargar
                </a>`
             : `<button class="btn-primary" style="flex:1; justify-content:center; opacity:0.5;" disabled>
-                   <i data-lucide="check" size="14"></i> Obtenido
+                   <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-check"></use></svg> Obtenido
                </button>`;
         actionsEl.innerHTML +=
             `<button class="btn-ghost" style="flex:1; justify-content:center;" id="preview-close-btn">Volver</button>`;
@@ -654,7 +666,7 @@ function openPreviewModal(itemOrId) {
             `<button class="btn-ghost" style="flex:1; justify-content:center;" id="preview-close-btn">Volver</button>
              <button class="btn-primary preview-buy-btn" style="flex:2; justify-content:center;"
                      data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
-                 <i data-lucide="star" size="13" fill="#fbbf24" stroke="none"></i>
+                 <svg class="icon" width="13" height="13" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
                  Canjear · ${finalPrice}
              </button>`;
     }
@@ -849,7 +861,6 @@ function updateWishlistCost() {
         : `¡Tienes saldo para toda tu lista! (<strong>${count}</strong> ítem${plural})`;
 
     banner.classList.remove('hidden');
-    if (window.lucide) lucide.createIcons({ nodes: [banner] });
 }
 
 // ── Render: Streak Calendar ───────────────────────────────────────────────────
@@ -868,12 +879,10 @@ function renderStreakCalendar() {
         return `<div class="streak-cal-day">
             <span class="streak-cal-label">${day}</span>
             <div class="${cls}" title="${rewards[i]} monedas">
-                ${i < streak ? '<i data-lucide="check" size="10"></i>' : rewards[i]}
+                ${i < streak ? '<svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-check"></use></svg>' : rewards[i]}
             </div>
         </div>`;
     }).join('');
-
-    if (window.lucide) lucide.createIcons({ nodes: [cal] });
 }
 
 // ── Render: Catálogo ──────────────────────────────────────────────────────────
@@ -892,11 +901,11 @@ function renderShop(items) {
         const priceHTML = eco.isSaleActive && !isOwned
             ? `<div class="shop-price">
                    <span class="price-original">${item.price}</span>
-                   <i data-lucide="star" size="11" fill="#fbbf24" stroke="none"></i>
+                   <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
                    <span class="price-sale">${finalPrice}</span>
                </div>`
             : `<div class="shop-price">
-                   <i data-lucide="star" size="11" fill="#fbbf24" stroke="none"></i>
+                   <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
                    ${isOwned ? '<span style="color:var(--success);">Obtenido</span>' : item.price}
                </div>`;
 
@@ -906,12 +915,12 @@ function renderShop(items) {
             actionHTML = url
                 ? `<a href="${url}" download class="btn-primary vault-btn"
                        style="width:100%; justify-content:center; font-size:0.78rem; padding:7px;">
-                       <i data-lucide="download" size="13"></i> Descargar
+                       <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-download"></use></svg> Descargar
                    </a>`
                 : `<button class="btn-primary"
                        style="width:100%; justify-content:center; opacity:0.5; font-size:0.78rem; padding:7px;"
                        disabled>
-                       <i data-lucide="check" size="13"></i> Obtenido
+                       <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-check"></use></svg> Obtenido
                    </button>`;
         } else {
             actionHTML =
@@ -919,12 +928,12 @@ function renderShop(items) {
                     <button class="btn-ghost shop-preview-btn"
                             style="flex-shrink:0; padding:7px 9px;"
                             data-id="${item.id}" title="Vista previa">
-                        <i data-lucide="eye" size="13"></i>
+                        <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-eye"></use></svg>
                     </button>
                     <button class="btn-primary shop-buy-btn"
                             style="flex:1; justify-content:center; font-size:0.78rem; padding:7px;"
                             data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
-                        <i data-lucide="star" size="11" fill="#fbbf24" stroke="none"></i> ${finalPrice}
+                        <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg> ${finalPrice}
                     </button>
                 </div>`;
         }
@@ -938,14 +947,14 @@ function renderShop(items) {
                 ? `<button class="wishlist-btn ${isWished ? 'wishlist-btn--active' : ''}"
                            data-id="${item.id}"
                            title="${isWished ? 'Quitar de lista' : 'Agregar a lista de deseos'}">
-                       <i data-lucide="heart" size="12"></i>
+                       <svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>
                    </button>`
                 : ''}
             <img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy"
                  onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
-            ${isOwned ? '<div class="owned-badge"><i data-lucide="check-circle-2" size="10"></i> Tuyo</div>' : ''}
+            ${isOwned ? '<div class="owned-badge"><svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-check-circle-2"></use></svg> Tuyo</div>' : ''}
             ${eco.isSaleActive && !isOwned
-                ? '<div class="sale-card-badge"><i data-lucide="zap" size="9" fill="currentColor" stroke="none"></i> OFERTA</div>'
+                ? '<div class="sale-card-badge"><svg class="icon" width="9" height="9" style="fill:currentColor;stroke:none" aria-hidden="true"><use href="#icon-zap"></use></svg> OFERTA</div>'
                 : ''}
             <div style="width:100%;">
                 <h3 class="card-name">${item.name}</h3>
@@ -964,8 +973,7 @@ function renderShop(items) {
             const isNow = GameCenter.toggleWishlist(id);
             btn.classList.toggle('wishlist-btn--active', isNow);
             btn.title = isNow ? 'Quitar de lista' : 'Agregar a lista de deseos';
-            btn.innerHTML = '<i data-lucide="heart" size="12"></i>';
-            if (window.lucide) lucide.createIcons({ nodes: [btn] });
+            btn.innerHTML = '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>';
             updateWishlistCost();
         });
     });
@@ -1004,7 +1012,7 @@ function renderLibrary(items) {
     if (owned.length === 0) {
         container.innerHTML =
             `<div style="grid-column:1/-1; text-align:center; padding:60px 20px; color:var(--text-low);">
-                <i data-lucide="archive" size="40" style="opacity:0.25; display:block; margin:0 auto 12px;"></i>
+                <svg class="icon" width="40" height="40" aria-hidden="true"><use href="#icon-archive"></use></svg>
                 <p style="font-family:var(--font-display); font-size:1rem; font-weight:700; color:var(--text-med);">Tu biblioteca está vacía</p>
                 <p style="font-size:0.8rem; margin-top:6px;">Canjea wallpapers en el Catálogo.</p>
             </div>`;
@@ -1024,26 +1032,26 @@ function renderLibrary(items) {
                    <a href="${url}" download
                       class="btn-primary vault-btn"
                       style="flex:1; justify-content:center; font-size:0.78rem; padding:7px;">
-                       <i data-lucide="download" size="13"></i> Descargar
+                       <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-download"></use></svg> Descargar
                    </a>
                    <button class="btn-mail library-mail-btn"
                            data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'
                            data-url="${url}"
                            aria-label="Enviar enlace de descarga por correo para ${item.name.replace(/"/g, '&quot;')}"
                            title="Enviar por correo">
-                       <i data-lucide="send" size="13"></i>
+                       <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-send"></use></svg>
                    </button>
                </div>`
             : `<button class="btn-primary"
                        style="margin-top:8px; width:100%; justify-content:center; opacity:0.5; font-size:0.78rem; padding:7px;"
                        disabled>
-                   <i data-lucide="check" size="13"></i> Sin archivo
+                   <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-check"></use></svg> Sin archivo
                </button>`;
 
         card.innerHTML =
             `<img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy"
                   onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
-            <div class="owned-badge"><i data-lucide="check-circle-2" size="10"></i> Tuyo</div>
+            <div class="owned-badge"><svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-check-circle-2"></use></svg> Tuyo</div>
             <div style="width:100%;">
                 <h3 class="card-name">${item.name}</h3>
                 ${actionsHTML}
@@ -1447,7 +1455,6 @@ async function _handleEmailConfirm() {
     if (tooLong) {
         if (fallbackEl) fallbackEl.classList.add('visible');
         if (fallUrlEl)  fallUrlEl.textContent = _emailAbsoluteUrl;
-        if (window.lucide) lucide.createIcons({ nodes: [fallbackEl] });
 
         const copyBtn = document.getElementById('email-copy-btn');
         if (copyBtn) {
@@ -1522,9 +1529,8 @@ function loadCatalog() {
         gridEl.classList.remove('hidden');
         gridEl.innerHTML =
             '<p style="color:var(--text-low); grid-column:1/-1; text-align:center; padding:40px 0;">' +
-            '<i data-lucide="loader" size="24" style="display:block; margin:0 auto 10px; opacity:0.4;"></i>' +
+            '<svg class="icon" width="24" height="24" aria-hidden="true"><use href="#icon-loader"></use></svg>' +
             'Cargando catálogo…</p>';
-        if (window.lucide) lucide.createIcons({ nodes: [gridEl] });
     }
 
     fetch('data/shop.json')
@@ -1550,7 +1556,6 @@ function loadCatalog() {
             if (emptyEl) emptyEl.classList.add('hidden');
             if (errorEl) {
                 errorEl.classList.remove('hidden');
-                if (window.lucide) lucide.createIcons({ nodes: [errorEl] });
             }
 
             // Botón de reintento — registrar listener solo una vez usando dataset
@@ -1620,7 +1625,6 @@ document.addEventListener('DOMContentLoaded', () => {
         section.classList.toggle('promo-section--collapsed', expanded);
         section.classList.toggle('promo-section--open', !expanded);
         if (!expanded) setTimeout(() => document.getElementById('promo-input').focus(), 50);
-        if (window.lucide) lucide.createIcons({ nodes: [toggleBtn] });
     });
 
     // ── Cargar catálogo UNA SOLA VEZ (con manejo de errores y reintento) ────────

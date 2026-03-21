@@ -1275,7 +1275,6 @@ applyIdentity();
 document.addEventListener('DOMContentLoaded', () => {
     // Re-sincronizar UI por si algún sub-módulo modificó el DOM
     updateUI();
-    if (window.lucide) lucide.createIcons();
 
     // ── Background time sync (v9.6) ───────────────────────────────────────
     // Se lanza 800 ms después del DOMContentLoaded para no competir con el
@@ -1300,7 +1299,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = new FileReader();
             reader.onload = (evt) => {
                 window.GameCenter.setAvatar(evt.target.result);
-                if (window.lucide) lucide.createIcons();
             };
             reader.readAsDataURL(file);
         });
@@ -1318,7 +1316,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = new FileReader();
             reader.onload = (evt) => {
                 window.GameCenter.setAvatar(evt.target.result);
-                if (window.lucide) lucide.createIcons();
             };
             reader.readAsDataURL(file);
         });
