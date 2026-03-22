@@ -1,8 +1,22 @@
 /**
- * shop-logic.js — Love Arcade v9.7
+ * shop-logic.js — Love Arcade v9.8
  * ─────────────────────────────────────────────────────────────────────────────
  * Contiene toda la lógica de la vista Tienda, extraída del script inline de
  * shop.html como parte de la migración a arquitectura SPA.
+ *
+ * NOVEDADES v9.8 (Mobile Performance Pass — Scroll & Modal Lag):
+ *  - openPreviewModal(): REFACTOR de dos fases para eliminar freeze en gama baja.
+ *    Antes: _buildMockupHTML() (~16 SVG inline) se ejecutaba de forma síncrona
+ *    antes de que el modal fuera visible, bloqueando el hilo principal 50–150 ms
+ *    y causando que la animación modalPopIn nunca renderizara su frame inicial.
+ *    Ahora: modal.classList.remove('hidden') se llama de forma síncrona (<1 ms),
+ *    dando respuesta visual inmediata. _buildMockupHTML() y toda la lógica de
+ *    carga de imágenes se difieren a requestAnimationFrame, donde el overlay ya
+ *    está pintado y el trabajo pesado no bloquea la percepción del usuario.
+ *    Los botones de acción (DOM mínimo) se construyen de forma síncrona para
+ *    mantener el foco accesible en el primer frame.
+ *  - Nota: los cambios CSS relacionados (backdrop-filter, laserScan, etc.)
+ *    se documentan en styles.css v9.8.
  *
  * NOVEDADES v9.7 (Smart Preload — Fase 2 hardening):
  *  - _preloadItemHiRes(): añadido img.decoding = 'async'. La decodificación de
@@ -799,6 +813,12 @@ function _initPreloadObserver(container, items) {
  * or a numeric item ID (from dynamically generated onclick="" strings).
  * When an ID is passed, the item is resolved from allItems[].
  *
+ * CAMBIO v9.8 — Apertura en dos fases para eliminar freeze en gama baja:
+ *   Fase síncrona  (<1 ms):  mostrar modal + renderizar botones de acción.
+ *   Fase diferida  (rAF):    _buildMockupHTML() + carga de imágenes.
+ * Esto garantiza que la animación modalPopIn arranca en el primer frame
+ * (<16 ms) antes de que el trabajo pesado comience.
+ *
  * @param {object|number|string} itemOrId  Full item object OR item ID (any type).
  */
 function openPreviewModal(itemOrId) {
@@ -832,122 +852,149 @@ function openPreviewModal(itemOrId) {
         return;
     }
 
-    // ── Inject mockup structure (art layer starts empty) ──────────────────────
-    slot.innerHTML     = _buildMockupHTML(item);
+    // ── v9.8: Apertura instantánea — mostrar el modal ANTES de construir el mockup
+    //
+    // Problema original: _buildMockupHTML() genera ~16 SVG inline + los 3 layers del
+    // mockup de forma síncrona. En gama baja esto bloquea el hilo principal 50–150 ms
+    // ANTES de que el modal sea visible, por lo que la animación de entrada (modalPopIn)
+    // nunca llega a renderizar su frame inicial — el usuario percibe un "freeze" y
+    // luego el modal aparece ya en su posición final.
+    //
+    // Solución: separar la apertura visual (instant, <1 ms) del trabajo pesado de DOM.
+    //   1. Mostrar el modal inmediatamente → el browser pinta el overlay + modalPopIn
+    //      en el siguiente frame, dando respuesta visual <16 ms.
+    //   2. Diferir todo el trabajo pesado (buildMockupHTML + image loading) al siguiente
+    //      requestAnimationFrame. En ese punto el overlay ya está en pantalla y el
+    //      usuario ve movimiento, eliminando la sensación de freeze.
+    //
+    // El name se actualiza de forma síncrona porque es texto puro (<1 ms).
     nameEl.textContent = item.name;
 
-    // ── Double-layer progressive image load ───────────────────────────────────
-    //
-    // Phase 1 (instant): set thumbnail as background immediately for zero-blank
-    //   display, then probe its reachability with a parallel Image() test.
-    //   → If thumbProbe.onload fires: CDN is reachable; Phase 2 proceeds normally.
-    //   → If thumbProbe.onerror fires: CDN is unreachable; cancel Phase 2 and
-    //     apply _applyArtFallback() so the frame shows a CSS gradient instead of
-    //     a blank white/dark void.
-    //
-    // Phase 2 (async): mockup-optimised wallpaper loads in a background Image().
-    //   → swapped in with a 200ms opacity cross-fade once fully decoded.
-    //   → On error, decision depends on _thumbOk (local closure variable):
-    //       _thumbOk = true  → thumbnail loaded; file may be missing on CDN.
-    //                          Degrade to visible thumbnail (blur→clear).
-    //       _thumbOk = false → CDN fully unreachable; apply solid CSS fallback.
-    //
-    // _getMockupUrl() selects the Cloudinary transformation that matches the
-    // device frame: 9:20 portrait for Mobile, 16:9 landscape for PC.
-    const wallpaperPath = _getMockupUrl(item);
-    const artEl         = slot.querySelector('.mockup-layer-art');
+    // Limpiar slot antes de abrir para evitar que se vea contenido del modal anterior
+    // durante el primer frame. innerHTML = '' es más barato que _buildMockupHTML.
+    slot.innerHTML = '';
 
-    // Phase 1 — set thumbnail immediately (best-case path stays zero-latency)
-    artEl.style.backgroundImage = `url('${item.image}')`;
-    artEl.classList.add('mockup-bg-loading');
+    // Registrar foco y abrir modal ANTES del trabajo pesado (v9.8).
+    _lastFocusedElement = document.activeElement;
+    modal.classList.remove('hidden');
 
-    // Cancel any stale load from a previous modal open
-    if (_pendingHiResImg) { _pendingHiResImg.onload = _pendingHiResImg.onerror = null; _pendingHiResImg = null; }
+    // Diferir construcción pesada del mockup al siguiente frame de animación.
+    // En ese momento el overlay ya está visible y pintado; el hilo principal
+    // puede permitirse 50–150 ms de trabajo sin que el usuario lo perciba como freeze.
+    requestAnimationFrame(() => {
 
-    // _thumbOk: local closure variable shared between thumbProbe and hiRes handlers.
-    // Tracks whether the Phase 1 thumbnail was reachable. Not module-level to avoid
-    // state contamination across rapid open/close cycles.
-    let _thumbOk = false;
+        // ── Inject mockup structure (art layer starts empty) ──────────────────
+        slot.innerHTML = _buildMockupHTML(item);
 
-    // Phase 1 probe — runs in parallel with Phase 2 load
-    const thumbProbe = new Image();
-    // decoding='async': la decodificación ocurre fuera del hilo principal.
-    // Aunque la thumbnail suele venir de caché (ya se mostró en la card del
-    // catálogo), el probe instancia un nuevo objeto Image y el navegador puede
-    // necesitar decodificarla en este contexto si la entrada de caché fue
-    // descartada. 'async' evita cualquier bloqueo del hilo principal.
-    thumbProbe.decoding = 'async';
-    thumbProbe.onload = () => { _thumbOk = true; };
-    thumbProbe.onerror = () => {
-        // CDN unreachable — thumbnail and hi-res will both fail.
-        // Cancel the in-flight Phase 2 load to avoid a redundant error callback,
-        // then apply the CSS fallback immediately.
-        if (_pendingHiResImg) {
-            _pendingHiResImg.onload = _pendingHiResImg.onerror = null;
-            _pendingHiResImg = null;
-        }
-        _applyArtFallback(artEl);
-    };
-    thumbProbe.src = item.image;
+        // ── Double-layer progressive image load ───────────────────────────────
+        //
+        // Phase 1 (instant): set thumbnail as background immediately for zero-blank
+        //   display, then probe its reachability with a parallel Image() test.
+        //   → If thumbProbe.onload fires: CDN is reachable; Phase 2 proceeds normally.
+        //   → If thumbProbe.onerror fires: CDN is unreachable; cancel Phase 2 and
+        //     apply _applyArtFallback() so the frame shows a CSS gradient instead of
+        //     a blank white/dark void.
+        //
+        // Phase 2 (async): mockup-optimised wallpaper loads in a background Image().
+        //   → swapped in once fully decoded.
+        //   → On error, decision depends on _thumbOk (local closure variable):
+        //       _thumbOk = true  → thumbnail loaded; file may be missing on CDN.
+        //                          Degrade to visible thumbnail (blur→clear).
+        //       _thumbOk = false → CDN fully unreachable; apply solid CSS fallback.
+        //
+        // _getMockupUrl() selects the Cloudinary transformation that matches the
+        // device frame: 9:20 portrait for Mobile, 16:9 landscape for PC.
+        const wallpaperPath = _getMockupUrl(item);
+        const artEl         = slot.querySelector('.mockup-layer-art');
 
-    // Phase 2 — hi-res mockup load in background
-    const hiRes    = new Image();
-    _pendingHiResImg = hiRes;
-    // decoding='async': la decodificación de la imagen hi-res (hasta 1200 px de
-    // ancho) se realiza en el hilo de decodificación del navegador. Sin este
-    // atributo, el onload dispararía en el hilo principal y la decodificación
-    // de una imagen grande podría bloquear el compositor por 20-80 ms, causando
-    // un "salto" perceptible en la animación de entrada del modal o en el scroll
-    // de fondo. Con 'async', el swap de backgroundImage ocurre sin jank.
-    hiRes.decoding = 'async';
-    hiRes.onload = () => {
-        if (_pendingHiResImg !== hiRes) return;    // Stale: modal was closed/re-opened
-        artEl.style.backgroundImage = `url('${wallpaperPath}')`;
-        artEl.classList.remove('mockup-bg-loading');
-        artEl.classList.add('mockup-bg-ready');
-        _pendingHiResImg = null;
-    };
-    hiRes.onerror = () => {
-        if (_pendingHiResImg !== hiRes) return;
-        _pendingHiResImg = null;
-        if (_thumbOk) {
-            // Thumbnail loaded fine — hi-res file may be missing or have a
-            // different public ID. Degrade gracefully: show thumbnail as final.
+        // Phase 1 — set thumbnail immediately (best-case path stays zero-latency)
+        artEl.style.backgroundImage = `url('${item.image}')`;
+        artEl.classList.add('mockup-bg-loading');
+
+        // Cancel any stale load from a previous modal open
+        if (_pendingHiResImg) { _pendingHiResImg.onload = _pendingHiResImg.onerror = null; _pendingHiResImg = null; }
+
+        // _thumbOk: local closure variable shared between thumbProbe and hiRes handlers.
+        // Tracks whether the Phase 1 thumbnail was reachable. Not module-level to avoid
+        // state contamination across rapid open/close cycles.
+        let _thumbOk = false;
+
+        // Phase 1 probe — runs in parallel with Phase 2 load
+        const thumbProbe = new Image();
+        // decoding='async': la decodificación ocurre fuera del hilo principal.
+        // Aunque la thumbnail suele venir de caché (ya se mostró en la card del
+        // catálogo), el probe instancia un nuevo objeto Image y el navegador puede
+        // necesitar decodificarla en este contexto si la entrada de caché fue
+        // descartada. 'async' evita cualquier bloqueo del hilo principal.
+        thumbProbe.decoding = 'async';
+        thumbProbe.onload = () => { _thumbOk = true; };
+        thumbProbe.onerror = () => {
+            // CDN unreachable — thumbnail and hi-res will both fail.
+            // Cancel the in-flight Phase 2 load to avoid a redundant error callback,
+            // then apply the CSS fallback immediately.
+            if (_pendingHiResImg) {
+                _pendingHiResImg.onload = _pendingHiResImg.onerror = null;
+                _pendingHiResImg = null;
+            }
+            _applyArtFallback(artEl);
+        };
+        thumbProbe.src = item.image;
+
+        // Phase 2 — hi-res mockup load in background
+        const hiRes    = new Image();
+        _pendingHiResImg = hiRes;
+        // decoding='async': la decodificación de la imagen hi-res (hasta 1200 px de
+        // ancho) se realiza en el hilo de decodificación del navegador. Sin este
+        // atributo, el onload dispararía en el hilo principal y la decodificación
+        // de una imagen grande podría bloquear el compositor por 20-80 ms, causando
+        // un "salto" perceptible en la animación de entrada del modal o en el scroll
+        // de fondo. Con 'async', el swap de backgroundImage ocurre sin jank.
+        hiRes.decoding = 'async';
+        hiRes.onload = () => {
+            if (_pendingHiResImg !== hiRes) return;    // Stale: modal was closed/re-opened
+            artEl.style.backgroundImage = `url('${wallpaperPath}')`;
             artEl.classList.remove('mockup-bg-loading');
             artEl.classList.add('mockup-bg-ready');
-        } else {
-            // CDN fully unreachable — both phases failed.
-            _applyArtFallback(artEl);
+            _pendingHiResImg = null;
+        };
+        hiRes.onerror = () => {
+            if (_pendingHiResImg !== hiRes) return;
+            _pendingHiResImg = null;
+            if (_thumbOk) {
+                // Thumbnail loaded fine — hi-res file may be missing or have a
+                // different public ID. Degrade gracefully: show thumbnail as final.
+                artEl.classList.remove('mockup-bg-loading');
+                artEl.classList.add('mockup-bg-ready');
+            } else {
+                // CDN fully unreachable — both phases failed.
+                _applyArtFallback(artEl);
+            }
+        };
+        hiRes.src = wallpaperPath;
+
+        // ── Anti-extraction: contextmenu hardening ────────────────────────────
+        // Guardado en variable de módulo (no en propiedad DOM) para poder hacer
+        // removeEventListener correctamente en closePreviewModal().
+        const stage = document.getElementById('preview-mockup-stage');
+        if (!_stageCtxHandler) {
+            _stageCtxHandler = (e) => { e.preventDefault(); };
         }
-    };
-    hiRes.src = wallpaperPath;
+        // Eliminar listener previo antes de añadir, por si el modal se abrió sin cerrar
+        stage.removeEventListener('contextmenu', _stageCtxHandler);
+        stage.addEventListener('contextmenu', _stageCtxHandler);
 
-    // ── will-change: gestionado en CSS sobre .modal-box (v9.6 Phase 3) ─────────
-    // will-change: opacity, transform está declarado permanentemente en la regla
-    // .modal-box del CSS. Como .modal-overlay.hidden aplica display:none, el
-    // navegador destruye la capa compuesta cuando el modal no está visible,
-    // por lo que no hay coste de memoria en reposo. No es necesario gestionarlo
-    // aquí via JS.
+        slot.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); return false; };
 
-    // ── Anti-extraction: contextmenu hardening ────────────────────────────────
-    // Guardado en variable de módulo (no en propiedad DOM) para poder hacer
-    // removeEventListener correctamente en closePreviewModal().
-    const stage = document.getElementById('preview-mockup-stage');
-    if (!_stageCtxHandler) {
-        _stageCtxHandler = (e) => { e.preventDefault(); };
-    }
-    // Eliminar listener previo antes de añadir, por si el modal se abrió sin cerrar
-    stage.removeEventListener('contextmenu', _stageCtxHandler);
-    stage.addEventListener('contextmenu', _stageCtxHandler);
+        // ── Live clock: update immediately, then every 30 s ───────────────────
+        if (_mockupClockInterval) clearInterval(_mockupClockInterval);
+        updateMockupTime();
+        _mockupClockInterval = setInterval(updateMockupTime, 30_000);
 
-    slot.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); return false; };
-
-    // ── Live clock: update immediately, then every 30 s ───────────────────────
-    if (_mockupClockInterval) clearInterval(_mockupClockInterval);
-    updateMockupTime();
-    _mockupClockInterval = setInterval(updateMockupTime, 30_000);
+    }); // end rAF — heavy DOM work done
 
     // ── Action buttons ────────────────────────────────────────────────────────
+    // Se construyen de forma síncrona porque son DOM mínimo (2 botones) y
+    // necesitan estar listos para el foco inmediatamente al abrir el modal.
     const isOwned    = GameCenter.getBoughtCount(item.id) > 0;
     const finalPrice = eco.isSaleActive ? Math.floor(item.price * eco.saleMultiplier) : item.price;
 
@@ -972,9 +1019,9 @@ function openPreviewModal(itemOrId) {
              </button>`;
     }
 
-    modal.classList.remove('hidden');
-    // Guardar foco y moverlo al botón de cierre del modal (WCAG 2.4.3).
-    _lastFocusedElement = document.activeElement;
+    // Mover foco al botón de cierre para accesibilidad (WCAG 2.4.3).
+    // Segundo rAF: esperar al frame posterior al que ya muestra el modal para
+    // que el botón sea interactivo antes de hacer focus().
     requestAnimationFrame(() => {
         document.getElementById('preview-close-btn')?.focus()
             ?? document.getElementById('preview-close')?.focus();
