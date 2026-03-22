@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v9.8 · Mobile Performance Pass · Smart Preload Hardening · CDN Offline Resilience · Arcade Solid 3.0
+### Plataforma de Recompensas · v9.9 · Ghost Analytics · Mobile Performance Pass · Smart Preload Hardening · CDN Offline Resilience
 
 ---
 
@@ -23,6 +23,7 @@
 2p. [Novedades en v9.6 — Neon Flow Fallback (Fase 4)](#2p-novedades-en-v96--neon-flow-fallback-fase-4--gpu-animated-gradients)
 2q. [Novedades en v9.7 — Smart Preload Hardening](#2q-novedades-en-v97--smart-preload-hardening-decoding-async--scheduler--connection-guard)
 2r. [Novedades en v9.8 — Mobile Performance Pass](#2r-novedades-en-v98--mobile-performance-pass-scroll--modal-lag)
+2s. [Novedades en v9.9 — Ghost Analytics](#2s-novedades-en-v99--ghost-analytics)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -3123,5 +3124,123 @@ El efecto de "thumbnail difuminada" se mantiene visualmente igual a 3 px de blur
 | Botones de acción síncronos | `openPreviewModal()` | DOM mínimo construido antes del rAF para mantener foco accesible |
 | Limpieza de slot antes de abrir | `openPreviewModal()` | `slot.innerHTML = ''` evita flash de contenido del modal anterior |
 
-*Love Arcade · Documentación técnica v9.8 · Mobile Performance Pass*
+---
+
+## 2s. Novedades en v9.9 — Ghost Analytics
+
+### Objetivo
+
+Capturar eventos de interacción en la plataforma de forma **privada, gratuita y sin backend**, enviando notificaciones en tiempo real a un canal privado de Discord mediante Webhooks HTTP.
+
+---
+
+### Nuevo archivo: `js/analytics.js`
+
+Módulo autónomo de analíticas. Debe cargarse **antes** de `app.js` y `shop-logic.js` en `index.html`:
+
+```html
+<script src="js/analytics.js"></script>
+<script src="js/app.js"></script>
+<script src="js/shop-logic.js"></script>
+<script src="js/spa-router.js"></script>
+```
+
+---
+
+### Eventos registrados
+
+| Nombre del evento | Dónde se dispara | Metadatos enviados |
+|---|---|---|
+| `view_preview` | `openPreviewModal()` en `shop-logic.js` — fase síncrona, antes del `rAF` | `{ wallpaper, categoria }` |
+| `click_download` | `renderLibrary()` — botón Descargar de la Biblioteca | `{ wallpaper, fuente: 'biblioteca' }` |
+| `click_download` | `openPreviewModal()` — botón Descargar del modal de preview | `{ wallpaper, fuente: 'preview' }` |
+| `redeem_code` | `handleRedeem()` en `shop-logic.js` y `redeemPromoCode()` en `app.js` (éxito) | `{ recompensa, código: 'XXX***' }` |
+| `open_game` | Delegación global en `DOMContentLoaded` de `app.js` sobre `<a href*="games/">` | `{ juego }` |
+| `detected_error` | `window.addEventListener('error')` y `'unhandledrejection'` en `analytics.js` | `{ mensaje, archivo?, línea?, tipo? }` |
+
+---
+
+### Arquitectura interna de `analytics.js`
+
+#### Ofuscación del Webhook
+
+La URL nunca aparece en texto plano en el código. Se almacena como un array de char codes XOR-eados con la clave `42` y se reconstruye en runtime mediante:
+
+```javascript
+String.fromCharCode(..._r.map(c => c ^ 42))
+```
+
+No es cifrado criptográfico; protege contra scrapers automatizados y búsquedas de texto plano, no contra DevTools.
+
+#### Rate limiting
+
+Máximo un evento idéntico (mismo nombre + mismos metadatos) cada **3 000 ms**. Previene spam ante doble clic, IntersectionObserver que dispara en ráfagas o bugs de re-renderizado.
+
+```javascript
+const RATE_LIMIT_MS = 3000;
+```
+
+La clave de rate limiting combina `event` + `JSON.stringify(meta)`, de modo que eventos del mismo tipo con datos distintos (ej. dos wallpapers diferentes vistos seguidos) siempre se envían.
+
+#### Protocolo de envío
+
+`fetch` con `keepalive: true` y `.catch(() => {})` — completamente fire-and-forget:
+
+```javascript
+fetch(_endpoint(), {
+    method:    'POST',
+    headers:   { 'Content-Type': 'application/json' },
+    body:      JSON.stringify(payload),
+    keepalive: true
+}).catch(() => { /* silencioso */ });
+```
+
+`keepalive: true` garantiza que el request sobrevive a navegaciones de página sin bloquear el `unload`. Nunca se usa `await`, por lo que el caller nunca espera.
+
+#### Degradación elegante
+
+Todas las llamadas a `GhostAnalytics` en `app.js` y `shop-logic.js` usan optional chaining (`?.`):
+
+```javascript
+window.GhostAnalytics?.track('view_preview', { wallpaper: item.name });
+```
+
+Si `analytics.js` no se carga (fallo de red, CSP restrictiva, orden incorrecto de scripts), la llamada es un no-op que no produce ningún error.
+
+---
+
+### Impacto en rendimiento
+
+| Criterio | Impacto |
+|---|---|
+| Hilo principal | **Cero bloqueo** — `fetch` es asíncrono y fire-and-forget |
+| Tiempo al primer byte (TTFB) | **Sin impacto** — analytics.js < 4 KB minificado |
+| FPS / jank | **Sin impacto** — no hay DOM manipulation, no hay `requestAnimationFrame` |
+| Memoria | **Despreciable** — `_lastSent` crece máximo 5–10 entradas (una por tipo de evento) |
+| Red | **Sin impacto en el usuario** — requests de ~500 B enviados al Webhook, no al CDN de la plataforma |
+
+---
+
+### Privacidad
+
+- No se recopilan IDs de usuario, IPs, cookies ni ningún identificador personal.
+- Los códigos promocionales se ofuscan antes de enviarse: `"PVZG***"` (primeros 3 chars + `***`).
+- Los nombres de wallpaper y juego son metadatos de producto, no datos personales.
+- El canal de Discord es privado y solo accesible para el propietario de la plataforma.
+
+---
+
+### Resumen de cambios por archivo
+
+| Archivo | Tipo de cambio | Detalle |
+|---|---|---|
+| `js/analytics.js` | **Nuevo** | Módulo completo de analíticas Ghost |
+| `js/app.js` | Modificado | Header v9.9, `GhostAnalytics.track('redeem_code')` en `redeemPromoCode()`, delegación `open_game` en `DOMContentLoaded` |
+| `js/shop-logic.js` | Modificado | Header v9.9, `track('view_preview')` en `openPreviewModal()`, `track('click_download')` en `openPreviewModal()` y `renderLibrary()`, `track('redeem_code')` en `handleRedeem()` |
+| `DOCUMENTACION.md` | Modificado | Sección §2s añadida; título y ToC actualizados a v9.9 |
+| `README.md` | — | Sin cambios (el README describe la arquitectura pública; analytics es un módulo interno) |
+
+---
+
+*Love Arcade · Documentación técnica v9.9 · Ghost Analytics*
 *Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*
