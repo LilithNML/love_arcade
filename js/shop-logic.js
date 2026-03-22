@@ -1,8 +1,22 @@
 /**
- * shop-logic.js — Love Arcade v9.8
+ * shop-logic.js — Love Arcade v9.9
  * ─────────────────────────────────────────────────────────────────────────────
  * Contiene toda la lógica de la vista Tienda, extraída del script inline de
  * shop.html como parte de la migración a arquitectura SPA.
+ *
+ * NOVEDADES v9.9.1 (Ghost Analytics — producción):
+ *  - buy_item: GhostAnalytics.track() en initiatePurchase() tras compra exitosa.
+ *    Registra nombre del wallpaper, precio final, cashback y categoría.
+ *  - Los hooks anteriores (view_preview, click_download, redeem_code) se mantienen.
+ *  - view_preview: GhostAnalytics.track() en openPreviewModal() inmediatamente
+ *    tras modal.classList.remove('hidden') — fase síncrona, sin depender del rAF.
+ *  - click_download: listeners añadidos en renderLibrary() (fuente:"biblioteca")
+ *    y en el bloque isOwned de openPreviewModal() (fuente:"preview") sobre los
+ *    <a download> generados dinámicamente.
+ *  - redeem_code: GhostAnalytics.track() en handleRedeem() cuando result.success.
+ *    El código original se ofusca con *** antes de enviarlo.
+ *  - Todas las llamadas usan optional chaining (?.) para que el módulo sea
+ *    no-operativo si analytics.js no está cargado.
  *
  * NOVEDADES v9.8 (Mobile Performance Pass — Scroll & Modal Lag):
  *  - openPreviewModal(): REFACTOR de dos fases para eliminar freeze en gama baja.
@@ -878,6 +892,13 @@ function openPreviewModal(itemOrId) {
     _lastFocusedElement = document.activeElement;
     modal.classList.remove('hidden');
 
+    // Analítica — view_preview: se dispara en fase síncrona, antes del rAF,
+    // para garantizar el registro incluso si el usuario cierra rápidamente.
+    window.GhostAnalytics?.track('view_preview', {
+        wallpaper: item.name,
+        categoria: Array.isArray(item.tags) && item.tags.length ? item.tags[0] : 'General'
+    });
+
     // Diferir construcción pesada del mockup al siguiente frame de animación.
     // En ese momento el overlay ya está visible y pintado; el hilo principal
     // puede permitirse 50–150 ms de trabajo sin que el usuario lo perciba como freeze.
@@ -1009,6 +1030,14 @@ function openPreviewModal(itemOrId) {
                </button>`;
         actionsEl.innerHTML +=
             `<button class="btn-ghost" style="flex:1; justify-content:center;" id="preview-close-btn">Volver</button>`;
+
+        // Analítica — click_download (fuente: vista previa)
+        actionsEl.querySelector('a[download]')?.addEventListener('click', () => {
+            window.GhostAnalytics?.track('click_download', {
+                wallpaper: item.name,
+                fuente: 'preview'
+            });
+        });
     } else {
         actionsEl.innerHTML =
             `<button class="btn-ghost" style="flex:1; justify-content:center;" id="preview-close-btn">Volver</button>
@@ -1429,6 +1458,19 @@ function renderLibrary(items) {
         });
     });
 
+    // Analítica — click_download (fuente: biblioteca / Mis Tesoros)
+    container.querySelectorAll('a.vault-btn[download]').forEach(link => {
+        link.addEventListener('click', () => {
+            // Extraer nombre del wallpaper desde el alt de la imagen hermana más cercana
+            const card = link.closest('.shop-card');
+            const name = card?.querySelector('.card-name')?.textContent?.trim() || 'desconocido';
+            window.GhostAnalytics?.track('click_download', {
+                wallpaper: name,
+                fuente: 'biblioteca'
+            });
+        });
+    });
+
     refreshIcons(container); // scope a la biblioteca renderizada
 }
 
@@ -1539,6 +1581,14 @@ async function initiatePurchase(item, btn) {
         });
         document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
         fireConfetti();
+        // Analítica — buy_item: registra qué wallpaper se compró con todos sus detalles
+        window.GhostAnalytics?.track('buy_item', {
+            wallpaper:  item.name,
+            precio:     `${result.finalPrice} ⭐`,
+            cashback:   result.cashback > 0 ? `+${result.cashback} ⭐` : 'ninguno',
+            categoría:  Array.isArray(item.tags) && item.tags.length ? item.tags[0] : 'General',
+            saldo_tras: GameCenter.getBalance()
+        });
         const cbNote = result.cashback > 0 ? ` <strong>+${result.cashback} cashback</strong> devueltas.` : '';
         showToast(`"${item.name}" desbloqueado.${cbNote} Ve a <strong>Mis Tesoros</strong>.`, 'success');
         updateWishlistCost();
@@ -1625,6 +1675,11 @@ async function handleRedeem() {
         if (!document.hidden) {
             confetti({ particleCount: 80, spread: 100, origin: { y: 0.4 }, colors: ['#fbbf24','#9b59ff','#22d07a'] });
         }
+        // Analítica — redeem_code: código ofuscado con *** para no exponer texto plano
+        window.GhostAnalytics?.track('redeem_code', {
+            recompensa: result.reward,
+            código: `${code.slice(0, 3)}***`
+        });
     } else {
         showMsg(msg, result.message, 'var(--error)');
         input.style.borderColor = 'var(--error)';

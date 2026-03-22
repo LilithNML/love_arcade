@@ -1,6 +1,18 @@
 /**
- * Game Center Core v9.4 — Identity Update
+ * Game Center Core v9.9 — Ghost Analytics
  * Compatible con gamecenter_v6_promos — migración silenciosa incluida.
+ *
+ * NOVEDADES v9.9 (Ghost Analytics):
+ *  - Integración con el módulo analytics.js (debe cargarse ANTES en el HTML).
+ *  - Evento open_game: delegación global en DOMContentLoaded sobre cualquier
+ *    <a href*="games/"> para registrar qué minijuego fue abierto.
+ *  - Evento redeem_code: llamada a GhostAnalytics.track() dentro de
+ *    redeemPromoCode() cuando el canje es exitoso. El código original nunca
+ *    se envía; se trunca con *** para proteger el texto plano.
+ *  - Los eventos detected_error se capturan automáticamente en analytics.js
+ *    mediante window.addEventListener('error') y 'unhandledrejection'.
+ *  - Todas las llamadas usan optional chaining (?.) para ser no-operativas
+ *    si analytics.js no está cargado (degradación elegante).
  *
  * NOVEDADES v9.4 (Identity Update):
  *  - store.nickname (string, max 15 chars): nombre personalizado del usuario.
@@ -95,7 +107,8 @@ const PROMO_CODES_HASHED = {
 '4564f1daae1dd157925088fce37fefc9869dabbbd7f860069dcf593d4d620a4b': 2500,   // PVZGW2500
 '5136694194f15aecc6eae3645b56b6a8273876d6d830709cf7591dd89a05b066': 500,   // PVZGW500
 'fe499ddb40f6bf77d1b7b18efe6c365848b46a9522e8c37155bcf306fad2e0ee': 1000,   // BOCCHICAT1000
-'aec9091f68e1f1324e1ed9b8ccb6ce86a137a9b2c3440ea5d2fa83bb2fb70523': 1000,   // 09112024    
+'aec9091f68e1f1324e1ed9b8ccb6ce86a137a9b2c3440ea5d2fa83bb2fb70523': 1000,// 09112024  
+'a6670a5454af70c97e1fc2fc457af9521383055a257ba58ac549c5ccc7766a85': 200,   // VERSION9
 };
 
 // =====================================================
@@ -533,6 +546,14 @@ window.GameCenter = {
         store.redeemedCodes.push(code);
         logTransaction('ingreso', reward, `Código canjeado`);
         saveState();
+
+        // Analítica — redeem_code: el código original se ofusca con *** para
+        // no exponer el texto plano en el canal de Discord.
+        window.GhostAnalytics?.track('redeem_code', {
+            recompensa: reward,
+            código: `${code.slice(0, 3)}***`
+        });
+
         return { success: true, reward, message: `¡+${reward} Monedas!` };
     },
 
@@ -1275,6 +1296,23 @@ applyIdentity();
 document.addEventListener('DOMContentLoaded', () => {
     // Re-sincronizar UI por si algún sub-módulo modificó el DOM
     updateUI();
+
+    // ── Analítica — open_game ─────────────────────────────────────────────────
+    // Delegación global para detectar la apertura de cualquier minijuego.
+    // Se escucha el click en cualquier <a> cuya href contenga "games/" para no
+    // requerir data-attributes específicos en cada tarjeta de juego del HTML.
+    // passive:true garantiza que no bloquea el scroll ni el propio navegador.
+    document.addEventListener('click', (e) => {
+        const link = e.target.closest('a[href*="games/"]');
+        if (!link) return;
+        // Intentar obtener el ID del juego desde data-game-id, data-game-name,
+        // o derivarlo del nombre del archivo HTML (último segmento de la URL).
+        const gameId = link.dataset.gameId
+            || link.dataset.gameName
+            || link.getAttribute('href')?.split('/').pop()?.replace(/\.html?$/, '')
+            || 'desconocido';
+        window.GhostAnalytics?.track('open_game', { juego: gameId });
+    }, { passive: true });
 
     // ── Background time sync (v9.6) ───────────────────────────────────────
     // Se lanza 800 ms después del DOMContentLoaded para no competir con el
