@@ -58,8 +58,6 @@
       } catch(e) { /* localStorage no disponible — continuar con tema por defecto */ }
     }();
     </script>
-
-    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
 </head>
 <!--
@@ -71,6 +69,158 @@
 <body>
 
     <!-- ══════════════════════════════════════════════════════════
+         SVG SPRITE — Love Arcade v9.6
+         Sprite estático. Los iconos se inyectan en el DOM una sola
+         vez. Uso: <svg class="icon" width="N" height="N">
+                        <use href="#icon-NAME"></use>
+                   </svg>
+         Elimina lucide.createIcons() y todo escaneo dinámico del DOM.
+         ══════════════════════════════════════════════════════════ -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display:none;" aria-hidden="true">
+        <symbol id="icon-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </symbol>
+        <symbol id="icon-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </symbol>
+        <symbol id="icon-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>
+        </symbol>
+        <symbol id="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+        </symbol>
+        <symbol id="icon-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </symbol>
+        <symbol id="icon-check-circle-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
+        </symbol>
+        <symbol id="icon-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+        </symbol>
+        <symbol id="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </symbol>
+        <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </symbol>
+        <symbol id="icon-download-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
+        </symbol>
+        <symbol id="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+        </symbol>
+        <symbol id="icon-file-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/>
+        </symbol>
+        <symbol id="icon-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+        </symbol>
+        <symbol id="icon-gamepad-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/>
+        </symbol>
+        <symbol id="icon-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+        </symbol>
+        <symbol id="icon-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </symbol>
+        <symbol id="icon-help-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </symbol>
+        <symbol id="icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+        </symbol>
+        <symbol id="icon-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+        </symbol>
+        <symbol id="icon-layout-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </symbol>
+        <symbol id="icon-loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+        </symbol>
+        <symbol id="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </symbol>
+        <symbol id="icon-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+        </symbol>
+        <symbol id="icon-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+        </symbol>
+        <symbol id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </symbol>
+        <symbol id="icon-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12c0 5.5 4.5 10 10 10 .926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+        </symbol>
+        <symbol id="icon-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+        </symbol>
+        <symbol id="icon-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+        </symbol>
+        <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </symbol>
+        <symbol id="icon-refresh-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </symbol>
+        <symbol id="icon-scroll-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><line x1="15" y1="8" x2="9" y2="8"/><line x1="15" y1="12" x2="9" y2="12"/>
+        </symbol>
+        <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </symbol>
+        <symbol id="icon-search-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m13.5 8.5-5 5"/><path d="m8.5 8.5 5 5"/><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </symbol>
+        <symbol id="icon-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </symbol>
+        <symbol id="icon-settings-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>
+        </symbol>
+        <symbol id="icon-shield-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>
+        </symbol>
+        <symbol id="icon-shopping-bag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
+        </symbol>
+        <symbol id="icon-smartphone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+        </symbol>
+        <symbol id="icon-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>
+        </symbol>
+        <symbol id="icon-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </symbol>
+        <symbol id="icon-ticket-percent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><path d="M9 9h.01"/><path d="M15 15h.01"/><path d="m15 9-6 6"/>
+        </symbol>
+        <symbol id="icon-trending-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+        </symbol>
+        <symbol id="icon-upload-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+        </symbol>
+        <symbol id="icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </symbol>
+        <symbol id="icon-wifi-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+        </symbol>
+        <symbol id="icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </symbol>
+        <symbol id="icon-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </symbol>
+    </svg>
+
+    <!-- ══════════════════════════════════════════════════════════
          ELEMENTOS GLOBALES PERSISTENTES
          Existen una sola vez, visibles en todas las vistas.
          ══════════════════════════════════════════════════════════ -->
@@ -78,7 +228,7 @@
     <!-- ── TOP NAVBAR ── -->
     <nav class="navbar glass-panel" aria-label="Navegación principal">
         <div class="nav-brand">
-            <i data-lucide="gamepad-2" size="26"></i>
+            <svg class="icon" width="26" height="26" aria-hidden="true"><use href="#icon-gamepad-2"></use></svg>
             Love<span>Arcade</span>
         </div>
 
@@ -94,16 +244,16 @@
                  El valor se actualiza dinámicamente en app.js updateUI(). -->
             <div class="coin-badge" title="0 monedas">
                 <span class="moon-blessing-badge hidden" title="Bendición Lunar activa">
-                    <i data-lucide="moon" size="13"></i>
+                    <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-moon"></use></svg>
                 </span>
-                <i data-lucide="star" size="15" fill="#fbbf24" stroke="none"></i>
+                <svg class="icon" width="15" height="15" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
                 <span class="coin-display">0</span>
             </div>
             <label for="avatar-upload" class="avatar-container" aria-label="Cambiar foto de perfil">
                 <div class="avatar" id="user-avatar-display" style="background-image: url('assets/default_avatar.png');">
-                    <i data-lucide="user" size="18"></i>
+                    <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-user"></use></svg>
                 </div>
-                <div class="avatar-edit-icon"><i data-lucide="plus"></i></div>
+                <div class="avatar-edit-icon"><svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-plus"></use></svg></div>
             </label>
             <input type="file" id="avatar-upload" hidden accept="image/*">
         </div>
@@ -112,19 +262,19 @@
     <!-- ── BOTTOM NAV (mobile) ── -->
     <nav class="bottom-nav" aria-label="Navegación rápida móvil">
         <a href="#" class="b-nav-item active" data-view="home">
-            <i data-lucide="home" size="20"></i>
+            <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#icon-home"></use></svg>
             <span>Inicio</span>
         </a>
         <a href="#" class="b-nav-item" data-view="home" data-anchor="games">
-            <i data-lucide="gamepad-2" size="20"></i>
+            <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#icon-gamepad-2"></use></svg>
             <span>Juegos</span>
         </a>
         <a href="#" class="b-nav-item" data-view="shop">
-            <i data-lucide="shopping-bag" size="20"></i>
+            <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#icon-shopping-bag"></use></svg>
             <span>Tienda</span>
         </a>
         <a href="#" class="b-nav-item" data-view="home" data-anchor="faq">
-            <i data-lucide="help-circle" size="20"></i>
+            <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#icon-help-circle"></use></svg>
             <span>Ayuda</span>
         </a>
     </nav>
@@ -138,7 +288,7 @@
         <!-- ═══════════════════════════════════════════
              VISTA: INICIO
              ═══════════════════════════════════════════ -->
-        <div id="view-home">
+        <div id="view-home" class="view-section">
 
             <!-- ── PLAYER HUD ── -->
             <div class="player-hud">
@@ -147,7 +297,7 @@
                     <div class="hud-avatar-wrap">
                         <label for="avatar-upload-hud" aria-label="Cambiar foto de perfil">
                             <div class="hud-avatar" id="hud-avatar-display" style="background-image: url('assets/default_avatar.png');">
-                                <i data-lucide="user" size="24"></i>
+                                <svg class="icon" width="24" height="24" aria-hidden="true"><use href="#icon-user"></use></svg>
                             </div>
                         </label>
                         <div class="hud-avatar-ring"></div>
@@ -163,7 +313,7 @@
                                     class="btn-edit-identity"
                                     type="button"
                                     aria-label="Editar nombre y saludo">
-                                <i data-lucide="pencil" size="11"></i>
+                                <svg class="icon" width="11" height="11" aria-hidden="true"><use href="#icon-pencil"></use></svg>
                             </button>
                         </div>
                         <p class="hud-status">
@@ -177,13 +327,13 @@
                     <div class="hud-balance">
                         <span class="hud-balance-label">Monedas</span>
                         <div class="hud-balance-amount">
-                            <i data-lucide="star" size="18" fill="#fbbf24" stroke="none"></i>
+                            <svg class="icon" width="18" height="18" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
                             <span class="coin-display">0</span>
                         </div>
                     </div>
 
                     <button id="btn-daily" class="hud-daily-btn">
-                        <i data-lucide="gift" size="20"></i>
+                        <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#icon-gift"></use></svg>
                         <span class="hud-daily-reward" id="hud-reward-amount">+20</span>
                         <span class="hud-daily-label">BONO DIARIO</span>
                     </button>
@@ -195,7 +345,7 @@
                 <p id="daily-msg" class="daily-msg"></p>
 
                 <div class="hud-streak">
-                    <span class="streak-label"><i data-lucide="flame" size="11"></i> Racha</span>
+                    <span class="streak-label"><svg class="icon" width="11" height="11" aria-hidden="true"><use href="#icon-flame"></use></svg> Racha</span>
                     <div class="streak-days" id="streak-days">
                         <div class="streak-day"></div>
                         <div class="streak-day"></div>
@@ -218,112 +368,112 @@
             <section id="games" class="games-grid">
 
                 <article class="game-card">
-                    <div class="card-cover" style="background-image: url('assets/cover/2048_cover_art.webp');">
+                    <div class="card-cover" style="background-image: url('https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/2048_cover_art');">
                         <div class="card-badge badge-new">NUEVO</div>
                     </div>
                     <div class="card-info">
                         <h3 class="card-title">2048</h3>
                         <p class="card-desc">Desliza las fichas y combina números iguales para sumarlos.</p>
                         <a href="games/2048" class="btn-primary w-full" style="justify-content:center;">
-                            <i data-lucide="play" size="15"></i> Jugar Ahora
+                            <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-play"></use></svg> Jugar Ahora
                         </a>
                     </div>
                 </article>
                 
                 <article class="game-card">
-                    <div class="card-cover" style="background-image: url('assets/cover/jungle_dash_cover_art.webp');">
+                    <div class="card-cover" style="background-image: url('https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/jungle_dash_cover_art');">
                         <div class="card-badge badge-new">NUEVO</div>
                     </div>
                     <div class="card-info">
                         <h3 class="card-title">Jungle Dash</h3>
                         <p class="card-desc">Controla a un jaguar en la selva y salta para esquivar obstáculos. ¿Cuánto puedes resistir?</p>
                         <a href="games/jungle-dash" class="btn-primary w-full" style="justify-content:center;">
-                            <i data-lucide="play" size="15"></i> Jugar Ahora
+                            <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-play"></use></svg> Jugar Ahora
                         </a>
                     </div>
                 </article>
 
                 <article class="game-card">
-                    <div class="card-cover" style="background-image: url('assets/cover/ollin_smash_cover_art.webp');">
+                    <div class="card-cover" style="background-image: url('https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/ollin_smash_cover_art');">
                         <div class="card-badge badge-new">NUEVO</div>
                     </div>
                     <div class="card-info">
                         <h3 class="card-title">Ollin Smash</h3>
                         <p class="card-desc">Destruye todos los bloques antes de que la pelota caiga.</p>
                         <a href="games/ollin-smash" class="btn-primary w-full" style="justify-content:center;">
-                            <i data-lucide="play" size="15"></i> Jugar Ahora
+                            <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-play"></use></svg> Jugar Ahora
                         </a>
                     </div>
                 </article>
 
                 <article class="game-card">
-                    <div class="card-cover" style="background-image: url('assets/cover/space_shooter_cover_art.webp');">
+                    <div class="card-cover" style="background-image: url('https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/space_shooter_cover_art');">
                     </div>
                     <div class="card-info">
                         <h3 class="card-title">Vortex</h3>
                         <p class="card-desc">Elimina todas las naves enemigas en este frenético shooter espacial.</p>
                         <a href="games/Shooter" class="btn-primary w-full" style="justify-content:center;">
-                            <i data-lucide="play" size="15"></i> Jugar Ahora
+                            <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-play"></use></svg> Jugar Ahora
                         </a>
                     </div>
                 </article>
 
                 <article class="game-card">
-                    <div class="card-cover" style="background-image: url('assets/cover/wordhunt_cover_art.webp');">
+                    <div class="card-cover" style="background-image: url('https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/wordhunt_cover_art');">
                     </div>
                     <div class="card-info">
                         <h3 class="card-title">Word Hunt</h3>
                         <p class="card-desc">Encuentra todas las palabras ocultas en el tablero.</p>
                         <a href="games/word-hunt" class="btn-primary w-full" style="justify-content:center;">
-                            <i data-lucide="play" size="15"></i> Jugar Ahora
+                            <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-play"></use></svg> Jugar Ahora
                         </a>
                     </div>
                 </article>
 
                 <article class="game-card">
-                    <div class="card-cover" style="background-image: url('assets/cover/pixeldrop_cover_art.webp');">
+                    <div class="card-cover" style="background-image: url('https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/pixeldrop_cover_art');">
                     </div>
                     <div class="card-info">
                         <h3 class="card-title">Pixel Drop</h3>
                         <p class="card-desc">El clásico de bloques reimaginado con giro pixelado.</p>
                         <a href="games/pixel_drop.html" class="btn-primary w-full" style="justify-content:center;">
-                            <i data-lucide="play" size="15"></i> Jugar Ahora
+                            <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-play"></use></svg> Jugar Ahora
                         </a>
                     </div>
                 </article>
 
                 <article class="game-card">
-                    <div class="card-cover" style="background-image: url('assets/cover/maze_cover_art.webp');">
+                    <div class="card-cover" style="background-image: url('https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/maze_cover_art');">
                     </div>
                     <div class="card-info">
                         <h3 class="card-title">Laberinto</h3>
                         <p class="card-desc">Encuentra el camino correcto a través de la oscuridad.</p>
                         <a href="games/maze.html" class="btn-primary w-full" style="justify-content:center;">
-                            <i data-lucide="play" size="15"></i> Jugar Ahora
+                            <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-play"></use></svg> Jugar Ahora
                         </a>
                     </div>
                 </article>
 
                 <article class="game-card">
-                    <div class="card-cover" style="background-image: url('assets/cover/rompecabezas_cover_art.webp');">
+                    <div class="card-cover" style="background-image: url('https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/rompecabezas_cover_art');">
                     </div>
                     <div class="card-info">
                         <h3 class="card-title">Rompecabezas</h3>
                         <p class="card-desc">Une las piezas para completar la imagen y ganar monedas.</p>
                         <a href="games/rompecabezas" class="btn-primary w-full" style="justify-content:center;">
-                            <i data-lucide="play" size="15"></i> Jugar Ahora
+                            <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-play"></use></svg> Jugar Ahora
                         </a>
                     </div>
                 </article>
 
                 <article class="game-card">
-                    <div class="card-cover" style="background-image: url('assets/cover/dodger_cover_art.webp');">
+                    <div class="card-cover" style="background-image: url('https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/dodger_cover_art');">
                     </div>
                     <div class="card-info">
                         <h3 class="card-title">Dodger</h3>
                         <p class="card-desc">Sobrevive el mayor tiempo posible a la lluvia de asteroides.</p>
                         <a href="games/Dodger" class="btn-primary w-full" style="justify-content:center;">
-                            <i data-lucide="play" size="15"></i> Jugar Ahora
+                            <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-play"></use></svg> Jugar Ahora
                         </a>
                     </div>
                 </article>
@@ -398,7 +548,7 @@
         <!-- ═══════════════════════════════════════════
              VISTA: TIENDA
              ═══════════════════════════════════════════ -->
-        <div id="view-shop" class="hidden">
+        <div id="view-shop" class="view-section hidden">
 
             <!-- ── SALE BANNER ── -->
             <div id="sale-banner" class="sale-banner hidden">
@@ -406,7 +556,7 @@
                     <div class="sale-banner__notch-left"></div>
                     <div class="sale-banner__notch-right"></div>
                     <div class="sale-banner__icon">
-                        <i data-lucide="zap" size="20" fill="currentColor" stroke="none"></i>
+                        <svg class="icon" width="20" height="20" style="fill:currentColor;stroke:none" aria-hidden="true"><use href="#icon-zap"></use></svg>
                     </div>
                     <div class="sale-banner__content">
                         <p class="sale-banner__title" id="sale-label-text">¡OFERTA ESPECIAL!</p>
@@ -419,14 +569,14 @@
             <!-- ── CÓDIGO PROMO ── -->
             <div class="promo-toggle-wrap">
                 <button id="btn-promo-toggle" class="btn-ghost promo-toggle-btn" aria-expanded="false" aria-controls="promo-section">
-                    <i data-lucide="ticket-percent" size="14"></i>
+                    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-ticket-percent"></use></svg>
                     <span>¿Tienes un código promocional?</span>
-                    <i data-lucide="chevron-down" size="13" class="promo-chevron"></i>
+                    <svg class="icon promo-chevron" width="13" height="13" aria-hidden="true"><use href="#icon-chevron-down"></use></svg>
                 </button>
                 <section id="promo-section" class="glass-panel promo-section promo-section--collapsed" aria-hidden="true">
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
                         <div class="promo-icon-wrap">
-                            <i data-lucide="ticket-percent" color="white" size="18"></i>
+                            <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-ticket-percent"></use></svg>
                         </div>
                         <div>
                             <h3 style="margin:0; font-family:var(--font-display); font-size:0.95rem; font-weight:800; letter-spacing:-0.2px;">Canjear código</h3>
@@ -437,7 +587,7 @@
                         <input type="text" id="promo-input" placeholder="Ej: AMOR2024" class="promo-input">
                         <button id="btn-redeem" class="btn-primary">
                             <span>Canjear</span>
-                            <i data-lucide="sparkles" size="14"></i>
+                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-sparkles"></use></svg>
                         </button>
                     </div>
                     <p id="promo-msg" class="feedback-msg"></p>
@@ -447,16 +597,16 @@
             <!-- ── TABS ── -->
             <div class="shop-tabs">
                 <button class="shop-tab active" data-tab="catalog">
-                    <i data-lucide="layout-grid" size="13"></i> Catálogo
+                    <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-layout-grid"></use></svg> Catálogo
                 </button>
                 <button class="shop-tab" data-tab="library">
-                    <i data-lucide="archive" size="13"></i> Mis Tesoros
+                    <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-archive"></use></svg> Mis Tesoros
                 </button>
                 <button class="shop-tab" data-tab="sync">
-                    <i data-lucide="refresh-cw" size="13"></i> Sincronizar
+                    <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-refresh-cw"></use></svg> Sincronizar
                 </button>
                 <button class="shop-tab" data-tab="settings">
-                    <i data-lucide="settings-2" size="13"></i> Ajustes
+                    <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-settings-2"></use></svg> Ajustes
                 </button>
             </div>
 
@@ -464,32 +614,32 @@
             <section id="tab-catalog" class="tab-panel">
                 <div class="shop-toolbar">
                     <div class="search-wrap">
-                        <i data-lucide="search" size="14" class="search-icon"></i>
+                        <svg class="icon search-icon" width="14" height="14" aria-hidden="true"><use href="#icon-search"></use></svg>
                         <input type="text" id="search-input" class="search-input"
                                placeholder="Buscar wallpaper…" autocomplete="off">
                         <button id="search-clear" class="search-clear hidden" aria-label="Limpiar">
-                            <i data-lucide="x" size="12"></i>
+                            <svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-x"></use></svg>
                         </button>
                     </div>
                     <div class="filter-pills" id="filter-pills">
                         <button class="pill active" data-filter="Todos">Todos</button>
                         <button class="pill" data-filter="NoObtenidos">
-                            <i data-lucide="sparkles" size="10"></i> Nuevos
+                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-sparkles"></use></svg> Nuevos
                         </button>
                         <button class="pill" data-filter="PC">
-                            <i data-lucide="monitor" size="10"></i> PC
+                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-monitor"></use></svg> PC
                         </button>
                         <button class="pill" data-filter="Mobile">
-                            <i data-lucide="smartphone" size="10"></i> Mobile
+                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-smartphone"></use></svg> Mobile
                         </button>
                         <button class="pill pill--wishlist" data-filter="Wishlist">
-                            <i data-lucide="heart" size="10"></i> Lista de deseos
+                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-heart"></use></svg> Lista de deseos
                         </button>
                     </div>
                 </div>
 
                 <div id="wishlist-cost-banner" class="wishlist-cost-banner hidden">
-                    <i data-lucide="heart" size="12" fill="currentColor" style="color:#ff4f7a; flex-shrink:0;"></i>
+                    <svg class="icon" width="12" height="12" style="fill:currentColor" aria-hidden="true"><use href="#icon-heart"></use></svg>
                     <span id="wishlist-cost-text"></span>
                 </div>
 
@@ -498,17 +648,17 @@
 
                 <!-- Estado de error de red — visible solo si shop.json falla -->
                 <div id="shop-error-state" class="shop-error-state hidden" role="alert">
-                    <i data-lucide="wifi-off" size="40"></i>
+                    <svg class="icon" width="40" height="40" aria-hidden="true"><use href="#icon-wifi-off"></use></svg>
                     <p class="shop-error-title">No se pudo cargar el catálogo</p>
                     <p class="shop-error-desc">Revisa tu conexión a internet e inténtalo de nuevo.</p>
                     <button id="btn-retry-shop" class="btn-primary">
-                        <i data-lucide="refresh-cw" size="14"></i>
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-refresh-cw"></use></svg>
                         Reintentar
                     </button>
                 </div>
 
                 <div id="filter-empty" class="filter-empty hidden">
-                    <i data-lucide="search-x" size="40"></i>
+                    <svg class="icon" width="40" height="40" aria-hidden="true"><use href="#icon-search-x"></use></svg>
                     <p>Sin resultados para tu búsqueda.</p>
                     <button class="btn-ghost" id="btn-reset-filters">Ver todo el catálogo</button>
                 </div>
@@ -538,17 +688,17 @@
 
                 <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;">
                     <div style="display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; background:var(--accent-soft); border:1px solid var(--accent-border); font-size:0.72rem; font-weight:700; color:var(--accent);">
-                        <i data-lucide="shield-check" size="12"></i> Checksum SHA-256
+                        <svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-shield-check"></use></svg> Checksum SHA-256
                     </div>
                     <div style="display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; background:var(--success-soft); border:1px solid rgba(34,208,122,0.3); font-size:0.72rem; font-weight:700; color:var(--success);">
-                        <i data-lucide="lock" size="12"></i> Anti-edición
+                        <svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-lock"></use></svg> Anti-edición
                     </div>
                 </div>
 
                 <div class="memory-card">
                     <div class="memory-card__header">
                         <div class="memory-card__chip memory-card__chip--export">
-                            <i data-lucide="upload-cloud" color="white" size="18"></i>
+                            <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-upload-cloud"></use></svg>
                         </div>
                         <div>
                             <h3 class="memory-card__title">Exportar partida</h3>
@@ -556,7 +706,7 @@
                         </div>
                     </div>
                     <button id="btn-export" class="btn-primary" style="position:relative; z-index:1;">
-                        <i data-lucide="download-cloud" size="15"></i>
+                        <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-download-cloud"></use></svg>
                         <span>Exportar y descargar</span>
                     </button>
                     <p id="export-msg" class="feedback-msg"></p>
@@ -565,7 +715,7 @@
                 <div class="memory-card" style="border-color:rgba(34,208,122,0.25);">
                     <div class="memory-card__header">
                         <div class="memory-card__chip memory-card__chip--import">
-                            <i data-lucide="download-cloud" color="white" size="18"></i>
+                            <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-download-cloud"></use></svg>
                         </div>
                         <div>
                             <h3 class="memory-card__title">Importar partida</h3>
@@ -574,7 +724,7 @@
                     </div>
 
                     <label for="import-file" class="btn-ghost file-label" style="position:relative; z-index:1;">
-                        <i data-lucide="file-up" size="14"></i> Cargar archivo .txt
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-file-up"></use></svg> Cargar archivo .txt
                     </label>
                     <input type="file" id="import-file" accept=".txt" hidden>
                     <span id="import-file-name" class="file-name-display">Ningún archivo seleccionado</span>
@@ -583,7 +733,7 @@
                     <textarea id="import-input" class="sync-textarea" placeholder="Pega tu código aquí…" style="position:relative; z-index:1;"></textarea>
 
                     <button id="btn-import" class="btn-primary" style="margin-top:10px; width:100%; justify-content:center; position:relative; z-index:1; background:linear-gradient(135deg,#22d07a,#16a85e); color:#041a0a;">
-                        <i data-lucide="check-circle" size="15"></i>
+                        <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-check-circle"></use></svg>
                         <span>Importar progreso</span>
                     </button>
                     <p id="import-msg" class="feedback-msg"></p>
@@ -603,7 +753,7 @@
                 <div class="glass-panel settings-card" style="margin-bottom:1rem;">
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:1.1rem;">
                         <div class="promo-icon-wrap">
-                            <i data-lucide="palette" color="white" size="18"></i>
+                            <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-palette"></use></svg>
                         </div>
                         <div>
                             <h3 style="margin:0; font-family:var(--font-display); font-size:0.95rem; font-weight:800;">Tema de color</h3>
@@ -614,27 +764,27 @@
                         <button class="theme-btn" data-theme="violet">
                             <span class="theme-swatch" style="background:#9b59ff;"></span>
                             <span class="theme-name">Violeta</span>
-                            <i data-lucide="check" size="12" class="theme-check"></i>
+                            <svg class="icon theme-check" width="12" height="12" aria-hidden="true"><use href="#icon-check"></use></svg>
                         </button>
                         <button class="theme-btn" data-theme="pink">
                             <span class="theme-swatch" style="background:#ff59b4;"></span>
                             <span class="theme-name">Rosa Neón</span>
-                            <i data-lucide="check" size="12" class="theme-check"></i>
+                            <svg class="icon theme-check" width="12" height="12" aria-hidden="true"><use href="#icon-check"></use></svg>
                         </button>
                         <button class="theme-btn" data-theme="cyan">
                             <span class="theme-swatch" style="background:#00d4ff;"></span>
                             <span class="theme-name">Cyan Arcade</span>
-                            <i data-lucide="check" size="12" class="theme-check"></i>
+                            <svg class="icon theme-check" width="12" height="12" aria-hidden="true"><use href="#icon-check"></use></svg>
                         </button>
                         <button class="theme-btn" data-theme="gold">
                             <span class="theme-swatch" style="background:#f59e0b;"></span>
                             <span class="theme-name">Dorado</span>
-                            <i data-lucide="check" size="12" class="theme-check"></i>
+                            <svg class="icon theme-check" width="12" height="12" aria-hidden="true"><use href="#icon-check"></use></svg>
                         </button>
                         <button class="theme-btn" data-theme="crimson">
                             <span class="theme-swatch" style="background:#e11d48;"></span>
                             <span class="theme-name">Carmesí</span>
-                            <i data-lucide="check" size="12" class="theme-check"></i>
+                            <svg class="icon theme-check" width="12" height="12" aria-hidden="true"><use href="#icon-check"></use></svg>
                         </button>
                     </div>
                 </div>
@@ -643,7 +793,7 @@
                 <div class="glass-panel settings-card" style="margin-bottom:1rem; border-color:rgba(192,132,252,0.2);">
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
                         <div class="promo-icon-wrap moon-icon-wrap">
-                            <i data-lucide="moon" color="white" size="18"></i>
+                            <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-moon"></use></svg>
                         </div>
                         <div>
                             <h3 style="margin:0; font-family:var(--font-display); font-size:0.95rem; font-weight:800;">Bendición Lunar</h3>
@@ -665,7 +815,7 @@
                         </div>
                     </div>
                     <button id="btn-moon-blessing" class="btn-primary moon-btn" style="width:100%; justify-content:center;">
-                        <i data-lucide="moon" size="14"></i>
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-moon"></use></svg>
                         <span>Activar Bendición Lunar (100 monedas)</span>
                     </button>
                     <p id="moon-blessing-msg" class="feedback-msg"></p>
@@ -675,7 +825,7 @@
                 <div class="glass-panel settings-card" style="margin-bottom:1rem;">
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
                         <div class="promo-icon-wrap" style="background:linear-gradient(135deg,#f59e0b,#ef4444);">
-                            <i data-lucide="flame" color="white" size="18"></i>
+                            <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-flame"></use></svg>
                         </div>
                         <div>
                             <h3 style="margin:0; font-family:var(--font-display); font-size:0.95rem; font-weight:800;">Racha Diaria</h3>
@@ -692,7 +842,7 @@
                 <div class="glass-panel settings-card" style="margin-bottom:1rem;">
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
                         <div class="promo-icon-wrap" style="background:linear-gradient(135deg,#fbbf24,#f59e0b);">
-                            <i data-lucide="trending-up" color="#120900" size="18"></i>
+                            <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-trending-up"></use></svg>
                         </div>
                         <div>
                             <h3 style="margin:0; font-family:var(--font-display); font-size:0.95rem; font-weight:800;">Estado de la economía</h3>
@@ -715,7 +865,7 @@
                 <div class="glass-panel settings-card">
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
                         <div class="promo-icon-wrap" style="background:rgba(148,163,184,0.2);">
-                            <i data-lucide="scroll-text" color="white" size="18"></i>
+                            <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-scroll-text"></use></svg>
                         </div>
                         <div>
                             <h3 style="margin:0; font-family:var(--font-display); font-size:0.95rem; font-weight:800;">Historial de transacciones</h3>
@@ -754,7 +904,7 @@
 
             <!-- Icono central con glow -->
             <div class="identity-modal-icon" aria-hidden="true">
-                <i data-lucide="sparkles" size="28"></i>
+                <svg class="icon" width="28" height="28" aria-hidden="true"><use href="#icon-sparkles"></use></svg>
             </div>
 
             <h3 id="identity-modal-title" class="modal-title identity-modal-title">
@@ -797,13 +947,13 @@
                 <span class="identity-char-count" id="identity-char-count" aria-live="polite">0/15</span>
             </div>
             <p class="identity-input-error hidden" id="identity-input-error" role="alert">
-                <i data-lucide="alert-circle" size="12"></i>
+                <svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-alert-circle"></use></svg>
                 El nickname no puede estar vacío.
             </p>
 
             <!-- Confirmar -->
             <button id="identity-confirm-btn" class="btn-primary identity-confirm-btn" type="button">
-                <i data-lucide="check" size="16"></i>
+                <svg class="icon" width="16" height="16" aria-hidden="true"><use href="#icon-check"></use></svg>
                 <span id="identity-confirm-label">Empezar</span>
             </button>
 
@@ -868,7 +1018,7 @@
             </h3>
 
             <div class="email-input-wrap">
-                <i data-lucide="mail" size="15" class="email-input-icon"></i>
+                <svg class="icon email-input-icon" width="15" height="15" aria-hidden="true"><use href="#icon-mail"></use></svg>
                 <input
                     id="email-modal-input"
                     type="email"
@@ -882,7 +1032,7 @@
             </div>
 
             <p id="email-modal-error" class="email-error-msg" role="alert" aria-live="polite">
-                <i data-lucide="alert-circle" size="12"></i>
+                <svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-alert-circle"></use></svg>
                 <span id="email-modal-error-text">Introduce un correo válido.</span>
             </p>
 
@@ -893,7 +1043,7 @@
 
             <div id="email-fallback" class="email-fallback" role="region" aria-label="Alternativa de copia">
                 <p class="email-fallback-title">
-                    <i data-lucide="alert-triangle" size="13"></i>
+                    <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-alert-triangle"></use></svg>
                     Enlace demasiado largo para correo
                 </p>
                 <p class="email-fallback-desc">
@@ -902,13 +1052,13 @@
                 </p>
                 <code id="email-fallback-url" class="email-fallback-url"></code>
                 <button id="email-copy-btn" class="btn-primary" style="width:100%; justify-content:center; font-size:0.82rem;">
-                    <i data-lucide="copy" size="14"></i>
+                    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-copy"></use></svg>
                     <span id="email-copy-label">Copiar enlace de descarga</span>
                 </button>
             </div>
 
             <div class="email-tip" role="note">
-                <i data-lucide="info" size="13"></i>
+                <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-info"></use></svg>
                 <span>
                     Se abrirá tu cliente de correo con el mensaje pre-rellenado.
                     El archivo no se adjunta; solo se incluye el enlace de descarga.
@@ -920,7 +1070,7 @@
                     Cancelar
                 </button>
                 <button id="email-modal-confirm" class="btn-primary" style="flex:2; justify-content:center;">
-                    <i data-lucide="send" size="14"></i>
+                    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-send"></use></svg>
                     Abrir correo
                 </button>
             </div>
@@ -941,8 +1091,6 @@
     <script src="js/spa-router.js"></script>
 
     <script>
-        // ── Inicializar iconos de Lucide ─────────────────────────────────────
-        lucide.createIcons();
 
         // ── Sincronizar avatar HUD con input de navbar ───────────────────────
         const avatarUploads = [
@@ -1037,6 +1185,15 @@
             refresh() {
                 updateCountdownDisplay();
                 updateStreakBar();
+            },
+            /**
+             * Llamado por spa-router.js al SALIR de la vista Inicio (v9.6).
+             * Reservado para liberar recursos futuros (observers, timers, etc.).
+             * Se implementa ahora para que el hook esté completo y no falle
+             * silenciosamente cuando se añadan recursos que requieran cleanup.
+             */
+            onLeave() {
+                // placeholder — listo para futuros IntersectionObservers o timers
             }
         };
 
@@ -1091,9 +1248,8 @@
                 chip.classList.toggle('identity-chip--active', chip.dataset.gender === selectedGender);
             });
 
-            // ── Mostrar modal y renderizar iconos ──────────────────────────
+            // ── Mostrar modal ──────────────────────────────────────────────
             identityModal.classList.remove('hidden');
-            if (window.lucide) lucide.createIcons();
             errorEl?.classList.add('hidden');
 
             // ── Listeners (se registran con {once:true} para evitar duplicados)

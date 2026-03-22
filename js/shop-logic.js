@@ -1,8 +1,67 @@
 /**
- * shop-logic.js — Love Arcade v9.4
+ * shop-logic.js — Love Arcade v9.7
  * ─────────────────────────────────────────────────────────────────────────────
  * Contiene toda la lógica de la vista Tienda, extraída del script inline de
  * shop.html como parte de la migración a arquitectura SPA.
+ *
+ * NOVEDADES v9.7 (Smart Preload — Fase 2 hardening):
+ *  - _preloadItemHiRes(): añadido img.decoding = 'async'. La decodificación de
+ *    píxeles ya no bloquea el hilo principal cuando múltiples precargas resuelven
+ *    simultáneamente durante scroll rápido. Soporte universal: Chrome 65+,
+ *    Firefox 63+, Safari 11.1+.
+ *  - openPreviewModal(): thumbProbe e hiRes también reciben decoding = 'async'.
+ *    La imagen hi-res (hasta 1200 px) se decodifica en el thread del compositor;
+ *    el swap de backgroundImage ya no provoca jank en la animación del modal.
+ *  - Nuevo helper _isDataSaverActive(): omite la precarga si el usuario tiene
+ *    Data Saver activo (navigator.connection.saveData) o la conexión es slow-2g.
+ *    Respeta la preferencia explícita del usuario sin degradar la funcionalidad
+ *    (el modal carga la imagen cuando se abre, como antes de v9.6).
+ *  - Nuevo helper _isLowBandwidth(): detecta conexión 2g y reduce el lote de
+ *    precarga a 2 imágenes por ciclo.
+ *  - Nuevo scheduler de precarga (_preloadQueue, _schedulePreloadItem,
+ *    _schedulePreloadFlush, _flushPreloadQueue): agrupa las entries del mismo
+ *    ciclo del observer en un requestIdleCallback (fallback: setTimeout) para
+ *    no saturar la red durante ráfagas de scroll. El scheduler se cancela y
+ *    la cola se vacía en _initPreloadObserver() al reconstruirse el DOM.
+ *  - _initPreloadObserver(): rootMargin cambiado a '200px 0px 400px 0px'
+ *    (superior 200 px para scroll hacia arriba, inferior 400 px para zona de
+ *    precarga principal, sin margen horizontal). threshold cambiado de 0.1 a 0
+ *    para disparar en cuanto cualquier píxel del card entra en la zona extendida,
+ *    maximizando el tiempo de anticipación sin esperar el 10 % de visibilidad.
+ *
+ *  - Nueva función privada _applyArtFallback(artEl): aplica un degradado CSS
+ *    puro (sin recursos externos) cuando Cloudinary es inalcanzable. Idempotente:
+ *    segura de llamar desde Phase 1 y Phase 2 simultáneamente.
+ *  - openPreviewModal() — Phase 1: se añade una Image() de prueba en paralelo
+ *    (thumbProbe) para detectar fallos CDN en la thumbnail. Si thumbProbe.onerror
+ *    dispara, cancela el load de Phase 2 y aplica _applyArtFallback inmediatamente.
+ *  - openPreviewModal() — Phase 2: hiRes.onerror ya no se limita a quitar la
+ *    clase de carga; ahora evalúa si la thumbnail cargó correctamente (_thumbOk):
+ *      · _thumbOk = true  → el CDN funciona pero falta el archivo hi-res;
+ *                           degrade a la thumbnail visible (blur→clear).
+ *      · _thumbOk = false → CDN totalmente inaccesible; aplica _applyArtFallback.
+ *  - renderShop() y renderLibrary(): los <img> de catálogo y biblioteca incluyen
+ *    onerror inline que añade .shop-img--offline y limpia el src para suprimir
+ *    el icono de imagen rota del navegador.
+ *  - styles.css: nuevas clases .mockup-layer-art.mockup-bg-offline y
+ *    .shop-img--offline con gradientes CSS puros (sin fetch externo).
+ *
+ * NOVEDADES v9.5 (Cloudinary CDN Migration):
+ *  - assets/product-thumbs/ ELIMINADA. Las thumbnails del catálogo se cargan
+ *    desde Cloudinary con la transformación ar_16:9,c_fill,g_auto,w_640.
+ *    El campo `image` de shop.json ahora apunta directamente a la URL CDN.
+ *  - assets/cover/ ELIMINADA. Las carátulas de los juegos en index.html
+ *    usan Cloudinary con la transformación ar_16:9,c_fill,g_auto,w_1080.
+ *  - _getMockupUrl(item): nueva función privada que construye la URL Cloudinary
+ *    con la transformación correcta según el tag del producto:
+ *      · Mobile → f_auto,q_auto,ar_9:20,c_fill,w_500
+ *      · PC     → f_auto,q_auto,ar_16:9,c_fill,w_1200
+ *  - openPreviewModal(): Phase 2 ahora usa _getMockupUrl() en lugar de
+ *    CONFIG.wallpapersPath + item.file, garantizando que el mockup siempre
+ *    recibe la versión optimizada para el marco del dispositivo.
+ *  - getDownloadUrl() en app.js: la URL de descarga/email usa la estructura
+ *    limpia https://res.cloudinary.com/dyspgn0sw/image/upload/{public_id}
+ *    sin extensión ni parámetros de transformación, sirviendo el master original.
  *
  * NOVEDADES v9.4 (sincronización de versión con app.js):
  *  - Eliminado will-change estático en tarjetas del catálogo y biblioteca.
@@ -11,7 +70,7 @@
  *    en lugar de reimplementar el patrón navigator.clipboard + execCommand.
  *  - _noCtxHandler movido a variable de cierre del módulo (ya no muta el DOM).
  *  - btn-reset-filters escuchado vía JS en DOMContentLoaded (elimina onclick inline).
- *  - lucide.createIcons() siempre scoped con { nodes: [...] } en renders parciales.
+ *  - [v9.6] lucide.createIcons() eliminado. Iconos servidos como SVG Sprite estático.
  *
  * NOVEDADES v9.1:
  *  - loadCatalog(): función encapsulada con manejo de errores y reintento.
@@ -25,7 +84,7 @@
  *
  * DEPENDENCIAS (deben estar cargadas ANTES en el DOM):
  *  - js/app.js          → window.GameCenter, window.ECONOMY, window.debounce, window.MailHelper
- *  - lucide             → window.lucide
+ *  - [v9.6] lucide eliminado. _icon() helper genera referencias al SVG Sprite.
  *  - canvas-confetti    → window.confetti
  *
  * OPTIMIZACIONES DE RENDIMIENTO:
@@ -36,7 +95,7 @@
  *  - El confetti solo se dispara cuando la pestaña está activa (document.hidden check).
  *  - will-change en tarjetas: gestionado en CSS vía :hover, no en JS. Esto evita
  *    promover N capas GPU simultáneas cuando el catálogo está estático.
- *  - lucide.createIcons() siempre se invoca con { nodes: [container] } en renders
+ *  - [v9.6] lucide.createIcons() eliminado — sin escaneo dinámico del DOM.
  *    parciales para evitar el scan del DOM completo.
  *
  * NOTAS SPA:
@@ -63,28 +122,40 @@ let _stageCtxHandler = null;
 // usuarios de teclado no pierdan su posición en el flujo de la interfaz (WCAG 2.4.3).
 let _lastFocusedElement = null;
 
-// ── Utilidad de iconos ─────────────────────────────────────────────────────────
+// ── Utilidad de iconos (v9.6 — SVG Sprite) ───────────────────────────────────
 /**
- * Inicializa o refresca los iconos Lucide dentro de un contenedor específico.
+ * [v9.6] refreshIcons() es ahora un no-op. Los iconos se sirven como SVG Sprite
+ * estático definido en index.html. No hay escaneo dinámico del DOM, no hay
+ * reflow por reemplazo de nodos, y no hay dependencia de window.lucide.
  *
- * REGLA DE RENDIMIENTO: Nunca llamar lucide.createIcons() sin scope en renders
- * parciales. Un scan global del DOM completo en cada pulsación de teclado del
- * buscador o en cada toggle de wishlist duplica el trabajo en la SPA porque
- * ambas vistas (home + shop) están cargadas simultáneamente.
+ * La función se mantiene declarada para compatibilidad con cualquier llamada
+ * existente en el codebase; su cuerpo está intencionalmente vacío.
  *
- * USO CORRECTO:
- *   refreshIcons(container)  → escanea solo el subárbol del contenedor
- *   refreshIcons()           → scan global — SOLO en init inicial del DOM
- *
- * @param {HTMLElement|null} [container]  Nodo raíz del scan. null = global (solo init).
+ * @param {HTMLElement|null} [container]  Ignorado — parámetro preservado por API.
  */
-function refreshIcons(container) {
-    if (!window.lucide) return;
-    if (container) {
-        lucide.createIcons({ nodes: [container] });
-    } else {
-        lucide.createIcons();
-    }
+// eslint-disable-next-line no-unused-vars
+function refreshIcons(_container) { /* no-op: SVG Sprite estático v9.6 */ }
+
+/**
+ * Helper: genera el markup de un icono SVG Sprite.
+ * Reemplaza el patrón <svg class="icon" aria-hidden="true"><use href="#icon-NAME"></use></svg> eliminado en v9.6.
+ *
+ * @param {string} name      - Nombre del icono (ej: "download", "heart").
+ * @param {number} [size=16] - Ancho y alto en px.
+ * @param {Object} [opts]    - Opciones adicionales.
+ * @param {string} [opts.fill]   - Valor CSS para fill (ej: "#fbbf24", "currentColor").
+ * @param {string} [opts.stroke] - Valor CSS para stroke (ej: "none").
+ * @param {string} [opts.cls]    - Clases CSS adicionales.
+ * @returns {string} Markup SVG listo para insertar en innerHTML.
+ */
+function _icon(name, size = 16, opts = {}) {
+    const w = size;
+    const styleArr = [];
+    if (opts.fill !== undefined)   styleArr.push(`fill:${opts.fill}`);
+    if (opts.stroke !== undefined) styleArr.push(`stroke:${opts.stroke}`);
+    const style = styleArr.length ? ` style="${styleArr.join(';')}"` : '';
+    const cls   = opts.cls ? `icon ${opts.cls}` : 'icon';
+    return `<svg class="${cls}" width="${w}" height="${w}"${style} aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
 }
 
 // ── Confirm Modal ─────────────────────────────────────────────────────────────
@@ -126,6 +197,7 @@ function _closeModal(value) {
 
 let _mockupClockInterval = null;   // Cleared on modal close to prevent leaks
 let _pendingHiResImg     = null;   // Tracks in-flight Image() load; cancelled on close
+let _preloadObserver     = null;   // IntersectionObserver for hi-res smart preloading (v9.6)
 
 /**
  * Returns the current time as "HH:MM" using the device locale.
@@ -315,6 +387,52 @@ const MOCKUP_SVG = {
 };
 
 /**
+ * Applies a self-contained CSS fallback to the art layer when Cloudinary
+ * is unreachable (network error, blocked CDN, CORS failure, etc.).
+ *
+ * The fallback uses a pure CSS gradient defined in styles.css
+ * (.mockup-bg-offline) — zero external requests are made.
+ *
+ * Idempotent: safe to call from both Phase 1 (thumbProbe.onerror) and
+ * Phase 2 (hiRes.onerror) without producing duplicate side-effects.
+ *
+ * @param {HTMLElement} artEl — .mockup-layer-art element inside #mockup-slot
+ */
+function _applyArtFallback(artEl) {
+    if (!artEl || artEl.classList.contains('mockup-bg-offline')) return;
+    artEl.style.backgroundImage = 'none';
+    artEl.classList.remove('mockup-bg-loading', 'mockup-bg-ready');
+    artEl.classList.add('mockup-bg-offline');
+}
+
+/**
+ * Returns the Cloudinary URL for the mockup preview of an item.
+ *
+ * The transformation is chosen based on the item's tag so the crop
+ * matches the target device frame:
+ *   Mobile → 9:20 portrait, 500 px wide   (phone screen)
+ *   PC     → 16:9 landscape, 1200 px wide  (desktop screen)
+ *   Other  → falls back to the PC preset
+ *
+ * The public ID is derived from item.file by stripping the file extension,
+ * keeping the URL independent of the original upload format (.webp/.jpg/.png).
+ *
+ * @param {object} item — shop item with .file and .tags[]
+ * @returns {string}    — Cloudinary URL with the appropriate transformation
+ */
+function _getMockupUrl(item) {
+    const CDN_BASE = 'https://res.cloudinary.com/dyspgn0sw/image/upload/';
+    const tags     = Array.isArray(item.tags) ? item.tags : [];
+    const base     = item.file.replace(/\.[^.]+$/, ''); // strip extension → public ID
+
+    if (tags.includes('Mobile')) {
+        return `${CDN_BASE}f_auto,q_auto,ar_9:20,c_fill,w_500/${base}`;
+    }
+    // PC or untagged — 16:9 widescreen
+    return `${CDN_BASE}f_auto,q_auto,ar_16:9,c_fill,w_1200/${base}`;
+}
+
+/**
  * Builds the 3-layer mockup HTML string for a given item.
  * @param {object} item  — shop item with .image and .tags[]
  * @returns {string}     — innerHTML for #mockup-slot
@@ -323,13 +441,6 @@ function _buildMockupHTML(item) {
     const tags  = Array.isArray(item.tags) ? item.tags : [];
     const isMob = tags.includes('Mobile');
     const isPc  = tags.includes('PC');
-
-    // ── Art URL: full wallpaper, NOT the thumbnail ────────────────────────────
-    // item.image  → assets/product-thumbs/…_thumbs.webp  (small cropped preview)
-    // item.file   → rouge_the_bat_a94a3cca.webp            (full resolution)
-    // Cloudinary base URL matches CONFIG.wallpapersPath in app.js
-    const wallpaperPath = (window.CONFIG?.wallpapersPath ?? 'https://res.cloudinary.com/dyspgn0sw/image/upload/') + item.file;
-    const imgUrl = wallpaperPath.replace(/'/g, "\\'");
 
     const now = _getMockupTimeString();
 
@@ -419,6 +530,267 @@ function _buildMockupHTML(item) {
         </div>`;
 }
 
+// ── Smart Preload — Intersection Observer (v9.7) ──────────────────────────────
+
+// ── Connection helpers ────────────────────────────────────────────────────────
+
+/**
+ * Devuelve true si el usuario activó Data Saver o la conexión es extremadamente
+ * lenta (slow-2g). En ese caso la precarga se omite por completo para respetar
+ * la preferencia explícita del usuario y no consumir su ancho de banda limitado.
+ *
+ * La Network Information API es opcional. Si el navegador no la soporta
+ * (Firefox, Safari < 17.4) la función devuelve false y la precarga procede con
+ * normalidad — degradación elegante sin comportamiento diferencial.
+ *
+ * @returns {boolean}
+ */
+function _isDataSaverActive() {
+    const conn = navigator?.connection;
+    if (!conn) return false;
+    return conn.saveData === true || conn.effectiveType === 'slow-2g';
+}
+
+/**
+ * Devuelve true si la conexión es lenta pero funcional (~2G / 100–250 kbps).
+ * En ese caso la precarga no se cancela, pero el lote de despacho se limita
+ * a 2 imágenes por ciclo para no monopolizar el ancho de banda disponible.
+ *
+ * @returns {boolean}
+ */
+function _isLowBandwidth() {
+    return navigator?.connection?.effectiveType === '2g';
+}
+
+// ── Preload scheduler — cola y despacho por lotes ─────────────────────────────
+//
+// Problema: cuando el usuario hace scroll rápido y varias tarjetas entran en
+// el viewport al mismo tiempo, el observer recibe todas sus entries de golpe.
+// Sin throttling, se inician N descargas simultáneas que compiten entre sí,
+// saturando el ancho de banda aunque fetchPriority='low' esté activo.
+//
+// Solución: encolar todas las solicitudes del mismo ciclo del observer y
+// despacharlas en requestIdleCallback (fallback: setTimeout) una vez que el
+// hilo principal está libre. En conexión 2g, el lote se limita a 2 items para
+// no consumir toda la red disponible. Los items restantes se procesan en el
+// siguiente ciclo idle.
+//
+// El scheduler se cancela y la cola se vacía en _initPreloadObserver() cada
+// vez que renderShop() reconstruye el DOM, evitando referencias colgadas.
+
+/** @type {Array<{cardEl: HTMLElement, item: object}>} */
+const _preloadQueue = [];
+
+/** @type {number|null} Handle del requestIdleCallback o setTimeout activo. */
+let _preloadFlushId = null;
+
+/**
+ * Despacha el lote de precargas pendiente.
+ * Limita el tamaño del lote a 2 en conexión 2g; en conexión normal procesa
+ * toda la cola de una vez. Si quedan items, agenda el siguiente ciclo idle.
+ */
+function _flushPreloadQueue() {
+    _preloadFlushId = null;
+    const batchSize = _isLowBandwidth() ? 2 : _preloadQueue.length;
+    _preloadQueue.splice(0, batchSize).forEach(({ cardEl, item }) =>
+        _preloadItemHiRes(cardEl, item)
+    );
+    // Continuar procesando si quedan items pendientes
+    if (_preloadQueue.length > 0) _schedulePreloadFlush();
+}
+
+/**
+ * Agenda _flushPreloadQueue en el próximo tiempo de inactividad del hilo
+ * principal. Usa requestIdleCallback cuando está disponible (Chrome, Edge,
+ * Opera) con un timeout de seguridad que garantiza ejecución incluso durante
+ * scroll continuo prolongado. Fallback a setTimeout para Firefox y Safari.
+ */
+function _schedulePreloadFlush() {
+    if (_preloadFlushId !== null) return; // Ya hay un despacho programado
+    if ('requestIdleCallback' in window) {
+        // timeout = tiempo máximo de espera antes de forzar la ejecución.
+        // Más largo en 2g para ceder la red a la navegación activa.
+        _preloadFlushId = requestIdleCallback(_flushPreloadQueue, {
+            timeout: _isLowBandwidth() ? 1200 : 200
+        });
+    } else {
+        _preloadFlushId = setTimeout(
+            _flushPreloadQueue,
+            _isLowBandwidth() ? 400 : 0
+        );
+    }
+}
+
+/**
+ * Añade un item a la cola de precarga y dispara el scheduler si aún no está
+ * activo. Llamada por el callback del IntersectionObserver.
+ *
+ * @param {HTMLElement} cardEl
+ * @param {object}      item
+ */
+function _schedulePreloadItem(cardEl, item) {
+    _preloadQueue.push({ cardEl, item });
+    _schedulePreloadFlush();
+}
+
+/**
+ * Precarga silenciosa de la imagen hi-res de un item en background.
+ *
+ * El navegador almacena la imagen en su caché HTTP (disco/memoria). Cuando
+ * openPreviewModal() crea su propio Image() con la misma URL, el navegador
+ * resuelve la petición desde la caché sin tocar la red → latencia ~0 ms.
+ *
+ * NOVEDADES v9.7:
+ *  - img.decoding = 'async': la decodificación de la imagen se encola en el
+ *    hilo de decodificación del navegador sin bloquear el hilo principal ni
+ *    un milisegundo. Crítico cuando el observer activa 8-10 precargas al mismo
+ *    tiempo durante un scroll rápido: sin este atributo, cada new Image() que
+ *    resuelve dispara la decodificación síncronamente y puede congelar el hilo
+ *    principal por 10-40 ms por imagen dependiendo de la GPU del dispositivo.
+ *
+ * Marca el card con data-preloaded="true" una vez iniciada la carga para que
+ * el observer no vuelva a disparar trabajo redundante en el mismo elemento.
+ *
+ * @param {HTMLElement} cardEl  — Elemento .shop-card que entró en el viewport.
+ * @param {object}      item    — Objeto item completo de allItems[].
+ */
+function _preloadItemHiRes(cardEl, item) {
+    // Evitar doble precarga si la tarjeta ya fue procesada
+    if (cardEl.dataset.preloaded) return;
+    // Marcar ANTES de crear la Image() para evitar condición de carrera si el
+    // observer dispara dos veces rápidamente en el mismo frame
+    cardEl.dataset.preloaded = 'true';
+
+    const url = _getMockupUrl(item);
+    const img = new Image();
+
+    // fetchPriority='low': no compite con recursos críticos del HUD/UI.
+    // Soportado en Chrome 101+ y Safari 17.2+; ignorado silenciosamente en otros.
+    img.fetchPriority = 'low';
+
+    // decoding='async': la decodificación de píxeles se realiza fuera del
+    // hilo principal (thread del compositor/GPU). Evita micro-congelaciones
+    // durante scroll rápido cuando múltiples precargas resuelven al mismo tiempo.
+    // Soporte: Chrome 65+, Firefox 63+, Safari 11.1+ — cobertura universal.
+    img.decoding = 'async';
+
+    img.onload  = () => { /* imagen ya en caché — modal abrirá instantáneamente */ };
+    img.onerror = () => {
+        // CDN inalcanzable: resetear para que openPreviewModal use su fallback CSS.
+        delete cardEl.dataset.preloaded;
+    };
+    img.src = url;
+}
+
+/**
+ * Crea (o recrea) el IntersectionObserver de precarga.
+ *
+ * CONFIGURACIÓN v9.7:
+ *  - rootMargin: '200px 0px 400px 0px'
+ *      · Superior 200 px: anticipa el scroll hacia arriba.
+ *      · Inferior 400 px: zona de precarga principal (~2 alturas de card).
+ *        Con una conexión 4G promedio (5-10 MB/s) y una imagen optimizada
+ *        en Cloudinary de ~80-150 KB, 400 px de margen equivalen a ~1.5 s
+ *        de scroll tranquilo — suficiente para que la imagen esté en caché
+ *        cuando el usuario llegue a la tarjeta.
+ *      · Lados 0 px: sin margen horizontal. El catálogo es vertical; extender
+ *        lateralmente activaría precargas en cards con overflow oculto.
+ *  - threshold: 0
+ *      Con rootMargin ya proveyendo el buffer, threshold: 0.1 añadía latencia
+ *      extra (debía verse un 10 % del card dentro de la zona expandida antes
+ *      de disparar). Con threshold: 0 el observer dispara en cuanto cualquier
+ *      píxel del card entra en la zona, maximizando el tiempo de anticipación.
+ *
+ * GUARD DE CONEXIÓN (v9.7):
+ *  - Si el usuario tiene Data Saver activo o conexión slow-2g, la función
+ *    retorna sin crear el observer. La imagen se cargará al abrir el modal,
+ *    que es el comportamiento pre-v9.6 — sin degradación funcional.
+ *  - En conexión 2g (lenta pero funcional), el observer se crea normalmente
+ *    pero el scheduler limita el lote a 2 imágenes por ciclo.
+ *
+ * SCHEDULER (v9.7):
+ *  Usa _schedulePreloadItem() en lugar de _preloadItemHiRes() directamente
+ *  para que múltiples entries del mismo ciclo del observer se encolen y se
+ *  despachen en un requestIdleCallback, sin bloquear el hilo principal durante
+ *  ráfagas de scroll.
+ *
+ * Idempotente: si _preloadObserver ya existe la desconecta y cancela la cola
+ * pendiente antes de crear una nueva (necesario tras renderShop()).
+ *
+ * Solo observa tarjetas de items NO comprados (identificadas por .shop-preview-btn).
+ *
+ * @param {HTMLElement} container — #shop-container con las tarjetas ya en el DOM.
+ * @param {object[]}    items     — Arreglo de items en el mismo orden del DOM.
+ */
+function _initPreloadObserver(container, items) {
+    // Desconectar observer anterior y vaciar la cola si el catálogo se re-renderizó.
+    // Esto evita que callbacks pendientes referencien nodos del DOM anterior.
+    if (_preloadObserver) {
+        _preloadObserver.disconnect();
+        _preloadObserver = null;
+    }
+    _preloadQueue.length = 0;
+    if (_preloadFlushId !== null) {
+        'cancelIdleCallback' in window
+            ? cancelIdleCallback(_preloadFlushId)
+            : clearTimeout(_preloadFlushId);
+        _preloadFlushId = null;
+    }
+
+    // Degradación elegante: entornos sin soporte (browsers muy antiguos, SSR)
+    if (!('IntersectionObserver' in window)) return;
+
+    // Respetar preferencia de ahorro de datos del usuario.
+    // En slow-2g o Data Saver, cualquier precarga consumiría recursos que el
+    // usuario explícitamente quiere conservar.
+    if (_isDataSaverActive()) return;
+
+    // Construir mapa id → item para O(1) lookup en el callback
+    const itemMap = new Map(items.map(it => [it.id, it]));
+
+    _preloadObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting) return;
+
+            const cardEl = entry.target;
+
+            // Si ya fue procesado en un ciclo anterior, solo dejar de observar
+            if (cardEl.dataset.preloaded) {
+                _preloadObserver?.unobserve(cardEl);
+                return;
+            }
+
+            // Resolver item desde el data-id del botón de preview
+            const previewBtn = cardEl.querySelector('.shop-preview-btn');
+            const rawId      = previewBtn?.dataset?.id;
+            const item       = rawId ? itemMap.get(parseInt(rawId, 10)) : null;
+
+            if (item) {
+                // Usar el scheduler para agrupar entries del mismo ciclo en un
+                // único lote idle, evitando N descargas simultáneas en scroll rápido
+                _schedulePreloadItem(cardEl, item);
+            }
+
+            // Dejar de observar — ya no hay trabajo pendiente en este elemento
+            _preloadObserver?.unobserve(cardEl);
+        });
+    }, {
+        // Superior 200 px (scroll hacia arriba) · Inferior 400 px (scroll principal)
+        // Sin margen horizontal para no activar cards fuera del flujo vertical
+        rootMargin: '200px 0px 400px 0px',
+        // threshold: 0 — disparar en cuanto cualquier píxel del card entra en la
+        // zona extendida. Con rootMargin ya proveyendo el buffer, esperar al 10 %
+        // solo añadía latencia sin beneficio de precisión.
+        threshold:  0
+    });
+
+    container.querySelectorAll('.shop-card').forEach(card => {
+        if (card.querySelector('.shop-preview-btn')) {
+            _preloadObserver.observe(card);
+        }
+    });
+}
+
 /**
  * Opens the preview modal with the dynamic mockup for the given item.
  * Handles clock updates, context-menu blocking, and action buttons.
@@ -466,24 +838,68 @@ function openPreviewModal(itemOrId) {
 
     // ── Double-layer progressive image load ───────────────────────────────────
     //
-    // Phase 1 (instant): thumbnail already in browser cache from the catalog grid.
-    //   → shown immediately as blurred/scaled "ghost" to eliminate blank flash.
-    // Phase 2 (async):   full-resolution wallpaper loads in a background Image().
-    //   → swapped in with a 200ms opacity cross-fade once fully decoded.
+    // Phase 1 (instant): set thumbnail as background immediately for zero-blank
+    //   display, then probe its reachability with a parallel Image() test.
+    //   → If thumbProbe.onload fires: CDN is reachable; Phase 2 proceeds normally.
+    //   → If thumbProbe.onerror fires: CDN is unreachable; cancel Phase 2 and
+    //     apply _applyArtFallback() so the frame shows a CSS gradient instead of
+    //     a blank white/dark void.
     //
-    const wallpaperPath = (window.CONFIG?.wallpapersPath ?? 'https://res.cloudinary.com/dyspgn0sw/image/upload/') + item.file;
+    // Phase 2 (async): mockup-optimised wallpaper loads in a background Image().
+    //   → swapped in with a 200ms opacity cross-fade once fully decoded.
+    //   → On error, decision depends on _thumbOk (local closure variable):
+    //       _thumbOk = true  → thumbnail loaded; file may be missing on CDN.
+    //                          Degrade to visible thumbnail (blur→clear).
+    //       _thumbOk = false → CDN fully unreachable; apply solid CSS fallback.
+    //
+    // _getMockupUrl() selects the Cloudinary transformation that matches the
+    // device frame: 9:20 portrait for Mobile, 16:9 landscape for PC.
+    const wallpaperPath = _getMockupUrl(item);
     const artEl         = slot.querySelector('.mockup-layer-art');
 
-    // Phase 1 — thumbnail as blurred placeholder
+    // Phase 1 — set thumbnail immediately (best-case path stays zero-latency)
     artEl.style.backgroundImage = `url('${item.image}')`;
     artEl.classList.add('mockup-bg-loading');
 
     // Cancel any stale load from a previous modal open
     if (_pendingHiResImg) { _pendingHiResImg.onload = _pendingHiResImg.onerror = null; _pendingHiResImg = null; }
 
-    // Phase 2 — high-res load in background
+    // _thumbOk: local closure variable shared between thumbProbe and hiRes handlers.
+    // Tracks whether the Phase 1 thumbnail was reachable. Not module-level to avoid
+    // state contamination across rapid open/close cycles.
+    let _thumbOk = false;
+
+    // Phase 1 probe — runs in parallel with Phase 2 load
+    const thumbProbe = new Image();
+    // decoding='async': la decodificación ocurre fuera del hilo principal.
+    // Aunque la thumbnail suele venir de caché (ya se mostró en la card del
+    // catálogo), el probe instancia un nuevo objeto Image y el navegador puede
+    // necesitar decodificarla en este contexto si la entrada de caché fue
+    // descartada. 'async' evita cualquier bloqueo del hilo principal.
+    thumbProbe.decoding = 'async';
+    thumbProbe.onload = () => { _thumbOk = true; };
+    thumbProbe.onerror = () => {
+        // CDN unreachable — thumbnail and hi-res will both fail.
+        // Cancel the in-flight Phase 2 load to avoid a redundant error callback,
+        // then apply the CSS fallback immediately.
+        if (_pendingHiResImg) {
+            _pendingHiResImg.onload = _pendingHiResImg.onerror = null;
+            _pendingHiResImg = null;
+        }
+        _applyArtFallback(artEl);
+    };
+    thumbProbe.src = item.image;
+
+    // Phase 2 — hi-res mockup load in background
     const hiRes    = new Image();
     _pendingHiResImg = hiRes;
+    // decoding='async': la decodificación de la imagen hi-res (hasta 1200 px de
+    // ancho) se realiza en el hilo de decodificación del navegador. Sin este
+    // atributo, el onload dispararía en el hilo principal y la decodificación
+    // de una imagen grande podría bloquear el compositor por 20-80 ms, causando
+    // un "salto" perceptible en la animación de entrada del modal o en el scroll
+    // de fondo. Con 'async', el swap de backgroundImage ocurre sin jank.
+    hiRes.decoding = 'async';
     hiRes.onload = () => {
         if (_pendingHiResImg !== hiRes) return;    // Stale: modal was closed/re-opened
         artEl.style.backgroundImage = `url('${wallpaperPath}')`;
@@ -492,18 +908,26 @@ function openPreviewModal(itemOrId) {
         _pendingHiResImg = null;
     };
     hiRes.onerror = () => {
-        // Wallpaper file missing — keep thumbnail, remove loading state gracefully
         if (_pendingHiResImg !== hiRes) return;
-        artEl.classList.remove('mockup-bg-loading');
-        artEl.classList.add('mockup-bg-ready');
         _pendingHiResImg = null;
+        if (_thumbOk) {
+            // Thumbnail loaded fine — hi-res file may be missing or have a
+            // different public ID. Degrade gracefully: show thumbnail as final.
+            artEl.classList.remove('mockup-bg-loading');
+            artEl.classList.add('mockup-bg-ready');
+        } else {
+            // CDN fully unreachable — both phases failed.
+            _applyArtFallback(artEl);
+        }
     };
     hiRes.src = wallpaperPath;
 
-    // ── will-change: active only while modal is open ──────────────────────────
-    // Applying will-change globally wastes GPU memory on composited layers that
-    // are never animated. We add it now and remove it in closePreviewModal().
-    modal.style.willChange = 'opacity, transform';
+    // ── will-change: gestionado en CSS sobre .modal-box (v9.6 Phase 3) ─────────
+    // will-change: opacity, transform está declarado permanentemente en la regla
+    // .modal-box del CSS. Como .modal-overlay.hidden aplica display:none, el
+    // navegador destruye la capa compuesta cuando el modal no está visible,
+    // por lo que no hay coste de memoria en reposo. No es necesario gestionarlo
+    // aquí via JS.
 
     // ── Anti-extraction: contextmenu hardening ────────────────────────────────
     // Guardado en variable de módulo (no en propiedad DOM) para poder hacer
@@ -531,10 +955,10 @@ function openPreviewModal(itemOrId) {
         const url = GameCenter.getDownloadUrl(item.id, item.file);
         actionsEl.innerHTML = url
             ? `<a href="${url}" download class="btn-primary vault-btn" style="flex:1; justify-content:center;">
-                   <i data-lucide="download" size="14"></i> Descargar
+                   <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-download"></use></svg> Descargar
                </a>`
             : `<button class="btn-primary" style="flex:1; justify-content:center; opacity:0.5;" disabled>
-                   <i data-lucide="check" size="14"></i> Obtenido
+                   <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-check"></use></svg> Obtenido
                </button>`;
         actionsEl.innerHTML +=
             `<button class="btn-ghost" style="flex:1; justify-content:center;" id="preview-close-btn">Volver</button>`;
@@ -543,7 +967,7 @@ function openPreviewModal(itemOrId) {
             `<button class="btn-ghost" style="flex:1; justify-content:center;" id="preview-close-btn">Volver</button>
              <button class="btn-primary preview-buy-btn" style="flex:2; justify-content:center;"
                      data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
-                 <i data-lucide="star" size="13" fill="#fbbf24" stroke="none"></i>
+                 <svg class="icon" width="13" height="13" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
                  Canjear · ${finalPrice}
              </button>`;
     }
@@ -574,9 +998,12 @@ function openPreviewModal(itemOrId) {
  * Closes the preview modal and performs full resource cleanup:
  *  - Cancels any in-flight high-res image load (prevents stale onload callbacks)
  *  - Clears background-image on the art layer → frees GPU texture buffer
- *  - Removes will-change from the modal element → releases compositor layer
  *  - Clears the clock interval
  *  - Removes the contextmenu blocker from the stage
+ *
+ * [v9.6 Phase 3] will-change ya no se gestiona aquí. Está declarado en CSS
+ * sobre .modal-box y se libera automáticamente cuando el overlay recibe
+ * display:none via .hidden (el navegador descarta la capa compuesta).
  *
  * Public — no arguments needed (resolves DOM refs internally).
  * Also accepts optional explicit refs for internal callers (unchanged API).
@@ -608,10 +1035,11 @@ function closePreviewModal(modal, stage) {
     // ── Remove slot contextmenu blocker ───────────────────────────────────────
     if (slot) slot.oncontextmenu = null;
 
-    // ── will-change cleanup ───────────────────────────────────────────────────
-    // Removing will-change after the modal is hidden tells the browser it can
-    // discard the promoted compositor layer, freeing GPU memory.
-    if (m) { m.style.willChange = 'auto'; m.classList.add('hidden'); }
+    // ── Ocultar modal — la capa compuesta se libera automáticamente ───────────
+    // .hidden aplica display:none, lo que destruye la capa GPU creada por
+    // will-change:opacity,transform declarado en .modal-box (CSS). No es
+    // necesario m.style.willChange = 'auto'.
+    if (m) { m.classList.add('hidden'); }
 
     // ── Clock interval ────────────────────────────────────────────────────────
     if (_mockupClockInterval) { clearInterval(_mockupClockInterval); _mockupClockInterval = null; }
@@ -738,7 +1166,6 @@ function updateWishlistCost() {
         : `¡Tienes saldo para toda tu lista! (<strong>${count}</strong> ítem${plural})`;
 
     banner.classList.remove('hidden');
-    if (window.lucide) lucide.createIcons({ nodes: [banner] });
 }
 
 // ── Render: Streak Calendar ───────────────────────────────────────────────────
@@ -757,12 +1184,10 @@ function renderStreakCalendar() {
         return `<div class="streak-cal-day">
             <span class="streak-cal-label">${day}</span>
             <div class="${cls}" title="${rewards[i]} monedas">
-                ${i < streak ? '<i data-lucide="check" size="10"></i>' : rewards[i]}
+                ${i < streak ? '<svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-check"></use></svg>' : rewards[i]}
             </div>
         </div>`;
     }).join('');
-
-    if (window.lucide) lucide.createIcons({ nodes: [cal] });
 }
 
 // ── Render: Catálogo ──────────────────────────────────────────────────────────
@@ -781,11 +1206,11 @@ function renderShop(items) {
         const priceHTML = eco.isSaleActive && !isOwned
             ? `<div class="shop-price">
                    <span class="price-original">${item.price}</span>
-                   <i data-lucide="star" size="11" fill="#fbbf24" stroke="none"></i>
+                   <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
                    <span class="price-sale">${finalPrice}</span>
                </div>`
             : `<div class="shop-price">
-                   <i data-lucide="star" size="11" fill="#fbbf24" stroke="none"></i>
+                   <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
                    ${isOwned ? '<span style="color:var(--success);">Obtenido</span>' : item.price}
                </div>`;
 
@@ -795,12 +1220,12 @@ function renderShop(items) {
             actionHTML = url
                 ? `<a href="${url}" download class="btn-primary vault-btn"
                        style="width:100%; justify-content:center; font-size:0.78rem; padding:7px;">
-                       <i data-lucide="download" size="13"></i> Descargar
+                       <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-download"></use></svg> Descargar
                    </a>`
                 : `<button class="btn-primary"
                        style="width:100%; justify-content:center; opacity:0.5; font-size:0.78rem; padding:7px;"
                        disabled>
-                       <i data-lucide="check" size="13"></i> Obtenido
+                       <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-check"></use></svg> Obtenido
                    </button>`;
         } else {
             actionHTML =
@@ -808,12 +1233,12 @@ function renderShop(items) {
                     <button class="btn-ghost shop-preview-btn"
                             style="flex-shrink:0; padding:7px 9px;"
                             data-id="${item.id}" title="Vista previa">
-                        <i data-lucide="eye" size="13"></i>
+                        <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-eye"></use></svg>
                     </button>
                     <button class="btn-primary shop-buy-btn"
                             style="flex:1; justify-content:center; font-size:0.78rem; padding:7px;"
                             data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
-                        <i data-lucide="star" size="11" fill="#fbbf24" stroke="none"></i> ${finalPrice}
+                        <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg> ${finalPrice}
                     </button>
                 </div>`;
         }
@@ -827,13 +1252,14 @@ function renderShop(items) {
                 ? `<button class="wishlist-btn ${isWished ? 'wishlist-btn--active' : ''}"
                            data-id="${item.id}"
                            title="${isWished ? 'Quitar de lista' : 'Agregar a lista de deseos'}">
-                       <i data-lucide="heart" size="12"></i>
+                       <svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>
                    </button>`
                 : ''}
-            <img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy">
-            ${isOwned ? '<div class="owned-badge"><i data-lucide="check-circle-2" size="10"></i> Tuyo</div>' : ''}
+            <img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy"
+                 onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
+            ${isOwned ? '<div class="owned-badge"><svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-check-circle-2"></use></svg> Tuyo</div>' : ''}
             ${eco.isSaleActive && !isOwned
-                ? '<div class="sale-card-badge"><i data-lucide="zap" size="9" fill="currentColor" stroke="none"></i> OFERTA</div>'
+                ? '<div class="sale-card-badge"><svg class="icon" width="9" height="9" style="fill:currentColor;stroke:none" aria-hidden="true"><use href="#icon-zap"></use></svg> OFERTA</div>'
                 : ''}
             <div style="width:100%;">
                 <h3 class="card-name">${item.name}</h3>
@@ -852,8 +1278,7 @@ function renderShop(items) {
             const isNow = GameCenter.toggleWishlist(id);
             btn.classList.toggle('wishlist-btn--active', isNow);
             btn.title = isNow ? 'Quitar de lista' : 'Agregar a lista de deseos';
-            btn.innerHTML = '<i data-lucide="heart" size="12"></i>';
-            if (window.lucide) lucide.createIcons({ nodes: [btn] });
+            btn.innerHTML = '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>';
             updateWishlistCost();
         });
     });
@@ -881,6 +1306,12 @@ function renderShop(items) {
     // llamada (cada keystroke del buscador, cada cambio de filtro, cada compra).
     // NO añadir lógica costosa dentro del forEach de items sin considerar este ciclo.
     refreshIcons(container);
+
+    // Smart Preload (v9.6): inicializar/reinicializar el observer tras cada render.
+    // renderShop destruye y reconstruye el DOM, así que el observer anterior apunta
+    // a nodos huérfanos. _initPreloadObserver() lo desconecta y crea uno nuevo
+    // observando únicamente los cards con .shop-preview-btn (no comprados).
+    _initPreloadObserver(container, items);
 }
 
 // ── Render: Biblioteca ────────────────────────────────────────────────────────
@@ -892,7 +1323,7 @@ function renderLibrary(items) {
     if (owned.length === 0) {
         container.innerHTML =
             `<div style="grid-column:1/-1; text-align:center; padding:60px 20px; color:var(--text-low);">
-                <i data-lucide="archive" size="40" style="opacity:0.25; display:block; margin:0 auto 12px;"></i>
+                <svg class="icon" width="40" height="40" aria-hidden="true"><use href="#icon-archive"></use></svg>
                 <p style="font-family:var(--font-display); font-size:1rem; font-weight:700; color:var(--text-med);">Tu biblioteca está vacía</p>
                 <p style="font-size:0.8rem; margin-top:6px;">Canjea wallpapers en el Catálogo.</p>
             </div>`;
@@ -912,25 +1343,26 @@ function renderLibrary(items) {
                    <a href="${url}" download
                       class="btn-primary vault-btn"
                       style="flex:1; justify-content:center; font-size:0.78rem; padding:7px;">
-                       <i data-lucide="download" size="13"></i> Descargar
+                       <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-download"></use></svg> Descargar
                    </a>
                    <button class="btn-mail library-mail-btn"
                            data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'
                            data-url="${url}"
                            aria-label="Enviar enlace de descarga por correo para ${item.name.replace(/"/g, '&quot;')}"
                            title="Enviar por correo">
-                       <i data-lucide="send" size="13"></i>
+                       <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-send"></use></svg>
                    </button>
                </div>`
             : `<button class="btn-primary"
                        style="margin-top:8px; width:100%; justify-content:center; opacity:0.5; font-size:0.78rem; padding:7px;"
                        disabled>
-                   <i data-lucide="check" size="13"></i> Sin archivo
+                   <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-check"></use></svg> Sin archivo
                </button>`;
 
         card.innerHTML =
-            `<img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy">
-            <div class="owned-badge"><i data-lucide="check-circle-2" size="10"></i> Tuyo</div>
+            `<img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy"
+                  onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
+            <div class="owned-badge"><svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-check-circle-2"></use></svg> Tuyo</div>
             <div style="width:100%;">
                 <h3 class="card-name">${item.name}</h3>
                 ${actionsHTML}
@@ -1052,7 +1484,13 @@ async function initiatePurchase(item, btn) {
     if (result.success) {
         filterItems();
         renderLibrary(allItems);
-        document.querySelectorAll('.coin-display').forEach(el => el.textContent = GameCenter.getBalance());
+        // Actualizar displays: navbar con formato abreviado, resto con valor exacto.
+        const bal = GameCenter.getBalance();
+        document.querySelectorAll('.navbar .coin-display').forEach(el => {
+            el.textContent = window.formatCoinsNavbar?.(bal) ?? bal;
+            el.closest('.coin-badge')?.setAttribute('title', `${bal} monedas`);
+        });
+        document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
         fireConfetti();
         const cbNote = result.cashback > 0 ? ` <strong>+${result.cashback} cashback</strong> devueltas.` : '';
         showToast(`"${item.name}" desbloqueado.${cbNote} Ve a <strong>Mis Tesoros</strong>.`, 'success');
@@ -1130,7 +1568,13 @@ async function handleRedeem() {
         showMsg(msg, result.message, 'var(--success)');
         input.value = '';
         input.style.borderColor = '';
-        document.querySelectorAll('.coin-display').forEach(el => el.textContent = GameCenter.getBalance());
+        // Actualizar displays: navbar con formato abreviado, resto con valor exacto.
+        const bal = GameCenter.getBalance();
+        document.querySelectorAll('.navbar .coin-display').forEach(el => {
+            el.textContent = window.formatCoinsNavbar?.(bal) ?? bal;
+            el.closest('.coin-badge')?.setAttribute('title', `${bal} monedas`);
+        });
+        document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
         if (!document.hidden) {
             confetti({ particleCount: 80, spread: 100, origin: { y: 0.4 }, colors: ['#fbbf24','#9b59ff','#22d07a'] });
         }
@@ -1334,7 +1778,6 @@ async function _handleEmailConfirm() {
     if (tooLong) {
         if (fallbackEl) fallbackEl.classList.add('visible');
         if (fallUrlEl)  fallUrlEl.textContent = _emailAbsoluteUrl;
-        if (window.lucide) lucide.createIcons({ nodes: [fallbackEl] });
 
         const copyBtn = document.getElementById('email-copy-btn');
         if (copyBtn) {
@@ -1366,9 +1809,15 @@ window.ShopView = {
     onEnter() {
         initEconomyInfo();
         renderMoonBlessingStatus();
-        // Actualizar saldo en el badge de coin-display de la navbar
-        document.querySelectorAll('.coin-display').forEach(el => {
-            el.textContent = window.GameCenter?.getBalance?.() ?? 0;
+        // Actualizar saldo en todos los coin-display:
+        // la navbar usa el formato abreviado (ej: "25.5k") y el resto el valor exacto.
+        const balance = window.GameCenter?.getBalance?.() ?? 0;
+        document.querySelectorAll('.navbar .coin-display').forEach(el => {
+            el.textContent = window.formatCoinsNavbar?.(balance) ?? balance;
+            el.closest('.coin-badge')?.setAttribute('title', `${balance} monedas`);
+        });
+        document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => {
+            el.textContent = balance;
         });
         // Re-aplicar filtros activos: si el usuario vuelve a la Tienda después de
         // navegar al Home, el catálogo se refiltra con el estado previo de activeFilter
@@ -1380,6 +1829,19 @@ window.ShopView = {
         // iconos dinámicos que pueden necesitar re-inicialización al volver a la vista.
         const shopView = document.getElementById('view-shop');
         if (shopView) refreshIcons(shopView);
+    },
+
+    /**
+     * Llamado por spa-router.js al SALIR de la vista de Tienda (v9.6).
+     * Desconecta el IntersectionObserver de precarga para liberar recursos
+     * cuando el catálogo no es visible. Se reconecta automáticamente en el
+     * próximo renderShop() al volver a la vista.
+     */
+    onLeave() {
+        if (_preloadObserver) {
+            _preloadObserver.disconnect();
+            _preloadObserver = null;
+        }
     }
 };
 
@@ -1409,9 +1871,8 @@ function loadCatalog() {
         gridEl.classList.remove('hidden');
         gridEl.innerHTML =
             '<p style="color:var(--text-low); grid-column:1/-1; text-align:center; padding:40px 0;">' +
-            '<i data-lucide="loader" size="24" style="display:block; margin:0 auto 10px; opacity:0.4;"></i>' +
+            '<svg class="icon" width="24" height="24" aria-hidden="true"><use href="#icon-loader"></use></svg>' +
             'Cargando catálogo…</p>';
-        if (window.lucide) lucide.createIcons({ nodes: [gridEl] });
     }
 
     fetch('data/shop.json')
@@ -1437,7 +1898,6 @@ function loadCatalog() {
             if (emptyEl) emptyEl.classList.add('hidden');
             if (errorEl) {
                 errorEl.classList.remove('hidden');
-                if (window.lucide) lucide.createIcons({ nodes: [errorEl] });
             }
 
             // Botón de reintento — registrar listener solo una vez usando dataset
@@ -1507,7 +1967,6 @@ document.addEventListener('DOMContentLoaded', () => {
         section.classList.toggle('promo-section--collapsed', expanded);
         section.classList.toggle('promo-section--open', !expanded);
         if (!expanded) setTimeout(() => document.getElementById('promo-input').focus(), 50);
-        if (window.lucide) lucide.createIcons({ nodes: [toggleBtn] });
     });
 
     // ── Cargar catálogo UNA SOLA VEZ (con manejo de errores y reintento) ────────

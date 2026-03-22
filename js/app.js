@@ -132,7 +132,7 @@ function debounce(fn, delay = 300) {
         timer = setTimeout(() => fn(...args), delay);
     };
 }
-window.debounce = debounce; // Disponible globalmente para shop.html
+window.debounce = debounce; // Disponible globalmente para shop-logic.js
 
 // =====================================================
 // TIEMPO DE RED — Fuente de verdad externa para el bono diario
@@ -473,9 +473,12 @@ window.GameCenter = {
 
     getDownloadUrl: (itemId, fileName) => {
         if (!fileName) return null;
-        return (store.inventory[itemId] || 0) > 0
-            ? CONFIG.wallpapersPath + fileName
-            : null;
+        if ((store.inventory[itemId] || 0) === 0) return null;
+        // Strip file extension — Cloudinary download URL uses the base public ID
+        // without extension or transformation parameters so the original master
+        // file is served (no crop, no resize, no format override).
+        const base = fileName.replace(/\.[^.]+$/, '');
+        return CONFIG.wallpapersPath + base;
     },
 
     // ── WISHLIST ─────────────────────────────────────────────────────────────
@@ -1272,7 +1275,6 @@ applyIdentity();
 document.addEventListener('DOMContentLoaded', () => {
     // Re-sincronizar UI por si algún sub-módulo modificó el DOM
     updateUI();
-    if (window.lucide) lucide.createIcons();
 
     // ── Background time sync (v9.6) ───────────────────────────────────────
     // Se lanza 800 ms después del DOMContentLoaded para no competir con el
@@ -1297,7 +1299,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = new FileReader();
             reader.onload = (evt) => {
                 window.GameCenter.setAvatar(evt.target.result);
-                if (window.lucide) lucide.createIcons();
             };
             reader.readAsDataURL(file);
         });
@@ -1315,7 +1316,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = new FileReader();
             reader.onload = (evt) => {
                 window.GameCenter.setAvatar(evt.target.result);
-                if (window.lucide) lucide.createIcons();
             };
             reader.readAsDataURL(file);
         });

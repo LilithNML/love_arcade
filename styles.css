@@ -48,6 +48,61 @@ html {
 /* ================================================================
    DESIGN TOKENS
    ================================================================ */
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   SVG SPRITE ICONS — v9.6
+   Sustituye los nodos generados por lucide.createIcons(). Cada icono es un
+   <svg class="icon"> con un <use href="#icon-NAME">. El sprite se define
+   una sola vez en index.html y el navegador lo cachea en Shadow DOM interno.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.icon {
+    display: inline-block;
+    vertical-align: middle;
+    flex-shrink: 0;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+    pointer-events: none;
+}
+
+/* Fallback de tamaño SOLO para íconos sin atributo width explícito.
+   Los atributos de presentación SVG (width="N") tienen menor especificidad
+   que cualquier regla CSS de clase, así que no se puede poner width:1em en
+   .icon directamente — sobreescribiría todos los tamaños declarados en el HTML.
+   :not([width]) garantiza que el fallback únicamente aplica a SVGs sin dimensión. */
+.icon:not([width]) {
+    width: 1em;
+    height: 1em;
+}
+
+/* Icono estrella rellena (coin-badge, hud-balance, precio en cards) */
+.icon--star-filled {
+    fill: #fbbf24;
+    stroke: none;
+}
+
+/* Icono de rayo relleno (sale badge, sale banner) */
+.icon--zap-filled {
+    fill: currentColor;
+    stroke: none;
+}
+
+/* Icono de corazón relleno (wishlist banner) */
+.icon--heart-filled {
+    fill: currentColor;
+    stroke: none;
+}
+
+/* Ajuste de posición vertical para iconos dentro de texto inline */
+.icon + span,
+span + .icon,
+.icon + .icon {
+    vertical-align: middle;
+}
+
 :root {
     /* ── Backgrounds ── */
     --bg-main:       #07070d;
@@ -1662,7 +1717,8 @@ body::before {
     display: flex; align-items: center; justify-content: center;
     padding: 20px;
     animation: modalFadeIn 0.18s ease;
-    /* GPU compositing hint — prevents repaints from bleeding outside the overlay */
+    /* backface-visibility en el overlay previene que el repaint del backdrop-filter
+       se filtre fuera de la capa durante la animación del .modal-box hijo. */
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
     -webkit-perspective: 1000;
@@ -1680,12 +1736,34 @@ body::before {
     position: relative;
     background: #0e1019;
     border: 1px solid var(--glass-float-border);
-    animation: modalSlideUp 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: modalPopIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
     box-shadow: 0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px var(--accent-border);
+    /* GPU compositing: will-change declarado en CSS para promover la capa
+       ANTES de que la animación arranque, evitando el promotion jank.
+       Seguro en memoria porque la caja hereda display:none del overlay.hidden,
+       que destruye la capa compuesta cuando el modal no está visible. */
+    will-change: opacity, transform;
+    /* backface-visibility: previene el parpadeo blanco en Safari/iOS durante
+       la animación de scale en pantallas Retina. */
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
 }
-@keyframes modalSlideUp {
-    from { transform: translateY(20px) scale(0.96); opacity: 0; }
-    to { transform: translateY(0) scale(1); opacity: 1; }
+/* ── modalPopIn — v9.6 Phase 3 ────────────────────────────────────────────────
+   Reemplaza modalSlideUp (translateY + scale). El translateY ha sido eliminado:
+   escalar un elemento es una operación de multiplicación matricial para la GPU,
+   no requiere recalcular el layout ni repintar áreas descubiertas adyacentes.
+   cubic-bezier(0.34, 1.56, 0.64, 1) = back-out suave: rebote leve que compensa
+   visualmente la ausencia de desplazamiento físico.
+   ─────────────────────────────────────────────────────────────────────────── */
+@keyframes modalPopIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 .modal-title {
     font-family: var(--font-display);
@@ -2482,6 +2560,128 @@ svg { stroke-width: 2; }
 .mockup-bg-ready {
     filter: blur(0);
     transform: scale(1);
+}
+
+/* ================================================================
+   CDN OFFLINE FALLBACK — v9.6 Phase 4 (GPU Neon Flow)
+   ================================================================
+   Aplicado por _applyArtFallback() cuando Cloudinary es inalcanzable.
+
+   Estrategia de animación por capas (compositor puro):
+   · La capa base (.mockup-bg-offline) es un fondo oscuro ESTÁTICO.
+     No se anima, no genera repints. Solo define el color de superficie.
+   · El efecto de movimiento vive íntegramente en ::before: un pseudo-
+     elemento 200% × 200% con conic-gradient neón que se desplaza y rota
+     con transform. Transform es propiedad de compositor — la GPU la
+     ejecuta sin tocar el hilo principal ni recalcular layout.
+   · filter: blur(40px) en ::before suaviza el banding entre color-stops
+     y permite un gradiente más simple (menos stops, menos rasterización).
+   · overflow: hidden en el padre contiene el ::before sobredimensionado
+     sin alterar el layout de la tarjeta o frame.
+   ================================================================ */
+
+.mockup-layer-art.mockup-bg-offline {
+    background-image: none !important;
+    background: #07060f;           /* superficie base oscura — sin gradiente propio */
+    filter: none !important;
+    transform: scale(1) !important;
+    transition: none;
+    overflow: hidden;              /* contiene el ::before sobredimensionado */
+    will-change: transform;
+}
+
+/*
+ * Orb neón animado — pseudo-elemento 200 × 200 % del contenedor.
+ * Se mueve vía translate + rotate (compositor puro, zero repints).
+ * filter: blur(40px) convierte bordes duros del gradiente en difusión
+ * orgánica, eliminando banding visible sin cost adicional de rasterizado.
+ * Paleta: violeta Cyber-Vibrant (#c084fc) + verde neón Arcade Solid (#4ade80)
+ * + índigo mid-tone (#818cf8) — contrasta sobre el fondo #07060f y mantiene
+ * ratio 4.5:1 con texto blanco (#fff) superpuesto.
+ */
+.mockup-layer-art.mockup-bg-offline::before {
+    content: '';
+    position: absolute;
+    width: 200%;
+    height: 200%;
+    top: -50%;
+    left: -50%;
+    background: conic-gradient(
+        from 0deg at 40% 50%,
+        #c084fc 0deg,
+        #4ade80 90deg,
+        #818cf8 180deg,
+        #c084fc 270deg,
+        #4ade80 360deg
+    );
+    filter: blur(40px);
+    opacity: 0.18;
+    pointer-events: none;
+    z-index: 0;
+    animation: neonFlowDrift 8s linear infinite;
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+/* ── neonFlowDrift — desplazamiento + rotación diagonal ──────────────────────
+   Translate + rotate: ambas propiedades son compositor-only.
+   8s asegura suavidad en gama baja sin aceleración de fotogramas perceptible.
+   linear evita aceleración / desaceleración que delate el bucle de 8s. */
+@keyframes neonFlowDrift {
+    0%   { transform: translate(0%,   0%)   rotate(0deg);   }
+    25%  { transform: translate(-8%,  5%)   rotate(90deg);  }
+    50%  { transform: translate(-12%, -4%)  rotate(180deg); }
+    75%  { transform: translate(-4%,  8%)   rotate(270deg); }
+    100% { transform: translate(0%,   0%)   rotate(360deg); }
+}
+
+/*
+ * Catalog / Library image offline placeholder.
+ * Applied via onerror on <img> when the Cloudinary thumbnail fails.
+ * Uses the same GPU-animated ::before pattern at reduced opacity
+ * to maintain visual consistency between card and modal fallbacks.
+ * overflow:hidden es necesario para contener el ::before.
+ */
+.shop-img--offline {
+    position: relative;
+    overflow: hidden;
+    background: #07060f;
+    color: transparent;            /* Previene el ícono de imagen rota del navegador */
+}
+
+.shop-img--offline::before {
+    content: '';
+    position: absolute;
+    width: 200%;
+    height: 200%;
+    top: -50%;
+    left: -50%;
+    background: conic-gradient(
+        from 0deg at 40% 50%,
+        #c084fc 0deg,
+        #4ade80 90deg,
+        #818cf8 180deg,
+        #c084fc 270deg,
+        #4ade80 360deg
+    );
+    filter: blur(30px);
+    opacity: 0.14;                 /* más sutil en cards pequeñas */
+    pointer-events: none;
+    animation: neonFlowDrift 8s linear infinite;
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+/* ── prefers-reduced-motion: detener animaciones, preservar estética ─────────
+   Usuarios con vestibular disorders o epilepsia fotosensible pueden tener
+   activada esta preferencia. Pausamos la animación sin eliminar el diseño. */
+@media (prefers-reduced-motion: reduce) {
+    .mockup-layer-art.mockup-bg-offline::before,
+    .shop-img--offline::before {
+        animation-play-state: paused;
+    }
 }
 
 /*

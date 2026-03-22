@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v9.3 · Zero-Flicker Initiative · Arcade Solid 3.0
+### Plataforma de Recompensas · v9.7 · Smart Preload Hardening · CDN Offline Resilience · Arcade Solid 3.0
 
 ---
 
@@ -15,6 +15,13 @@
 2g. [Novedades en v9.4 — Identity Update](#2g-novedades-en-v94--identity-update)
 2h. [Novedades en v10.0 — Arcade Solid 3.0](#2h-novedades-en-v100--arcade-solid-30)
 2j. [Novedades en v10.2 — Preview 2.0 Sistema de Mockup Dinámico](#2j-novedades-en-v102--preview-20-sistema-de-mockup-dinámico)
+2k. [Novedades en v9.5 — Cloudinary CDN Migration](#2k-novedades-en-v95--cloudinary-cdn-migration)
+2l. [Novedades en v9.6 — CDN Offline Resilience](#2l-novedades-en-v96--cdn-offline-resilience)
+2m. [Novedades en v9.6 — SVG Sprite Migration](#2m-novedades-en-v96--svg-sprite-migration-fase-1--icon-performance)
+2n. [Novedades en v9.6 — Smart Preload (Fase 2)](#2n-novedades-en-v96--smart-preload-fase-2--intersection-observer)
+2o. [Novedades en v9.6 — Animación de Modal (Fase 3)](#2o-novedades-en-v96--animación-de-modal-fase-3--scale-opacity)
+2p. [Novedades en v9.6 — Neon Flow Fallback (Fase 4)](#2p-novedades-en-v96--neon-flow-fallback-fase-4--gpu-animated-gradients)
+2q. [Novedades en v9.7 — Smart Preload Hardening](#2q-novedades-en-v97--smart-preload-hardening-decoding-async--scheduler--connection-guard)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -60,7 +67,7 @@ Love Arcade es una **plataforma de recompensas sin backend** construida con HTML
 | **CSS** | Reescrito con arquitectura Mobile-First. Los estilos base aplican a móvil; los overrides de desktop usan `@media (min-width: 768px)`. |
 | **UI Móvil** | El "Hero Balance" (banner grande de monedas) se oculta en móvil mediante `display: none` en el CSS base. El saldo ya es visible en la Navbar superior. |
 | **UI Móvil** | La grilla de productos en la tienda usa `repeat(2, 1fr)` como base (2 columnas en móvil), en lugar de 1 columna. |
-| **Iconografía** | Todos los emojis funcionales (`🌙`, `⚡`, `♥`) han sido reemplazados por nodos `<i data-lucide="...">` de la librería Lucide ya integrada. |
+| **Iconografía** | Todos los emojis funcionales (`🌙`, `⚡`, `♥`) han sido reemplazados por `<svg class="icon"><use href="#icon-NAME">`. Los iconos se sirven desde un SVG Sprite estático definido en `index.html` (v9.6). |
 | **Filtros** | Los filtros del catálogo se simplifican a: Todos, PC, Mobile y Mis Lista. Se eliminan Anime, Gaming, Sonic, DragonBall y Genshin. |
 | **Wishlist** | Nuevo filtro "Mis Lista" para ver solo los ítems marcados con el corazón. |
 | **Wishlist** | Indicador de coste: muestra cuántas monedas faltan para comprar toda la lista. |
@@ -195,7 +202,7 @@ La "inteligencia" de la página (JavaScript) se ejecutaba demasiado tarde. El na
 **Solución:** Script crítico inline en `<head>`, que se ejecuta síncronamente **antes del primer layout/paint**.
 
 ```html
-<!-- En <head>, justo antes de Lucide -->
+<!-- En <head>, antes del script crítico de tema -->
 <script>
 !function(){
   var KEY='gamecenter_v6_promos';
@@ -381,6 +388,687 @@ El `.player-hud` permanece en `opacity: 0` en **ambos caminos** hasta el `reveal
 | `app.js` | `migrateState`: +`nickname`, +`gender`. `GameCenter`: +`setIdentity`, +`getIdentity`, +`hasIdentity`. Nueva función `applyIdentity()`. INIT síncrono: llama a `applyIdentity()`. |
 | `index.html` | HUD: `hud-greeting` con `<span id="pref-suffix">`, `hud-name` con `id="display-nickname"`. Identity Modal completo. Inline script: lógica condicional `hasIdentity → revealUI / modal`. |
 | `styles.css` | `.identity-modal-overlay`, `.identity-modal-box`, `.identity-chips`, `.identity-chip`, `.identity-chip--active`, `.identity-input`, `.identity-char-count`, `.identity-input-error`, `.identity-confirm-btn`. `.hud-name`: +`min-height`. |
+
+---
+
+## 2k. Novedades en v9.5 — Cloudinary CDN Migration
+
+### Resumen
+
+Se eliminan las carpetas locales `assets/product-thumbs/` y `assets/cover/` del proyecto. Todas las imágenes de producto y carátulas de juegos se sirven desde Cloudinary, lo que reduce el peso del repositorio, mejora los tiempos de carga con transformaciones on-the-fly y unifica el pipeline de imágenes en un único origen.
+
+### Cambios por archivo
+
+| Archivo | Cambio |
+|---|---|
+| `data/shop.json` | El campo `image` de cada producto ya no apunta a `assets/product-thumbs/`. Ahora es una URL Cloudinary con `ar_16:9,c_fill,g_auto,w_640`. |
+| `index.html` | Las 9 carátulas de juegos (`card-cover`) usan URLs Cloudinary `ar_16:9,c_fill,g_auto,w_1080` en lugar de `assets/cover/`. |
+| `js/app.js` | `getDownloadUrl()` ahora devuelve la URL maestra de Cloudinary sin extensión ni transformaciones: `https://res.cloudinary.com/dyspgn0sw/image/upload/{public_id}`. |
+| `js/shop-logic.js` | Nueva función privada `_getMockupUrl(item)`. `openPreviewModal()` usa `_getMockupUrl()` en lugar de `CONFIG.wallpapersPath + item.file`. |
+
+---
+
+### Estructura de URLs Cloudinary
+
+| Uso | Transformación | Ejemplo |
+|---|---|---|
+| **Thumbnail del catálogo** | `f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640` | `…/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/rouge_the_bat_a94a3cca` |
+| **Carátula de juego** | `f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080` | `…/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_1080/2048_cover_art` |
+| **Mockup Mobile** | `f_auto,q_auto,ar_9:20,c_fill,w_500` | `…/f_auto,q_auto,ar_9:20,c_fill,w_500/rouge_the_bat_a94a3cca` |
+| **Mockup PC** | `f_auto,q_auto,ar_16:9,c_fill,w_1200` | `…/f_auto,q_auto,ar_16:9,c_fill,w_1200/shadow_the_hedgehog_6ff623c4` |
+| **Descarga / Email** | *(ninguna — master original)* | `…/rouge_the_bat_a94a3cca` |
+
+> **Nota:** todas las URLs usan el **public ID sin extensión**. Cloudinary resuelve el formato de entrega automáticamente con `f_auto` (WebP en navegadores compatibles, JPEG/PNG como fallback).
+
+---
+
+### `_getMockupUrl(item)` — Detalles de implementación
+
+```javascript
+function _getMockupUrl(item) {
+    const CDN_BASE = 'https://res.cloudinary.com/dyspgn0sw/image/upload/';
+    const tags     = Array.isArray(item.tags) ? item.tags : [];
+    const base     = item.file.replace(/\.[^.]+$/, ''); // strip extension → public ID
+
+    if (tags.includes('Mobile')) {
+        return `${CDN_BASE}f_auto,q_auto,ar_9:20,c_fill,w_500/${base}`;
+    }
+    return `${CDN_BASE}f_auto,q_auto,ar_16:9,c_fill,w_1200/${base}`;
+}
+```
+
+La función es **self-contained**: no depende de `window.CONFIG` ni de ningún estado externo, lo que la hace segura de llamar en cualquier momento del ciclo de vida del módulo.
+
+---
+
+### Flujo de imágenes en el modal de preview (v9.5)
+
+```
+openPreviewModal(item)
+    │
+    ├── Phase 1 (instant)
+    │     artEl.style.backgroundImage = item.image   ← thumbnail CDN w_640 (ya en caché)
+    │     artEl.classList.add('mockup-bg-loading')   ← estado visual de carga
+    │
+    └── Phase 2 (async — Image() background load)
+          wallpaperPath = _getMockupUrl(item)         ← Mobile:w_500 / PC:w_1200
+          hiRes.src = wallpaperPath
+                │
+                ├─ onload → artEl.backgroundImage = wallpaperPath
+                │           artEl.classList → 'mockup-bg-ready'
+                └─ onerror → graceful degradation (thumbnail persiste)
+```
+
+---
+
+### Guía de mantenimiento actualizada
+
+Para **agregar un wallpaper nuevo** a partir de v9.5:
+
+1. Subir el archivo a Cloudinary. El public ID debe seguir el patrón `{nombre}_{hash8}` (sin extensión en el ID).
+2. Añadir la entrada en `data/shop.json`:
+   - `"image"`: `https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/{public_id}`
+   - `"file"`: nombre del archivo original incluyendo extensión (ej: `rouge_the_bat_a94a3cca.webp`)
+   - `"tags"`: debe incluir `"Mobile"` o `"PC"` para que `_getMockupUrl()` seleccione la transformación correcta.
+3. No es necesario generar thumbnails locales ni tocar JS o HTML.
+
+---
+
+## 2l. Novedades en v9.6 — CDN Offline Resilience
+
+### Motivación
+
+Con la migración completa a Cloudinary (v9.5), todas las imágenes de la plataforma dependen de un CDN externo. Ante una caída de Cloudinary o un CDN bloqueado por el usuario (ad-blocker, firewall corporativo, región con restricciones), la interfaz mostraba elementos en blanco o el icono de imagen rota del navegador. Esta entrega garantiza que la plataforma nunca se vea "rota", independientemente del estado del CDN.
+
+---
+
+### Escenarios cubiertos
+
+| Escenario | Comportamiento anterior | Comportamiento v9.6 |
+|---|---|---|
+| CDN caído — modal de preview abierto | Art layer en blanco, shimmer de carga infinito | Gradiente CSS puro (`mockup-bg-offline`) aplicado en <100 ms |
+| CDN caído — catálogo | Icono roto del navegador en cada tarjeta | Fondo sólido `.shop-img--offline`, sin icono roto |
+| CDN caído — biblioteca | Icono roto del navegador en cada tarjeta | Fondo sólido `.shop-img--offline`, sin icono roto |
+| Archivo hi-res faltante, thumbnail OK | Shimmer de carga infinito | Degrada a thumbnail visible (blur → clear) |
+| CDN lento — modal abierto antes de cargar | Thumbnail visible con blur hasta hi-res | Sin cambio — comportamiento correcto preservado |
+
+---
+
+### Arquitectura del fallback
+
+#### `_applyArtFallback(artEl)` — `shop-logic.js`
+
+Función privada e idempotente. Limpia el `backgroundImage` del art layer y aplica la clase `.mockup-bg-offline`. Segura de llamar desde múltiples manejadores de error sin efectos secundarios duplicados.
+
+```javascript
+function _applyArtFallback(artEl) {
+    if (!artEl || artEl.classList.contains('mockup-bg-offline')) return;
+    artEl.style.backgroundImage = 'none';
+    artEl.classList.remove('mockup-bg-loading', 'mockup-bg-ready');
+    artEl.classList.add('mockup-bg-offline');
+}
+```
+
+#### Flujo completo del modal de preview (v9.6)
+
+```
+openPreviewModal(item)
+    │
+    ├── artEl.backgroundImage = thumbnail CDN    ← inmediato (best-case)
+    ├── artEl.classList → 'mockup-bg-loading'
+    │
+    ├── thumbProbe = new Image(item.image)       ← prueba CDN en paralelo
+    │       ├── onload  → _thumbOk = true        ← CDN alcanzable
+    │       └── onerror → cancela Phase 2
+    │                     _applyArtFallback()    ← gradiente CSS inmediato
+    │
+    └── hiRes = new Image(_getMockupUrl(item))   ← Phase 2 (hi-res)
+            ├── onload  → backgroundImage = hi-res URL
+            │             classList → 'mockup-bg-ready'
+            │
+            └── onerror →
+                    ├── _thumbOk = true  → classList remove 'loading', add 'ready'
+                    │                      (thumbnail queda como imagen final)
+                    └── _thumbOk = false → _applyArtFallback()
+```
+
+#### `.mockup-layer-art.mockup-bg-offline` — `styles.css`
+
+Gradiente CSS de doble capa (radial glow + linear base) aplicado sin recursos externos. Los `!important` en `filter` y `transform` anulan los estados `.mockup-bg-loading` que pueden estar activos cuando el error llega antes de que el load resuelva.
+
+```css
+.mockup-layer-art.mockup-bg-offline {
+    background-image: none !important;
+    background:
+        radial-gradient(ellipse 65% 55% at 50% 42%,
+            rgba(155, 89, 255, 0.09) 0%, transparent 70%),
+        linear-gradient(160deg, #0e0c1a 0%, #1a1428 55%, #0c0c18 100%);
+    filter: none !important;
+    transform: scale(1) !important;
+    transition: none;
+}
+```
+
+#### `onerror` en `<img>` de catálogo y biblioteca
+
+Añadido en `renderShop()` y `renderLibrary()`. El manejador se auto-elimina (`this.onerror=null`) para prevenir bucles de error recursivos, elimina el `src` para suprimir el icono de imagen rota del navegador, y añade `.shop-img--offline` para el fondo de relleno CSS.
+
+```html
+<img src="..." class="shop-img"
+     onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
+```
+
+---
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `js/shop-logic.js` | Nueva función `_applyArtFallback(artEl)`. `openPreviewModal()`: Phase 1 añade `thumbProbe` Image + `_thumbOk` closure variable; Phase 2 `onerror` reescrito con lógica condicional. `renderShop()` y `renderLibrary()`: `onerror` inline en `<img>`. |
+| `styles.css` | Nuevas clases `.mockup-layer-art.mockup-bg-offline` y `.shop-img--offline`. |
+
+---
+
+## 2m. Novedades en v9.6 — SVG Sprite Migration (Fase 1 — Icon Performance)
+
+### Motivación
+
+`lucide.createIcons()` se ejecutaba en cada transición de vista dentro de `_applyView()` y en cada render parcial del catálogo. En dispositivos de gama media/baja esto generaba un pico de CPU de ~200–500 ms que bloqueaba el hilo principal, causaba reflows por reemplazo de nodos SVG, y producía un parpadeo perceptible donde los iconos "aparecían" un instante después que el resto del contenido.
+
+Adicionalmente, la librería Lucide (~90 KB) se cargaba desde `unpkg.com` en el critical path, añadiendo un round-trip de red innecesario.
+
+### Solución: SVG Sprite Estático
+
+Se reemplaza el sistema dinámico de Lucide por un bloque `<svg>` oculto al inicio del `<body>` que contiene 47 símbolos (`<symbol id="icon-NAME">`). Cada icono se referencia con el patrón nativo:
+
+```html
+<!-- Antes (Lucide dinámico) -->
+<i data-lucide="shopping-bag" size="20"></i>
+
+<!-- Ahora (SVG Sprite estático) -->
+<svg class="icon" width="20" height="20" aria-hidden="true">
+    <use href="#icon-shopping-bag"></use>
+</svg>
+```
+
+El navegador clona cada símbolo vía Shadow DOM interno: sin scripting, sin reflow, pintado atómico desde el primer frame de cada transición.
+
+### Clase CSS `.icon`
+
+Se añade en `styles.css` la clase base `.icon` y variantes para casos de fill explícito:
+
+```css
+.icon {
+    display: inline-block;
+    vertical-align: middle;
+    flex-shrink: 0;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+    pointer-events: none;
+}
+
+/* Variantes de fill para iconos con relleno explícito */
+.icon--star-filled  { fill: #fbbf24; stroke: none; }  /* precio, coin-badge */
+.icon--zap-filled   { fill: currentColor; stroke: none; }  /* sale badge */
+.icon--heart-filled { fill: currentColor; stroke: none; }  /* wishlist activo */
+```
+
+> **Nota para desarrollo:** Los iconos generados dinámicamente en templates HTML dentro de `shop-logic.js` deben usar el helper `_icon(name, size, opts)` en lugar de la antigua sintaxis `<i data-lucide>`.
+
+### Helper `_icon()` en `shop-logic.js`
+
+```javascript
+// Genera markup SVG Sprite para usar en innerHTML de templates
+_icon('download', 14)
+// → <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-download"></use></svg>
+
+_icon('star', 13, { fill: '#fbbf24', stroke: 'none' })
+// → <svg class="icon" width="13" height="13" style="fill:#fbbf24;stroke:none" aria-hidden="true">...
+
+_icon('heart', 12, { cls: 'wishlist-icon' })
+// → <svg class="icon wishlist-icon" width="12" height="12" aria-hidden="true">...
+```
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `index.html` | SVG Sprite (47 `<symbol>`) inyectado al inicio del `<body>`. Los 70 nodos `<i data-lucide>` reemplazados por `<svg class="icon"><use>`. `<script src="unpkg.com/lucide">` eliminado. `lucide.createIcons()` inline eliminado. |
+| `spa-router.js` | `lucide.createIcons()` eliminado de `_applyView()`. JSDoc actualizado. Versión actualizada a v9.6. |
+| `app.js` | 3 llamadas a `lucide.createIcons()` eliminadas (DOMContentLoaded + 2 handlers de avatar upload). |
+| `shop-logic.js` | `refreshIcons()` convertida a no-op documentado. Añadido helper `_icon(name, size, opts)`. Todos los `<i data-lucide>` en template strings reemplazados por `<svg><use>`. Llamadas a `lucide.createIcons()` eliminadas. |
+| `styles.css` | Añadida clase `.icon` (stroke base, sin fill) y variantes `.icon--star-filled`, `.icon--zap-filled`, `.icon--heart-filled`. |
+
+### Resultado
+
+| Métrica | Antes | Después |
+|---|---|---|
+| Coste de scripting por transición | ~200–500 ms (CPU) | 0 ms |
+| Round-trips de red para iconos | 1 (CDN Lucide ~90 KB) | 0 |
+| Parpadeo de iconos en transición | Visible (~1 frame) | Eliminado |
+| Nodos del DOM creados/destruidos | Por cada transición | 0 (sprite cachado) |
+
+---
+
+## 2n. Novedades en v9.6 — Smart Preload (Fase 2 — Intersection Observer)
+
+### Motivación
+
+`openPreviewModal()` era un sistema puramente reactivo: la descarga de la imagen hi-res comenzaba únicamente cuando el usuario hacía clic. En conexiones móviles promedio esto producía ~3 segundos de espera con una miniatura pixelada en pantalla, dañando el impacto visual de la estética Cyber-Vibrant y haciendo que la interfaz se sintiese lenta a pesar de ser técnicamente fluida en el resto.
+
+### Solución: Precarga Predictiva
+
+Se implementa un `IntersectionObserver` que aprovecha el tiempo de lectura/scroll del usuario para descargar el arte hi-res en segundo plano. Cuando el usuario abre el modal, el navegador ya tiene la imagen en caché y la sirve instantáneamente.
+
+### Arquitectura (v9.6 base — ver hardening en v9.7 más abajo)
+
+#### `_preloadItemHiRes(cardEl, item)` — precarga unitaria
+
+```javascript
+function _preloadItemHiRes(cardEl, item) {
+    if (cardEl.dataset.preloaded) return;
+    cardEl.dataset.preloaded = 'true';   // Marcar antes de crear Image() — evita carrera
+
+    const img = new Image();
+    img.fetchPriority = 'low';           // No compite con recursos críticos del HUD
+    img.decoding      = 'async';         // [v9.7] decodificación fuera del hilo principal
+    img.src = _getMockupUrl(item);       // Misma URL que usará openPreviewModal() → cache hit
+}
+```
+
+- `data-preloaded="true"` se escribe en el card **antes** de instanciar `Image()` para evitar una condición de carrera si el observer dispara dos veces en el mismo frame.
+- `fetchPriority = 'low'` (Chrome 101+, Safari 17.2+) asegura que la precarga no compite con el HUD, el saldo ni otros elementos críticos.
+- `decoding = 'async'` (v9.7 — ver sección 2q) delega la decodificación de píxeles al thread del compositor, liberando el hilo principal durante ráfagas de scroll.
+- Si el CDN devuelve error, `onerror` elimina `data-preloaded` para que `openPreviewModal()` ejecute su propio flujo de fallback CSS.
+
+#### `_initPreloadObserver(container, items)` — configuración del observer
+
+| Parámetro | v9.6 | v9.7 | Razón del cambio |
+|---|---|---|---|
+| `rootMargin` | `'200px'` | `'200px 0px 400px 0px'` | Anticipación asimétrica: 400 px abajo (scroll principal), 200 px arriba (scroll inverso), 0 px en lados (evita activar overflow horizontal) |
+| `threshold` | `0.1` | `0` | Con rootMargin proveyendo el buffer, threshold 0.1 añadía latencia sin precisión. threshold 0 dispara al primer píxel en la zona extendida |
+
+```javascript
+_preloadObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const cardEl = entry.target;
+        if (cardEl.dataset.preloaded) { _preloadObserver?.unobserve(cardEl); return; }
+
+        const item = itemMap.get(parseInt(cardEl.querySelector('.shop-preview-btn')?.dataset?.id, 10));
+        if (item) _schedulePreloadItem(cardEl, item);   // [v9.7] scheduler, no directo
+
+        _preloadObserver?.unobserve(cardEl);
+    });
+}, { rootMargin: '200px 0px 400px 0px', threshold: 0 });
+```
+
+- **Mapa `id → item`**: construido en `O(n)` una sola vez al inicializar el observer; cada lookup en el callback es `O(1)`.
+- **`unobserve` inmediato**: tras procesar un card, se deja de observar. El observer no acumula referencias a elementos ya tratados.
+- **Solo cards con `.shop-preview-btn`**: las tarjetas compradas no tienen modal de preview y no necesitan precarga.
+- **Idempotente**: si `renderShop()` reconstruye el DOM, `_initPreloadObserver()` desconecta el observer anterior y vacía la cola pendiente antes de crear uno nuevo sobre los nodos frescos.
+
+#### Ciclo de vida del observer (integración con SPA)
+
+```
+navigateTo('shop')
+    └── ShopView.onEnter()
+            └── filterItems() → renderShop()
+                    └── _initPreloadObserver()   ← Observer activo
+
+[Usuario hace scroll — cards entran en zona extendida]
+    └── _schedulePreloadItem()                   ← Encolar
+            └── requestIdleCallback / setTimeout ← Despachar en idle
+                    └── _preloadItemHiRes()       ← Imagen hi-res en caché
+
+[Usuario hace clic en Preview]
+    └── openPreviewModal()                       ← cache hit → swap instantáneo
+
+navigateTo('home')
+    └── ShopView.onLeave()                       ← Observer desconectado
+            └── _preloadObserver.disconnect()
+```
+
+#### Cambios en `spa-router.js`
+
+`_applyView()` ahora llama a `onLeave()` de la vista que se abandona **antes** de activar la nueva:
+
+```javascript
+if (viewId === 'shop') window.HomeView?.onLeave?.();
+if (viewId === 'home') window.ShopView?.onLeave?.();
+
+if (viewId === 'home') window.HomeView?.refresh?.();
+if (viewId === 'shop') window.ShopView?.onEnter?.();
+```
+
+### Eficiencia de datos
+
+A diferencia de una precarga masiva, el observer solo descarga imágenes de los cards que el usuario está viendo o está a punto de ver. En un catálogo de 30 items con una pantalla móvil que muestra 4 cards, el máximo de precargas activas en cualquier momento es ~6-8 (los visibles + los dentro del margen).
+
+### Compatibilidad (v9.6 base)
+
+| API | Soporte |
+|---|---|
+| `IntersectionObserver` | Chrome 51+, Firefox 55+, Safari 12.1+, Edge 15+ |
+| `fetchPriority` | Chrome 101+, Safari 17.2+ (ignorado en otros — sin degradación) |
+
+En entornos sin `IntersectionObserver`, `_initPreloadObserver()` retorna inmediatamente y la imagen hi-res se carga al abrir el modal (comportamiento pre-v9.6).
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `js/shop-logic.js` | Nuevas funciones `_preloadItemHiRes()` e `_initPreloadObserver()`. Nueva variable de módulo `_preloadObserver`. `renderShop()` llama a `_initPreloadObserver()` tras construir el DOM. `ShopView` añade método `onLeave()` que desconecta el observer. |
+| `js/spa-router.js` | `_applyView()` llama a `onLeave()` de la vista saliente antes de activar la nueva. JSDoc actualizado. |
+
+---
+
+## 2q. Novedades en v9.7 — Smart Preload Hardening (decoding async + scheduler + connection guard)
+
+### Motivación
+
+La Fase 2 (v9.6) del Smart Preload resolvió el problema de latencia al abrir el modal. Sin embargo, tres problemas de rendimiento quedaron sin resolver:
+
+1. **Decodificación síncrona en scroll rápido**: `new Image()` instancia la carga, pero cuando la imagen resuelve, el navegador intenta decodificarla (descomprimir píxeles para la GPU) de forma síncrona en el hilo principal. Con 8-10 precargas resolviendo simultáneamente durante scroll rápido, esto producía micro-congelaciones de 10-40 ms por imagen — imperceptibles individualmente, pero acumuladas provocan jank visible en gama baja.
+
+2. **Sin throttling de red en scroll rápido**: cuando el usuario hace scroll muy rápido, el observer recibe todas las entries de golpe en el mismo callback. Sin cola, se inician N descargas en paralelo, saturando el ancho de banda disponible aunque `fetchPriority = 'low'` esté activo.
+
+3. **Sin respeto al Data Saver**: si el usuario tiene activado el modo de ahorro de datos o tiene conexión slow-2g, la precarga consumía ancho de banda en contra de su preferencia explícita.
+
+### Cambios
+
+#### `img.decoding = 'async'` en `_preloadItemHiRes()` y `openPreviewModal()`
+
+```javascript
+// _preloadItemHiRes()
+img.fetchPriority = 'low';
+img.decoding      = 'async';   // ← NUEVO v9.7
+
+// openPreviewModal() — thumbProbe
+thumbProbe.decoding = 'async'; // ← NUEVO v9.7
+
+// openPreviewModal() — hiRes
+hiRes.decoding = 'async';      // ← NUEVO v9.7
+```
+
+El atributo `decoding` con valor `async` indica al navegador que puede diferir la decodificación de la imagen al hilo de decodificación (fuera del hilo principal). El hilo principal solo recibe el control cuando la imagen ya está lista en el buffer de la GPU, sin haber sido bloqueado.
+
+| Contexto | Sin `decoding='async'` | Con `decoding='async'` |
+|---|---|---|
+| 8 precargas resuelven simultáneamente | Decodificación síncrona ~10-40 ms × 8 = posible congelación | Decodificación paralela en compositor; hilo principal libre |
+| openPreviewModal — imagen hi-res 1200 px | Swap de backgroundImage puede bloquear 20-80 ms | Swap sin jank; compositor decodifica en background |
+
+Soporte: Chrome 65+, Firefox 63+, Safari 11.1+. Cobertura prácticamente universal.
+
+#### Guard de conexión: `_isDataSaverActive()` e `_isLowBandwidth()`
+
+```javascript
+function _isDataSaverActive() {
+    const conn = navigator?.connection;
+    return conn?.saveData === true || conn?.effectiveType === 'slow-2g';
+}
+
+function _isLowBandwidth() {
+    return navigator?.connection?.effectiveType === '2g';
+}
+```
+
+`_initPreloadObserver()` retorna inmediatamente si `_isDataSaverActive()` es `true`. En ese caso no se crea el observer y la imagen se carga al abrir el modal — exactamente el comportamiento pre-v9.6, sin degradación funcional.
+
+La Network Information API es opcional: si el navegador no la soporta (Firefox, Safari < 17.4), ambas funciones devuelven `false` y la precarga procede normalmente.
+
+#### Scheduler de precarga: `_schedulePreloadItem` + `_flushPreloadQueue`
+
+```javascript
+// Cola de solicitudes
+const _preloadQueue = [];
+let   _preloadFlushId = null;
+
+function _schedulePreloadItem(cardEl, item) {
+    _preloadQueue.push({ cardEl, item });
+    _schedulePreloadFlush();
+}
+
+function _schedulePreloadFlush() {
+    if (_preloadFlushId !== null) return; // Ya hay despacho programado
+    if ('requestIdleCallback' in window) {
+        _preloadFlushId = requestIdleCallback(_flushPreloadQueue, {
+            timeout: _isLowBandwidth() ? 1200 : 200
+        });
+    } else {
+        _preloadFlushId = setTimeout(
+            _flushPreloadQueue,
+            _isLowBandwidth() ? 400 : 0
+        );
+    }
+}
+
+function _flushPreloadQueue() {
+    _preloadFlushId = null;
+    const batchSize = _isLowBandwidth() ? 2 : _preloadQueue.length;
+    _preloadQueue.splice(0, batchSize).forEach(({ cardEl, item }) =>
+        _preloadItemHiRes(cardEl, item)
+    );
+    if (_preloadQueue.length > 0) _schedulePreloadFlush();
+}
+```
+
+| Conexión | Comportamiento del scheduler |
+|---|---|
+| Data Saver / slow-2g | Observer no se crea; scheduler no se usa |
+| 2g | `requestIdleCallback(timeout: 1200ms)` · lote de 2 imágenes · siguiente ciclo tras 400ms |
+| 3g / 4g / WiFi | `requestIdleCallback(timeout: 200ms)` · todo el lote de una vez |
+| Sin Network Info API | El mismo comportamiento que 3g/4g (fallback conservador) |
+
+La cola se limpia (`_preloadQueue.length = 0`) y el callback pendiente se cancela (`cancelIdleCallback` / `clearTimeout`) cada vez que `_initPreloadObserver()` reconstruye el observer por un nuevo render del catálogo, evitando referencias a nodos DOM obsoletos.
+
+#### `rootMargin` y `threshold` actualizados
+
+| Parámetro | v9.6 | v9.7 |
+|---|---|---|
+| `rootMargin` | `'200px'` (simétrico) | `'200px 0px 400px 0px'` (asimétrico) |
+| `threshold` | `0.1` | `0` |
+
+El nuevo `rootMargin` asimétrico tiene tres efectivos:
+- **Superior 200 px**: anticipa el scroll hacia arriba (catálogo ascendente).
+- **Inferior 400 px**: zona de precarga principal. ~2 alturas de card en móvil (≈ 1.5 pantallas). En una conexión 4G promedio, una imagen Cloudinary de ~80-150 KB tarda < 0.5 s — el margen de 400 px da ≥ 2 s de anticipación a velocidad de scroll normal.
+- **Lados 0 px**: el catálogo es vertical; un margen lateral activaría precargas para cards en overflow horizontal oculto.
+
+`threshold: 0` dispara en cuanto cualquier píxel del card entra en la zona extendida. Con el rootMargin ya proveyendo el buffer, threshold 0.1 solo añadía latencia sin aportar precisión.
+
+### Compatibilidad actualizada
+
+| API | Soporte |
+|---|---|
+| `IntersectionObserver` | Chrome 51+, Firefox 55+, Safari 12.1+, Edge 15+ |
+| `fetchPriority` | Chrome 101+, Safari 17.2+ (ignorado en otros) |
+| `img.decoding = 'async'` | Chrome 65+, Firefox 63+, Safari 11.1+ — cobertura universal |
+| `requestIdleCallback` | Chrome 47+, Edge 79+, Opera 34+ (fallback: setTimeout) |
+| Network Information API | Chrome 61+, Edge 79+, Opera 48+ (fallback: asumir conexión rápida) |
+
+### Resultado
+
+| Escenario | v9.6 | v9.7 |
+|---|---|---|
+| Scroll rápido, 10 cards entran al mismo tiempo | 10 descargas paralelas, posible jank de decodificación | Cola idle → lote único; decoding async → 0 bloqueo |
+| Usuario con Data Saver | Precarga activa (ignora preferencia) | Observer no creado; 0 KB de precarga |
+| Usuario con 2g | Hasta 10 descargas simultáneas | Máx. 2 por ciclo idle, siguientes en 400ms |
+| openPreviewModal — imagen hi-res | Decodificación puede bloquear hilo | decoding async → swap sin jank |
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `js/shop-logic.js` | `_preloadItemHiRes()`: +`decoding='async'`. `openPreviewModal()`: +`decoding='async'` en thumbProbe y hiRes. Nuevas funciones `_isDataSaverActive()`, `_isLowBandwidth()`, `_schedulePreloadItem()`, `_schedulePreloadFlush()`, `_flushPreloadQueue()`. Nuevas vars de módulo `_preloadQueue`, `_preloadFlushId`. `_initPreloadObserver()`: guard de conexión, cancelación de cola, rootMargin asimétrico, threshold 0, usa `_schedulePreloadItem` en vez de llamada directa. |
+
+---
+
+## 2o. Novedades en v9.6 — Animación de Modal (Fase 3 — Scale + Opacity)
+
+### Motivación
+
+La animación de entrada del modal (`@keyframes modalSlideUp`) combinaba `translateY(20px)` con `scale(0.96)`. El desplazamiento en el eje Y obliga al compositor a rasterizar el contenedor en cada frame del trayecto, ya que las áreas del DOM que quedan "al descubierto" durante el movimiento deben repintarse. En GPUs móviles antiguas sobre pantallas OLED/Retina esto producía caídas de FPS visibles.
+
+### Cambios en `styles.css`
+
+#### `@keyframes modalPopIn` — reemplaza `modalSlideUp`
+
+```css
+/* ANTES */
+@keyframes modalSlideUp {
+    from { transform: translateY(20px) scale(0.96); opacity: 0; }
+    to   { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+
+/* AHORA */
+@keyframes modalPopIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1);    }
+}
+```
+
+`scale` es una multiplicación matricial de vértices en la GPU: no cambia la posición del elemento en el layout, no descubre áreas adyacentes, y no genera repints fuera de los límites de la capa compuesta del propio modal.
+
+El timing function `cubic-bezier(0.34, 1.56, 0.64, 1)` (back-out suave) compensa la ausencia de desplazamiento físico con un rebote leve que da dinamismo orgánico a la aparición.
+
+#### Hardening de `.modal-box`
+
+```css
+.modal-box {
+    /* ... */
+    animation: modalPopIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    will-change: opacity, transform;          /* capa compuesta antes de animar */
+    backface-visibility: hidden;              /* previene parpadeo blanco en Safari/iOS */
+    -webkit-backface-visibility: hidden;
+}
+```
+
+- **`will-change`** declarado en CSS sobre `.modal-box`, no en el overlay. La capa compuesta se crea cuando el modal deja de ser `display:none` y se libera automáticamente al volver a `display:none` (vía `.hidden`). No hay coste de memoria en reposo.
+- **`backface-visibility: hidden`** previene el artefacto de "parpadeo blanco" que Safari/iOS introduce durante animaciones de `scale` en pantallas de alta densidad al renderizar el lado trasero de la capa.
+
+### Cambios en `shop-logic.js`
+
+Se elimina la gestión manual de `will-change` en JavaScript:
+
+```javascript
+// ELIMINADO de openPreviewModal():
+modal.style.willChange = 'opacity, transform';
+
+// ELIMINADO de closePreviewModal():
+m.style.willChange = 'auto';
+```
+
+El CSS toma el control completo del ciclo de vida de la capa compuesta. `closePreviewModal()` solo necesita añadir `.hidden` al overlay.
+
+### Resultado visual
+
+El modal "emerge" desde su centro con un leve rebote, como si brotara de la superficie de la pantalla. El efecto encaja con la estética **Arcade Solid** (hardware táctico) y elimina el artefacto de "deslizamiento desde abajo" que no era coherente con una interfaz de superficie rígida.
+
+| Propiedad | Antes | Después |
+|---|---|---|
+| Animación | `translateY(20px) → 0` + `scale(0.96) → 1` | `scale(0.95) → 1` + `opacity` |
+| Repints por frame | Áreas descubiertas durante desplazamiento | Cero — solo multiplicación matricial |
+| `will-change` | Gestionado en JS (set/unset) sobre overlay | Declarado en CSS sobre `.modal-box` |
+| `backface-visibility` | Solo en overlay | Overlay **y** `.modal-box` |
+| Duración | 0.22s | 0.25s (margen para el rebote back-out) |
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `styles.css` | `@keyframes modalSlideUp` → `@keyframes modalPopIn` (sin translateY). `.modal-box`: animación actualizada, `will-change` y `backface-visibility` añadidos. Comentario de `.modal-overlay` actualizado. |
+| `shop-logic.js` | `modal.style.willChange = 'opacity, transform'` eliminado de `openPreviewModal()`. `m.style.willChange = 'auto'` eliminado de `closePreviewModal()`. JSDoc de ambas funciones actualizado. |
+
+---
+
+## 2p. Novedades en v9.6 — Neon Flow Fallback (Fase 4 — GPU Animated Gradients)
+
+### Motivación
+
+El fallback de CDN offline (`.mockup-bg-offline`, `.shop-img--offline`) era un gradiente CSS estático. Animar `background-position` o `linear-gradient` directamente requiere re-rasterizar los píxeles en cada frame, generando jank en scroll cuando múltiples tarjetas muestran el fallback simultáneamente. El objetivo es que el modo offline se sienta como un **modo de diseño alternativo**, no como un error.
+
+### Arquitectura: animación por capas
+
+La clave es separar el fondo estático (que no genera trabajo) del efecto de movimiento (que vive en un pseudo-elemento procesado íntegramente por el compositor):
+
+```
+.mockup-bg-offline  →  fondo oscuro estático (#07060f)   [cero repints]
+      └── ::before  →  conic-gradient 200×200% + blur     [compositor puro]
+                        animado con transform (translate + rotate)
+```
+
+El pseudo-elemento mide el 200 × 200 % del contenedor y parte posicionado `top:-50%; left:-50%`, de modo que los bordes del gradiente nunca quedan expuestos durante el movimiento.
+
+### `@keyframes neonFlowDrift`
+
+```css
+@keyframes neonFlowDrift {
+    0%   { transform: translate(0%,   0%)   rotate(0deg);   }
+    25%  { transform: translate(-8%,  5%)   rotate(90deg);  }
+    50%  { transform: translate(-12%, -4%)  rotate(180deg); }
+    75%  { transform: translate(-4%,  8%)   rotate(270deg); }
+    100% { transform: translate(0%,   0%)   rotate(360deg); }
+}
+```
+
+- `translate` + `rotate`: ambas son compositor-only — no calculan layout, no pintan píxeles.
+- `8s linear infinite`: ciclo largo para que el movimiento sea imperceptiblemente suave; `linear` elimina aceleraciones/desaceleraciones que delatarían el loop.
+
+### Paleta neón — Cyber-Vibrant + Arcade Solid 3.0
+
+```css
+background: conic-gradient(
+    from 0deg at 40% 50%,
+    #c084fc 0deg,    /* violeta Cyber-Vibrant */
+    #4ade80 90deg,   /* verde neón Arcade Solid */
+    #818cf8 180deg,  /* índigo mid-tone */
+    #c084fc 270deg,
+    #4ade80 360deg
+);
+filter: blur(40px);
+opacity: 0.18;       /* modal — sutil sobre fondo oscuro */
+```
+
+`filter: blur(40px)` convierte los bordes duros del `conic-gradient` en difusión orgánica, eliminando el banding visible sin coste adicional de rasterizado (blur en pseudo-elemento promocionado es una operación de convolution en GPU).
+
+El ratio de contraste de texto blanco (`#fff`) sobre el fondo base `#07060f` con el orb a `opacity: 0.18` supera 4.5:1 (WCAG AA) en todos los ángulos del ciclo de animación.
+
+### Reglas aplicadas
+
+| Selector | Opacity | Blur | Uso |
+|---|---|---|---|
+| `.mockup-bg-offline::before` | `0.18` | `40px` | Modal de preview (superficie grande) |
+| `.shop-img--offline::before` | `0.14` | `30px` | Cards de catálogo (superficie pequeña, más sutil) |
+
+### Limitación de capas (`will-change`)
+
+`will-change: transform` se declara únicamente en:
+- `.mockup-layer-art.mockup-bg-offline` — solo cuando el CDN falla (clase aplicada por JS)
+- `.shop-img--offline::before` — solo en imágenes con error (clase aplicada por `onerror`)
+
+En un catálogo cargado correctamente no hay ningún `will-change` extra activo en las tarjetas. La promoción de capas es proporcional al número de fallos reales de CDN, no al tamaño del catálogo.
+
+### Accesibilidad — `prefers-reduced-motion`
+
+```css
+@media (prefers-reduced-motion: reduce) {
+    .mockup-layer-art.mockup-bg-offline::before,
+    .shop-img--offline::before {
+        animation-play-state: paused;
+    }
+}
+```
+
+El gradiente permanece visible (modo diseño alternativo) pero el movimiento se detiene para usuarios con vestibular disorders o fotosensibilidad. Complementa la regla global `*::before { animation-duration: 0.01ms !important }` ya existente con una declaración explícita y legible.
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `styles.css` | `.mockup-bg-offline`: fondo estático + `overflow:hidden` + `will-change`. `.mockup-bg-offline::before`: orb neón animado con `neonFlowDrift`. `.shop-img--offline`: misma arquitectura a menor opacidad. `@keyframes neonFlowDrift`. Guard `prefers-reduced-motion` local. |
 
 ---
 
@@ -574,8 +1262,8 @@ Ambos mantienen el borde de 1px con `--border-subtle`. Los pseudo-elementos `::b
 │   │  <nav class="bottom-nav">    ← Global, siempre visible      │   │
 │   │                                                             │   │
 │   │  <main class="container">                                   │   │
-│   │    <div id="view-home">   ← HUD, juegos, FAQ                │   │
-│   │    <div id="view-shop" class="hidden">  ← Tienda            │   │
+│   │    <div id="view-home" class="view-section">   ← HUD, juegos, FAQ  │   │
+│   │    <div id="view-shop" class="view-section hidden">  ← Tienda    │   │
 │   │  </main>                                                    │   │
 │   │                                                             │   │
 │   │  <!-- Modales — fuera de main, position:fixed seguro -->    │   │
@@ -588,7 +1276,7 @@ Ambos mantienen el borde de 1px con `--border-subtle`. Los pseudo-elementos `::b
 │   1. js/app.js          → GameCenter API, store, updateUI            │
 │   2. js/shop-logic.js   → Catálogo, compras, sync, ajustes          │
 │   3. js/spa-router.js   → Navegación SPA sin recargas                │
-│   4. Inline script      → lucide.createIcons(), HomeView lógica      │
+│   4. Inline script      → HomeView lógica (countdown, racha)         │
 │                                                                      │
 │   Persistencia:   localStorage "gamecenter_v6_promos"                │
 │   Web Worker:     js/sync-worker.js  (SHA-256 + Base64)              │
@@ -713,7 +1401,7 @@ Cuando la transición `opacity 0→1` empieza, el scroll ya está en `top: 0`.
 | `spa-router.js` | v9.1 → v9.2. Scroll reset reordenado. JSDoc actualizado. |
 | `DOCUMENTACION.md` | Sección 2i añadida. |
 
-> **Nota HTML:** añadir clase `view-section` a `#view-home` y `#view-shop` en `index.html` para activar las transiciones. Sin esta clase, las vistas siguen funcionando correctamente pero sin animación de entrada.
+> **Estado actual:** la clase `view-section` está aplicada en `#view-home` y `#view-shop` de `index.html` (corregido en v9.6). Las transiciones de entrada se disparan correctamente.
 
 ---
 
@@ -1094,9 +1782,10 @@ love_arcade/
 │
 ├── wallpapers/             # Carpeta local legacy (reemplazada por Cloudinary CDN)
 ├── assets/
-│   ├── default_avatar.png
-│   ├── product-thumbs/
-│   └── cover/
+│   └── default_avatar.png
+│
+│   # assets/product-thumbs/ → ELIMINADA en v9.5 (Cloudinary CDN Migration)
+│   # assets/cover/          → ELIMINADA en v9.5 (Cloudinary CDN Migration)
 │
 └── games/
     ├── Shooter/
@@ -1197,7 +1886,7 @@ Sin cambios en la lógica de negocio. Las únicas modificaciones en v8.0 son:
 | `'Activar Bendición Lunar (100 🪙)'` | `'Activar Bendición Lunar (100 monedas)'` |
 | Badge title: `'🌙 Bendición Lunar activa hasta…'` | `'Bendición Lunar activa hasta…'` |
 
-La representación visual de la luna es ahora responsabilidad exclusiva del icono Lucide `<i data-lucide="moon">` en el HTML.
+La representación visual de la luna es ahora responsabilidad exclusiva del icono SVG Sprite `<svg class="icon"><use href="#icon-moon"></use></svg>` en el HTML.
 
 La función `updateMoonBlessingUI()` actualiza el `<span class="moon-blessing-badge">` (que ya contiene el icono SVG) mostrándolo u ocultándolo con la clase `hidden`. Ya no modifica el `textContent` del badge porque ese contenido es el icono SVG.
 
@@ -1311,9 +2000,9 @@ dailyBtn.addEventListener('click', async () => {
 
 ## 6. sync-worker.js — Web Worker
 
-**Sin cambios en v8.0.**
+**Actualizado en v9.6** — modernización de encoding; sin cambios en el protocolo de mensajes.
 
-El worker sigue manejando el checksum SHA-256 para los archivos `.txt` importados, garantizando que cualquier archivo cargado sea validado antes de aplicarse. El flujo completo es:
+El worker maneja el checksum SHA-256 para las operaciones de exportación e importación de partidas, garantizando integridad antes de aplicar cualquier dato al store. El flujo completo es:
 
 ```
 Usuario carga archivo .txt  →  FileReader lee el texto  →
@@ -1324,12 +2013,29 @@ GameCenter.importSave(code)  →  workerTask({action:'import', code, salt})
 ¿inválido? → rechazado con mensaje de error
 ```
 
-Los mensajes soportados son los mismos que en v7.5:
+Los mensajes soportados:
 
 | `action`   | Payload requerido       | Resultado devuelto                        |
 |---|---|---|
 | `'export'` | `{ store, salt }`       | `string` — código Base64 con checksum     |
 | `'import'` | `{ code, salt }`        | `{ data, valid, legacy }` — store + validez |
+
+### Cambios v9.6 — Modernización de encoding
+
+Las funciones `escape()` y `unescape()` estaban marcadas como **deprecadas** desde ES5 y han sido eliminadas de la especificación en ES2025. Se han reemplazado en ambas operaciones:
+
+| Operación | Antes (deprecado) | Después (moderno) |
+|---|---|---|
+| `exportStore` | `btoa(unescape(encodeURIComponent(payload)))` | `TextEncoder` → `Array.from` → `String.fromCharCode` → `btoa` |
+| `importStore` | `decodeURIComponent(escape(atob(code)))` | `atob` → `Uint8Array` → `TextDecoder` |
+
+El resultado codificado/decodificado es **byte-por-byte idéntico** al patrón anterior para contenido ASCII; la diferencia es relevante para payloads que contengan caracteres fuera del rango ASCII (nicknames con tildes, emojis en `saleLabel`, etc.), donde el patrón antiguo podía producir cadenas corruptas en motores estrictos.
+
+> **Compatibilidad de códigos existentes:** Los códigos exportados con versiones anteriores del worker siguen siendo válidos. `importStore` incluye un bloque de compatibilidad legada (`legacy: true`) que maneja stores sin checksum (v7.2 y anteriores).
+
+### Notas de versión
+
+El archivo declaraba `v7.5` en su cabecera JSDoc desde su creación. Actualizado a `v9.6` para mantener coherencia con el resto del proyecto.
 
 ---
 
@@ -1365,11 +2071,11 @@ Añadido dentro de `#tab-catalog`, inicialmente oculto. Se hace visible cuando `
 
 ```html
 <div id="shop-error-state" class="shop-error-state hidden" role="alert">
-    <i data-lucide="wifi-off" size="40"></i>
+    <svg class="icon" width="40" height="40"><use href="#icon-wifi-off"></use></svg>
     <p class="shop-error-title">No se pudo cargar el catálogo</p>
     <p class="shop-error-desc">Revisa tu conexión e inténtalo de nuevo.</p>
     <button id="btn-retry-shop" class="btn-primary">
-        <i data-lucide="refresh-cw" size="14"></i>
+        <svg class="icon" width="14" height="14"><use href="#icon-refresh-cw"></use></svg>
         Reintentar
     </button>
 </div>
@@ -1385,13 +2091,13 @@ El botón `#btn-retry-shop` es enlazado por `loadCatalog()` en `shop-logic.js`.
   <nav class="bottom-nav">                ← Global (Nav inferior móvil)
 
   <main class="container">
-    <div id="view-home">                  ← Vista Inicio
+    <div id="view-home" class="view-section">  ← Vista Inicio
       .player-hud
       #games.games-grid
       #faq
     </div>
 
-    <div id="view-shop" class="hidden">   ← Vista Tienda (oculta al inicio)
+    <div id="view-shop" class="view-section hidden">  ← Vista Tienda (oculta al inicio)
       #sale-banner
       .promo-toggle-wrap
       .shop-tabs
@@ -1410,7 +2116,7 @@ El botón `#btn-retry-shop` es enlazado por `loadCatalog()` en `shop-logic.js`.
   <script src="js/app.js"></script>
   <script src="js/shop-logic.js"></script>
   <script src="js/spa-router.js"></script>
-  <script>/* lucide + HomeView logic */</script>
+  <script>/* HomeView logic (countdown, racha) */</script>
 </body>
 ```
 
@@ -1449,6 +2155,13 @@ window.HomeView = {
     refresh() {
         updateCountdownDisplay(); // Refresca el countdown del bono diario
         updateStreakBar();         // Actualiza la barra de racha
+    },
+    /**
+     * Llamado por spa-router.js al SALIR de la vista Inicio (v9.6).
+     * Hook de ciclo de vida preparado para futuros observers/timers.
+     */
+    onLeave() {
+        // placeholder — listo para futuros recursos que requieran cleanup
     }
 };
 ```
@@ -1467,7 +2180,7 @@ Contiene toda la lógica que anteriormente vivía como script inline en `shop.ht
 | `window.ECONOMY` | `js/app.js` |
 | `window.debounce` | `js/app.js` |
 | `window.MailHelper` | `js/app.js` |
-| `window.lucide` | CDN `unpkg.com/lucide` |
+| SVG Sprite (iconos) | `index.html` — sprite estático inline, sin CDN (v9.6) |
 | `window.confetti` | CDN `cdn.jsdelivr.net/canvas-confetti` |
 
 ### API pública expuesta
@@ -1535,6 +2248,19 @@ window.ShopView.onEnter = function() {
 };
 ```
 
+### `window.ShopView.onLeave()` — v9.6
+
+Llamado por `spa-router.js` al abandonar la vista de Tienda. Desconecta el `IntersectionObserver` de precarga para liberar referencias a nodos DOM que pueden ser destruidos por el siguiente `renderShop()`:
+
+```javascript
+window.ShopView.onLeave = function() {
+    if (_preloadObserver) {
+        _preloadObserver.disconnect();
+        _preloadObserver = null;
+    }
+};
+```
+
 ### Optimizaciones de rendimiento
 
 - **`loading="lazy"`** en todos los `<img>` del catálogo y la biblioteca.
@@ -1578,9 +2304,13 @@ Función interna que aplica la transición SIN tocar el historial. Es la que lla
 1. Alterna `.hidden` entre `#view-home` y `#view-shop`.
 2. Actualiza clases `.active` en navbar y bottom-nav.
 3. Llama a `window.GameCenter.syncUI()`.
-4. Llama a `lucide.createIcons()`.
-5. `window.scrollTo({ top: 0, behavior: 'instant' })` o scroll suave al anchor.
-6. Ejecuta el callback de vista: `window.HomeView.refresh()` o `window.ShopView.onEnter()`.
+4. `window.scrollTo({ top: 0, behavior: 'instant' })` o scroll suave al anchor.
+5. **[v9.6]** Llama a `onLeave()` de la vista que se abandona (`ShopView.onLeave()` al ir a Home, `HomeView.onLeave()` al ir a Shop).
+6. Ejecuta el callback de vista entrante: `window.HomeView.refresh()` o `window.ShopView.onEnter()`.
+
+> **[v9.6 — SVG Sprite]** Se eliminó el paso `lucide.createIcons()` que existía entre los pasos 3 y 4. Los iconos son ahora SVG Sprite estáticos presentes desde el primer frame de la transición.
+
+> **[v9.6 — Smart Preload]** El paso 5 (`onLeave`) permite a `ShopView` desconectar el `IntersectionObserver` de precarga al abandonar la vista, liberando referencias a nodos DOM que pueden haber cambiado.
 
 ### History API — botón Atrás/Adelante (v9.1)
 
@@ -1752,7 +2482,7 @@ Ambas tienen `will-change: transform` para promoverse a capas GPU antes del prim
 .pill--wishlist.active { background: #ff4f7a; border-color: #ff4f7a; }
 ```
 
-**`.wishlist-btn--active svg path`** — Rellena el corazón SVG de Lucide vía CSS:
+**`.wishlist-btn--active svg path`** — Rellena el corazón SVG Sprite vía CSS:
 ```css
 .wishlist-btn--active svg path,
 .wishlist-btn--active svg circle { fill: currentColor !important; }
@@ -1775,7 +2505,7 @@ Ambas tienen `will-change: transform` para promoverse a capas GPU antes del prim
 .shop-card .card-desc-text { font-size: 0.76rem; -webkit-line-clamp: 2; /* desktop: 0.82rem, clamp 3 */ }
 ```
 
-**`.moon-blessing-badge`** — Actualizado para ser compatible con el icono SVG Lucide:
+**`.moon-blessing-badge`** — Actualizado para ser compatible con el icono SVG Sprite:
 ```css
 .moon-blessing-badge {
     display: inline-flex; align-items: center; justify-content: center;
@@ -1894,14 +2624,14 @@ Esto garantiza que un usuario que reclamó a las **23:59** puede volver a reclam
 
 ## 14. Bendición Lunar
 
-Sin cambios funcionales en v8.0. La representación visual migra de emoji a icono Lucide.
+Sin cambios funcionales en v8.0. La representación visual migra de emoji a icono SVG Sprite (v9.6).
 
 | Parámetro | Valor |
 |---|---|
 | Costo de activación | 100 monedas |
 | Efecto | +90 monedas por cada reclamo diario |
 | Vigencia | 7 días reales desde la activación |
-| Indicador UI | Icono `<i data-lucide="moon">` animado junto al saldo |
+| Indicador UI | Icono `<svg class="icon"><use href="#icon-moon">` animado junto al saldo |
 
 ### Comportamiento v9.6: Bendición Lunar sin dependencia de red
 
@@ -2147,9 +2877,12 @@ importSave(code)
 
 ### Agregar un wallpaper nuevo
 
-1. Preparar archivos: `assets/product-thumbs/{nombre}_{hash8}_thumbs.webp` (thumbnail local) y subir el wallpaper a Cloudinary bajo la URL `https://res.cloudinary.com/dyspgn0sw/image/upload/{nombre}_{hash8}.ext`.
-2. Añadir entrada en `data/shop.json` con ID consecutivo único y tags que incluyan al menos `"PC"` o `"Mobile"`.
-3. Subir el commit. No es necesario tocar JS ni HTML.
+1. Subir el archivo a Cloudinary. El public ID debe seguir el patrón `{nombre}_{hash8}` (sin extensión).
+2. Añadir entrada en `data/shop.json`:
+   - `"image"`: URL Cloudinary con transformación thumbnail → `f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/{public_id}`
+   - `"file"`: nombre del archivo original con extensión (ej: `rouge_the_bat_a94a3cca.webp`)
+   - `"tags"`: debe incluir `"Mobile"` o `"PC"` para que `_getMockupUrl()` seleccione la transformación correcta.
+3. No es necesario generar thumbnails locales, crear carpetas, ni tocar JS o HTML.
 
 ### Activar una oferta especial
 
@@ -2165,8 +2898,8 @@ Editar el objeto `ECONOMY` en `app.js`. Ver `ECONOMIA.md` para referencia comple
 Si se decide restaurar los filtros eliminados en v8.0, agregar las pills en `shop.html`:
 
 ```html
-<button class="pill" data-filter="Anime"><i data-lucide="sparkles" size="11"></i> Anime</button>
-<button class="pill" data-filter="Gaming"><i data-lucide="gamepad-2" size="11"></i> Gaming</button>
+<button class="pill" data-filter="Anime"><svg class="icon" width="11" height="11"><use href="#icon-sparkles"></use></svg> Anime</button>
+<button class="pill" data-filter="Gaming"><svg class="icon" width="11" height="11"><use href="#icon-gamepad-2"></use></svg> Gaming</button>
 <!-- etc. -->
 ```
 
@@ -2214,7 +2947,7 @@ const filteredTags = item.tags;
 | Edge | 89+ |
 | Hosting | Cualquier servidor estático (GitHub Pages, Netlify) |
 | Backend | Ninguno |
-| Dependencias | Lucide Icons (CDN), canvas-confetti (CDN) |
+| Dependencias | canvas-confetti (CDN) — único CDN externo desde v9.6 |
 
 > La `Clipboard API` (`navigator.clipboard.writeText`) requiere HTTPS o localhost. En entornos sin HTTPS, `handleExport()` tiene un fallback con `document.execCommand('copy')`. Si ambos fallan, el archivo `.txt` igualmente se descarga.
 

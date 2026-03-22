@@ -155,7 +155,7 @@ Si quieres cambiar ese texto de descripción del banner, edita directamente `ini
 const ECONOMY = {
     isSaleActive: false, // ← Oferta desactivada
     // El resto de valores se ignoran mientras isSaleActive sea false
-    saleMultiplier: 0.o,
+    saleMultiplier: 0.0,
     saleLabel:      '10% OFF',
     cashbackRate:   0.1
 };
