@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v9.9.1 · Ghost Analytics · Mobile Performance Pass · Smart Preload Hardening · CDN Offline Resilience
+### Plataforma de Recompensas · v9.9.2 · Hardening & Error Detection · Ghost Analytics · Mobile Performance Pass · Smart Preload Hardening · CDN Offline Resilience
 
 ---
 
@@ -25,6 +25,7 @@
 2r. [Novedades en v9.8 — Mobile Performance Pass](#2r-novedades-en-v98--mobile-performance-pass-scroll--modal-lag)
 2s. [Novedades en v9.9 — Ghost Analytics](#2s-novedades-en-v99--ghost-analytics)
 2t. [Novedades en v9.9.1 — Ghost Analytics: producción](#2t-novedades-en-v991--ghost-analytics-producción)
+2u. [Novedades en v9.9.2 — Hardening & Error Detection](#2u-novedades-en-v992--hardening--error-detection)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -3370,5 +3371,223 @@ Color del embed: **dorado** (`#fbbf24`) · Emoji: 🛒
 
 ---
 
-*Love Arcade · Documentación técnica v9.9.1 · Ghost Analytics — producción*
+## 2u. Novedades en v9.9.2 — Hardening & Error Detection
+
+### Objetivo
+
+Eliminar redundancias en el tracking de canjes, transformar el sistema de errores en una herramienta de diagnóstico forense, y capturar eventos de fricción de usuario que no son fallos de código pero sí señales de problemas de diseño o economía.
+
+---
+
+### Fix 1 — De-duplicación de `redeem_code`
+
+**Problema:** `track('redeem_code')` se disparaba dos veces por cada canje exitoso:
+
+1. Dentro de `app.js → redeemPromoCode()` (lógica de negocio).
+2. Dentro de `shop-logic.js → handleRedeem()` (UI).
+
+Ambas llamadas pasaban el mismo payload, generando un doble reporte en el canal de Discord.
+
+**Causa raíz:** La lógica de negocio (`redeemPromoCode`) y la capa de UI (`handleRedeem`) ambas estaban trackando el mismo evento sin coordinación.
+
+**Fix:** Se eliminó la llamada en `redeemPromoCode()` de `app.js`. La fuente única de verdad es `handleRedeem()` en `shop-logic.js`, que es el punto más tardío de la cadena de éxito y tiene acceso al código original para ofuscarlo.
+
+```javascript
+// app.js — redeemPromoCode() — v9.9.2
+// [eliminado] window.GhostAnalytics?.track('redeem_code', { … });
+// → El único disparo vive en shop-logic.js → handleRedeem()
+
+// shop-logic.js — handleRedeem() — único punto de disparo
+if (result.success) {
+    // … UI updates …
+    window.GhostAnalytics?.track('redeem_code', {
+        recompensa: result.reward,
+        código:     `${code.slice(0, 3)}***`
+    });
+}
+```
+
+---
+
+### Fix 2 — `detected_error` forense con contexto de ejecución
+
+**Problema:** Los eventos `detected_error` llegaban con `tipo`, `mensaje` y `stack`, pero sin contexto suficiente para reproducir el error (¿en qué URL? ¿con red o sin red? ¿en qué vista?).
+
+**Solución:** Nueva función privada `_getExecutionContext()` en `analytics.js` que construye un objeto con cuatro campos de diagnóstico y se mezcla en el `meta` de cada error vía `Object.assign`.
+
+```javascript
+function _getExecutionContext() {
+    const ctx = {};
+    ctx.url    = window.location.href.slice(0, 120);           // ruta completa
+    ctx.online = navigator.onLine ? 'sí' : 'no';              // estado de red
+    const mem  = performance?.memory;
+    if (mem?.usedJSHeapSize)
+        ctx.mem_mb = (mem.usedJSHeapSize / 1_048_576).toFixed(1) + ' MB';
+    const view = window.SpaRouter?.getCurrentView?.();
+    if (view) ctx.vista = view;                                // breadcrumb SPA
+    return ctx;
+}
+```
+
+Los eventos `detected_error` ahora incluyen:
+
+| Campo nuevo | Descripción | Ejemplo |
+|---|---|---|
+| `url` | URL completa donde ocurrió el error (máx 120 chars) | `https://…/index.html` |
+| `online` | Estado de red del cliente | `sí` / `no` |
+| `mem_mb` | Heap JS en uso (Chrome/Edge; omitido en Firefox/Safari) | `48.3 MB` |
+| `vista` | Vista SPA activa como breadcrumb | `shop` / `home` |
+
+> `_getExecutionContext()` nunca lanza excepciones — está envuelto en `try/catch` propio para no afectar el flujo del handler de errores.
+
+---
+
+### Nuevos eventos de fricción de usuario
+
+Los siguientes eventos no son fallos de código sino señales de diseño. Se capturan para detectar problemas de UX antes de que lleguen como quejas.
+
+---
+
+#### `invalid_promo_code` 🔑
+
+**Disparado en:** `shop-logic.js → handleRedeem()` cuando `result.message === 'Código inválido'`.
+
+**No se dispara cuando:** el mensaje es `'Ya canjeaste este código'` (es un intento legítimo, no un código desconocido).
+
+**Metadatos:**
+
+| Campo | Descripción | Ejemplo |
+|---|---|---|
+| `intento` | Prefijo del código + `***` | `PVZ***` |
+| `longitud` | Longitud del código introducido | `7` |
+
+**Utilidad de diagnóstico:** Un volumen alto indica que alguien intenta adivinar códigos por fuerza bruta, o que hay un código activo que el usuario espera que funcione pero no existe en `PROMO_CODES_HASHED`.
+
+---
+
+#### `insufficient_funds` 💸
+
+**Disparado en:** `app.js → buyItem()` y `app.js → buyMoonBlessing()` cuando el saldo es insuficiente.
+
+**Metadatos:**
+
+| Campo | Descripción | Ejemplo |
+|---|---|---|
+| `wallpaper` | Nombre del ítem o `'Bendición Lunar (buff)'` | `Cyber Neon Girl` |
+| `precio` | Precio final que se intentó pagar | `800 ⭐` |
+| `saldo` | Saldo actual del usuario | `320` |
+
+**Utilidad de diagnóstico:** Permite calcular la brecha promedio entre precio y saldo. Si la brecha es sistemáticamente alta, los precios pueden estar mal calibrados o el flujo de generación de monedas es insuficiente.
+
+---
+
+#### `wishlist_add` 💜
+
+**Disparado en:** `shop-logic.js → renderShop()` — listener del botón wishlist, solo cuando `isNow === true` (se está agregando, no quitando).
+
+**Metadatos:**
+
+| Campo | Descripción | Ejemplo |
+|---|---|---|
+| `wallpaper` | Nombre del ítem | `Sakura Dreams` |
+| `precio` | Precio base del ítem | `600` |
+
+**Utilidad de diagnóstico:** Revela qué wallpapers generan más deseo de compra sin que el usuario tenga saldo. Permite priorizar descuentos o ajustar precios de los más wishlisted.
+
+---
+
+#### `daily_bonus` 🌟
+
+**Disparado en:** `app.js → claimDaily()` — solo en la rama de éxito (`success: true`). No se dispara en intentos fallidos para no saturar el canal.
+
+**Metadatos:**
+
+| Campo | Descripción | Ejemplo |
+|---|---|---|
+| `recompensa` | Total de monedas recibidas | `110` |
+| `base` | Recompensa base sin buff lunar | `20` |
+| `luna` | Bonus de Bendición Lunar, o `'no'` | `+90` |
+| `racha` | Número de días de racha consecutivos | `5` |
+
+**Utilidad de diagnóstico:** Mide el engagement diario real. Permite ver si la Bendición Lunar se usa y si las rachas largas son frecuentes.
+
+---
+
+#### `user_snapshot` 📊
+
+**Disparado en:** `shop-logic.js → loadCatalog()` — una sola vez por sesión de navegador (guardado en `sessionStorage` bajo la clave `ga_snapshot_sent`).
+
+**No se repite** en navigations SPA ni en retries del catálogo (`loadCatalog()` puede llamarse múltiples veces).
+
+**Metadatos:**
+
+| Campo | Descripción | Ejemplo |
+|---|---|---|
+| `saldo` | Monedas actuales del usuario | `1450` |
+| `comprados` | Ítems del catálogo ya adquiridos | `3` |
+| `disponibles` | Ítems del catálogo aún sin comprar | `21` |
+| `racha` | Racha diaria activa | `7` |
+| `códigos_canjeados` | Número de códigos promo ya usados | `2` |
+
+**Utilidad de diagnóstico:** Proporciona una "primera impresión" del estado de cada sesión sin enviar datos redundantes. Permite calcular la riqueza promedio de los usuarios y el porcentaje de catálogo completado.
+
+> **Nota de privacidad:** `sessionStorage` se borra al cerrar la pestaña. Si el usuario abre la app en una nueva pestaña, se envía un nuevo snapshot. Esto es intencionado: cada sesión es independiente.
+
+---
+
+#### `sync_export` 💾
+
+**Disparado en:** `shop-logic.js → handleExport()` — después de que el archivo `.txt` es generado y descargado con éxito.
+
+**Metadatos:**
+
+| Campo | Descripción | Ejemplo |
+|---|---|---|
+| `portapapeles` | Si el código también fue copiado al portapapeles | `sí` / `no` |
+
+**Utilidad de diagnóstico:** Mide cuántos usuarios utilizan la funcionalidad de sincronización entre dispositivos. Tasas bajas sugieren que la función no es visible o suficientemente comunicada.
+
+---
+
+### `GameCenter.getRedeemedCount()` — nuevo método
+
+```javascript
+GameCenter.getRedeemedCount() → number
+```
+
+Devuelve el número de códigos promocionales ya canjeados (longitud de `store.redeemedHashes`). Expuesto exclusivamente para que `user_snapshot` en `shop-logic.js` pueda incluir este dato sin acceder directamente al `store` privado.
+
+---
+
+### Tabla de eventos completa (v9.9.2)
+
+| Evento | Emoji | Color | Dónde se dispara | Metadatos clave |
+|---|---|---|---|---|
+| `view_preview` | 👁️ | Violeta | `openPreviewModal()` | `wallpaper`, `categoria` |
+| `click_download` | ⬇️ | Verde | `renderLibrary()` / `openPreviewModal()` | `wallpaper`, `fuente` |
+| `buy_item` | 🛒 | Dorado | `initiatePurchase()` — éxito | `wallpaper`, `precio`, `cashback`, `categoría`, `saldo_tras` |
+| `redeem_code` | 🎁 | Rosa | `handleRedeem()` — éxito (fuente única) | `recompensa`, `código***` |
+| `open_game` | 🎮 | Cyan | delegación global `DOMContentLoaded` | `juego` |
+| `detected_error` | 🚨 | Carmesí | `window.error` / `unhandledrejection` | `tipo`, `mensaje`, `archivo?`, `stack?`, `url`, `online`, `mem_mb?`, `vista?` |
+| `invalid_promo_code` | 🔑 | Naranja | `handleRedeem()` — código desconocido | `intento***`, `longitud` |
+| `insufficient_funds` | 💸 | Rojo | `buyItem()` / `buyMoonBlessing()` | `wallpaper`, `precio`, `saldo` |
+| `wishlist_add` | 💜 | Rosa | `renderShop()` — wishlist toggle add | `wallpaper`, `precio` |
+| `daily_bonus` | 🌟 | Verde lima | `claimDaily()` — éxito | `recompensa`, `base`, `luna`, `racha` |
+| `user_snapshot` | 📊 | Celeste | `loadCatalog()` — una vez por sesión | `saldo`, `comprados`, `disponibles`, `racha`, `códigos_canjeados` |
+| `sync_export` | 💾 | Violeta suave | `handleExport()` — éxito | `portapapeles` |
+
+---
+
+### Resumen de cambios por archivo (v9.9.2)
+
+| Archivo | Cambio |
+|---|---|
+| `js/analytics.js` | v9.9.2: 6 nuevos tipos en `EVENT_COLORS/EMOJIS`, `_getExecutionContext()` helper, contexto forense en ambos handlers de error, `console.log` actualizado |
+| `js/app.js` | v9.9.2: eliminado `track('redeem_code')` de `redeemPromoCode()`, `insufficient_funds` en `buyItem()` y `buyMoonBlessing()`, `daily_bonus` en `claimDaily()`, nuevo `getRedeemedCount()` |
+| `js/shop-logic.js` | v9.9.2: fuente única `redeem_code` + `invalid_promo_code` en `handleRedeem()`, `wishlist_add` en `renderShop()`, `user_snapshot` en `loadCatalog()`, `sync_export` en `handleExport()` |
+| `DOCUMENTACION.md` | Sección §2u añadida; título, ToC y footer actualizados a v9.9.2 |
+
+---
+
+*Love Arcade · Documentación técnica v9.9.2 · Hardening & Error Detection*
 *Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*
