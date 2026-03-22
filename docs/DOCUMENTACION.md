@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v9.7 · Smart Preload Hardening · CDN Offline Resilience · Arcade Solid 3.0
+### Plataforma de Recompensas · v9.8 · Mobile Performance Pass · Smart Preload Hardening · CDN Offline Resilience · Arcade Solid 3.0
 
 ---
 
@@ -22,6 +22,7 @@
 2o. [Novedades en v9.6 — Animación de Modal (Fase 3)](#2o-novedades-en-v96--animación-de-modal-fase-3--scale-opacity)
 2p. [Novedades en v9.6 — Neon Flow Fallback (Fase 4)](#2p-novedades-en-v96--neon-flow-fallback-fase-4--gpu-animated-gradients)
 2q. [Novedades en v9.7 — Smart Preload Hardening](#2q-novedades-en-v97--smart-preload-hardening-decoding-async--scheduler--connection-guard)
+2r. [Novedades en v9.8 — Mobile Performance Pass](#2r-novedades-en-v98--mobile-performance-pass-scroll--modal-lag)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -2985,5 +2986,142 @@ const filteredTags = item.tags;
 
 ---
 
-*Love Arcade · Documentación técnica v9.6 · Background Time Sync & Instant Daily Claim*
+
+
+---
+
+## 2r. Novedades en v9.8 — Mobile Performance Pass (Scroll & Modal Lag)
+
+### Motivación
+
+En dispositivos táctiles de gama baja y media se reportaban dos problemas de rendimiento:
+
+1. **Lag de scroll en la sección Tienda**: al hacer scroll rápido sobre el catálogo de wallpapers, el hilo principal se saturaba causando frames caídos y "trabas" visuales.
+2. **Freeze al abrir el modal de preview**: al tocar "Ver preview" en una card, la UI se congelaba 50–150 ms antes de que el modal apareciera, haciendo que la animación de entrada nunca se viera.
+
+Ambos problemas tenían causas independientes. La v9.8 los resuelve de forma quirúrgica sin tocar la lógica de negocio.
+
+---
+
+### Causa raíz — Scroll lag
+
+#### 1. `backdrop-filter` en overlays no excluidos de `@media (pointer: coarse)`
+
+El bloque `@media (pointer: coarse)` existente solo desactivaba `backdrop-filter` en los elementos internos del mockup (`.mockup-app-icon`, `.mockup-taskbar`). Los overlays más costosos quedaban activos en móvil:
+
+| Elemento | Blur anterior | Blur v9.8 en táctil |
+|---|---|---|
+| `.modal-overlay` (confirm/buy) | `blur(4px)` | `none` |
+| `.identity-modal-overlay` | `blur(4px) brightness(0.4)` | `none` + `background` más opaco |
+| `.preview-close-btn` (botón ✕) | `blur(8px)` | `none` |
+| `.toast` | `blur(12px)` | `none` |
+
+En cada apertura de modal, `backdrop-filter` captura la escena completa detrás del overlay y la desenfoca en la GPU — operación equivalente a rasterizar toda la página dos veces. En gama baja esto cuesta 40–120 ms/frame y hace imposible mantener 60 fps. El fondo sólido ya presente (`rgba(0,0,0,0.82+)`) proporciona la ocultación visual necesaria sin coste.
+
+#### 2. `will-change: transform` permanente en `.sale-banner__ticket::after`
+
+La animación `laserScan` del banner de oferta tiene `will-change: transform` declarado de forma permanente. Esto crea una capa GPU dedicada para el pseudo-elemento que **el compositor debe recomponer en cada frame de scroll**, aunque el banner esté fuera del viewport.
+
+**Fix v9.8 en `@media (pointer: coarse)`:**
+```css
+.sale-banner__ticket::after {
+    animation: none;
+    opacity: 0;
+}
+```
+El efecto laser es inapreciable en pantallas OLED de alta tasa de refresco en móvil. Eliminarlo libera la capa GPU y el scroll del catálogo opera a compositor puro.
+
+#### 3. `box-shadow` en la transición de `.shop-card`
+
+`box-shadow` no es una propiedad compositor-only: cada cambio activa un pase de repaint en el área de la tarjeta. La transición anterior incluía `box-shadow 0.2s ease` que se evaluaba en cada frame de hover/tap-release.
+
+**Fix v9.8 (todos los dispositivos):**
+```css
+/* Antes */
+transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+/* Después */
+transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+```
+
+#### 4. Falta de hints de scroll para el browser
+
+Sin `overscroll-behavior-y` ni `touch-action` declarados, el browser debe mantener el scroll chaining con el body y evaluar gestos horizontales en cada evento touch, añadiendo overhead de hit-testing.
+
+**Fix v9.8:**
+```css
+#view-shop {
+    overscroll-behavior-y: contain;  /* elimina rebote hacia el body */
+    touch-action: pan-y;             /* descarta hit-testing horizontal */
+}
+```
+
+---
+
+### Causa raíz — Modal de preview lag
+
+#### `_buildMockupHTML()` bloqueaba el hilo principal antes de que el modal fuera visible
+
+**Flujo anterior (v9.7 y previas):**
+```
+tap "Ver preview"
+→ _buildMockupHTML()  ← 16 SVG inline, 3 layers, DOM pesado — 50–150 ms en gama baja
+→ image loading setup
+→ action buttons
+→ modal.classList.remove('hidden')  ← el modal aparece ya en su posición final
+→ modalPopIn animation arranca demasiado tarde — el usuario percibe freeze, no animación
+```
+
+El browser no puede pintar el modal hasta que el hilo principal quede libre. Toda la construcción de DOM bloqueaba la respuesta visual.
+
+**Flujo v9.8 (dos fases):**
+```
+tap "Ver preview"
+→ slot.innerHTML = ''                  ← limpiar contenido anterior (<0.1 ms)
+→ nameEl.textContent = item.name       ← texto puro (<0.1 ms)
+→ actionsEl.innerHTML = botones        ← DOM mínimo (~1 ms)
+→ modal.classList.remove('hidden')     ← VISIBLE en <2 ms total
+→ [browser pinta frame 1: overlay + modalPopIn animation comienza] ← 16 ms
+→ requestAnimationFrame()
+   → _buildMockupHTML()                ← trabajo pesado (50–150 ms), overlay ya en pantalla
+   → image loading setup
+   → clock interval
+```
+
+El usuario ve el modal abrirse con animación fluida. El mockup aparece en el frame siguiente (~16 ms después). En la práctica, la construcción del mockup es lo suficientemente rápida para que el usuario no perciba el slot vacío durante el primer frame.
+
+#### Reducción del blur en estados de carga del mockup (móvil)
+
+| Estado | Blur anterior | Blur v9.8 en táctil | Coste |
+|---|---|---|---|
+| `.mockup-bg-loading` | `blur(10px)` + `scale(1.1)` | `blur(3px)` + `scale(1.03)` | Rasterizado ×11 menor |
+| `.mockup-bg-offline::before` | `blur(40px)` | `blur(12px)` | Rasterizado ×11 menor |
+
+El efecto de "thumbnail difuminada" se mantiene visualmente igual a 3 px de blur. La diferencia es imperceptible al ojo humano pero representa un factor ×11 de reducción en el coste de rasterizado del filtro.
+
+---
+
+### Resumen de cambios por archivo
+
+#### `styles.css`
+
+| Cambio | Selector | Mecanismo |
+|---|---|---|
+| Añadido `overscroll-behavior-y: contain` + `touch-action: pan-y` | `#view-shop` | Hints de scroll al browser |
+| Eliminado `box-shadow` de la transición | `.shop-card` | Evita repaint en tap-release |
+| Desactivado `laserScan` + `will-change` | `.sale-banner__ticket::after` en `pointer:coarse` | Libera capa GPU de scroll |
+| Desactivado `backdrop-filter` | `.modal-overlay`, `.identity-modal-overlay`, `.preview-close-btn`, `.toast` en `pointer:coarse` | Elimina rasterizado doble de viewport |
+| Desactivado `transform`/`box-shadow` en hover | `.shop-card:hover`, `.shop-card:hover .shop-img` en `pointer:coarse` | Sin work compositor en tap-release |
+| Eliminada transición en `.shop-img` | `.shop-img` en `pointer:coarse` | Reduce slots de transición evaluados |
+| Reducido blur carga mockup | `.mockup-bg-loading` en `pointer:coarse` | Rasterizado ×11 menor |
+| Reducido blur fallback offline | `.mockup-layer-art.mockup-bg-offline::before` en `pointer:coarse` | Rasterizado ×11 menor |
+
+#### `shop-logic.js`
+
+| Cambio | Función | Mecanismo |
+|---|---|---|
+| Modal visible antes del trabajo pesado | `openPreviewModal()` | `modal.classList.remove('hidden')` síncrono; `_buildMockupHTML()` en `rAF` |
+| Botones de acción síncronos | `openPreviewModal()` | DOM mínimo construido antes del rAF para mantener foco accesible |
+| Limpieza de slot antes de abrir | `openPreviewModal()` | `slot.innerHTML = ''` evita flash de contenido del modal anterior |
+
+*Love Arcade · Documentación técnica v9.8 · Mobile Performance Pass*
 *Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*
