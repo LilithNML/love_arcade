@@ -4,7 +4,10 @@
  * Contiene toda la lógica de la vista Tienda, extraída del script inline de
  * shop.html como parte de la migración a arquitectura SPA.
  *
- * NOVEDADES v9.9 (Ghost Analytics):
+ * NOVEDADES v9.9.1 (Ghost Analytics — producción):
+ *  - buy_item: GhostAnalytics.track() en initiatePurchase() tras compra exitosa.
+ *    Registra nombre del wallpaper, precio final, cashback y categoría.
+ *  - Los hooks anteriores (view_preview, click_download, redeem_code) se mantienen.
  *  - view_preview: GhostAnalytics.track() en openPreviewModal() inmediatamente
  *    tras modal.classList.remove('hidden') — fase síncrona, sin depender del rAF.
  *  - click_download: listeners añadidos en renderLibrary() (fuente:"biblioteca")
@@ -1578,6 +1581,14 @@ async function initiatePurchase(item, btn) {
         });
         document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
         fireConfetti();
+        // Analítica — buy_item: registra qué wallpaper se compró con todos sus detalles
+        window.GhostAnalytics?.track('buy_item', {
+            wallpaper:  item.name,
+            precio:     `${result.finalPrice} ⭐`,
+            cashback:   result.cashback > 0 ? `+${result.cashback} ⭐` : 'ninguno',
+            categoría:  Array.isArray(item.tags) && item.tags.length ? item.tags[0] : 'General',
+            saldo_tras: GameCenter.getBalance()
+        });
         const cbNote = result.cashback > 0 ? ` <strong>+${result.cashback} cashback</strong> devueltas.` : '';
         showToast(`"${item.name}" desbloqueado.${cbNote} Ve a <strong>Mis Tesoros</strong>.`, 'success');
         updateWishlistCost();
