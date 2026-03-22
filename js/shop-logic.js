@@ -1,8 +1,24 @@
 /**
- * shop-logic.js — Love Arcade v9.9
+ * shop-logic.js — Love Arcade v9.9.2
  * ─────────────────────────────────────────────────────────────────────────────
  * Contiene toda la lógica de la vista Tienda, extraída del script inline de
  * shop.html como parte de la migración a arquitectura SPA.
+ *
+ * NOVEDADES v9.9.2 (Hardening & Error Detection):
+ *  - handleRedeem(): único punto de disparo de track('redeem_code'). El call
+ *    duplicado en app.js/redeemPromoCode() fue eliminado.
+ *  - handleRedeem(): nuevo track('invalid_promo_code') en la rama failure cuando
+ *    result.message === 'Código inválido'. Diferencia intentos de adivinar códigos
+ *    de errores ya canjeados (message === 'Ya canjeaste este código'), que se
+ *    ignoran para no saturar el canal.
+ *  - renderShop(): wishlist click handler añade track('wishlist_add') solo al
+ *    agregar un ítem (isNow === true), no al quitarlo.
+ *  - loadCatalog(): añade track('user_snapshot') una sola vez por sesión de
+ *    navegador (guardado en sessionStorage bajo 'ga_snapshot_sent') tras cargar
+ *    el catálogo con éxito. Registra saldo, items comprados, items disponibles,
+ *    racha y códigos canjeados. No se repite en navigations SPA ni retries.
+ *  - handleExport(): nuevo track('sync_export') al exportar la partida.
+ *    Permite medir cuántos usuarios usan la sincronización entre dispositivos.
  *
  * NOVEDADES v9.9.1 (Ghost Analytics — producción):
  *  - buy_item: GhostAnalytics.track() en initiatePurchase() tras compra exitosa.
@@ -1356,6 +1372,16 @@ function renderShop(items) {
             btn.title = isNow ? 'Quitar de lista' : 'Agregar a lista de deseos';
             btn.innerHTML = '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>';
             updateWishlistCost();
+            // [v9.9.2] Solo trackear al AGREGAR (isNow === true), no al quitar.
+            // Permite detectar qué wallpapers generan más interés sin registrar
+            // cada toggle como un evento distinto.
+            if (isNow) {
+                const item = allItems.find(i => i.id === id);
+                window.GhostAnalytics?.track('wishlist_add', {
+                    wallpaper: item?.name || `id:${id}`,
+                    precio:    item?.price ?? '?'
+                });
+            }
         });
     });
 
@@ -1675,15 +1701,28 @@ async function handleRedeem() {
         if (!document.hidden) {
             confetti({ particleCount: 80, spread: 100, origin: { y: 0.4 }, colors: ['#fbbf24','#9b59ff','#22d07a'] });
         }
-        // Analítica — redeem_code: código ofuscado con *** para no exponer texto plano
+        // [v9.9.2] Fuente ÚNICA de track('redeem_code'): aquí, al final de la cadena
+        // de éxito de UI. El disparo en app.js/redeemPromoCode() fue eliminado para
+        // evitar el doble reporte. Código ofuscado con *** para no exponer texto plano.
         window.GhostAnalytics?.track('redeem_code', {
             recompensa: result.reward,
-            código: `${code.slice(0, 3)}***`
+            código:     `${code.slice(0, 3)}***`
         });
     } else {
         showMsg(msg, result.message, 'var(--error)');
         input.style.borderColor = 'var(--error)';
         shakeElement(btn);
+
+        // [v9.9.2] Fricción de usuario: código que no existe en absoluto.
+        // Solo se trackea cuando el código es desconocido ('Código inválido'),
+        // no cuando ya fue canjeado ('Ya canjeaste este código') para evitar
+        // saturar el canal con intentos legítimos pero repetidos.
+        if (result.message === 'Código inválido') {
+            window.GhostAnalytics?.track('invalid_promo_code', {
+                intento: `${code.slice(0, 3)}***`,
+                longitud: code.length
+            });
+        }
     }
 }
 
@@ -1712,6 +1751,11 @@ async function handleExport() {
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
     } catch (_) {}
+
+    // [v9.9.2] Mide cuántos usuarios utilizan la sincronización entre dispositivos.
+    window.GhostAnalytics?.track('sync_export', {
+        portapapeles: clipboardOk ? 'sí' : 'no'
+    });
 
     showMsg(msg, clipboardOk
         ? '✓ Código copiado al portapapeles y archivo .txt descargado.'
@@ -1991,6 +2035,29 @@ function loadCatalog() {
 
             // Asegurar que el error state está oculto si se cargó correctamente
             if (errorEl) errorEl.classList.add('hidden');
+
+            // [v9.9.2] user_snapshot — instantánea de estado enviada UNA VEZ por sesión.
+            // sessionStorage se resetea al cerrar la pestaña; persistencia exacta para
+            // una "primera impresión" por visita sin datos redundantes entre navegaciones SPA.
+            // No se envía en retries del catálogo (loadCatalog puede llamarse múltiples veces).
+            if (!sessionStorage.getItem('ga_snapshot_sent')) {
+                try {
+                    sessionStorage.setItem('ga_snapshot_sent', '1');
+                    const gc          = window.GameCenter;
+                    const inventory   = gc?.getInventory?.() || {};
+                    const comprados   = Object.values(inventory).filter(v => v > 0).length;
+                    const disponibles = items.length - comprados;
+                    const state       = gc?.getState?.() || {};
+
+                    window.GhostAnalytics?.track('user_snapshot', {
+                        saldo:           state.coins ?? gc?.getBalance?.() ?? 0,
+                        comprados,
+                        disponibles,
+                        racha:           state.streak ?? 0,
+                        códigos_canjeados: gc?.getRedeemedCount?.() ?? 0
+                    });
+                } catch (_) { /* nunca interrumpir la carga del catálogo */ }
+            }
         })
         .catch(err => {
             console.error('[ShopLogic] Error cargando shop.json:', err);

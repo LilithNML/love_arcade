@@ -1,6 +1,21 @@
 /**
- * Game Center Core v9.9 — Ghost Analytics
+ * Game Center Core v9.9.2 — Hardening & Error Detection
  * Compatible con gamecenter_v6_promos — migración silenciosa incluida.
+ *
+ * NOVEDADES v9.9.2 (Hardening & Error Detection):
+ *  - Eliminado track('redeem_code') de redeemPromoCode(): la fuente única de
+ *    disparo es handleRedeem() en shop-logic.js, al final de la cadena de éxito
+ *    de UI. Elimina el doble reporte que saturaba el canal de Discord.
+ *  - buyItem(): nueva rama de tracking insufficient_funds cuando reason === 'coins'.
+ *    Registra wallpaper, precio final y saldo actual para detectar si los precios
+ *    son demasiado elevados o el HUD de saldo no es claro para el usuario.
+ *  - buyMoonBlessing(): ídem para insufficient_funds; registra el costo del buff
+ *    y el saldo disponible.
+ *  - claimDaily(): nuevo track('daily_bonus') en la rama de éxito. Registra
+ *    recompensa total, racha y si la Bendición Lunar contribuyó. Solo disparado
+ *    en éxito para no saturar el canal con intentos fallidos del botón.
+ *  - GameCenter.getRedeemedCount(): nuevo método expuesto que devuelve el número
+ *    de códigos ya canjeados, usado por el user_snapshot de shop-logic.js.
  *
  * NOVEDADES v9.9 (Ghost Analytics):
  *  - Integración con el módulo analytics.js (debe cargarse ANTES en el HTML).
@@ -463,7 +478,16 @@ window.GameCenter = {
             ? Math.floor(itemData.price * ECONOMY.saleMultiplier)
             : itemData.price;
 
-        if (store.coins < finalPrice) return { success: false, reason: 'coins' };
+        if (store.coins < finalPrice) {
+            // [v9.9.2] Fricción de usuario: intento de compra sin saldo suficiente.
+            // Ayuda a detectar precios demasiado elevados o HUD de saldo poco claro.
+            window.GhostAnalytics?.track('insufficient_funds', {
+                wallpaper: itemData.name,
+                precio:    `${finalPrice} ⭐`,
+                saldo:     store.coins
+            });
+            return { success: false, reason: 'coins' };
+        }
 
         const cashback = Math.floor(finalPrice * ECONOMY.cashbackRate);
 
@@ -483,6 +507,14 @@ window.GameCenter = {
     getBoughtCount: (id) => store.inventory[id] || 0,
     getBalance:     ()   => store.coins,
     getInventory:   ()   => ({ ...store.inventory }),
+
+    /**
+     * Devuelve el número de códigos promocionales ya canjeados.
+     * Usado por el user_snapshot de shop-logic.js para enriquecer la
+     * instantánea de sesión sin exponer el array completo de hashes.
+     * @returns {number}
+     */
+    getRedeemedCount: () => (store.redeemedHashes || []).length,
 
     getDownloadUrl: (itemId, fileName) => {
         if (!fileName) return null;
@@ -547,12 +579,9 @@ window.GameCenter = {
         logTransaction('ingreso', reward, `Código canjeado`);
         saveState();
 
-        // Analítica — redeem_code: el código original se ofusca con *** para
-        // no exponer el texto plano en el canal de Discord.
-        window.GhostAnalytics?.track('redeem_code', {
-            recompensa: reward,
-            código: `${code.slice(0, 3)}***`
-        });
+        // [v9.9.2] track('redeem_code') fue movido a handleRedeem() en shop-logic.js
+        // para que el disparo ocurra UNA SOLA VEZ, al final de la cadena de éxito
+        // de UI. No se trackea aquí para evitar el doble reporte.
 
         return { success: true, reward, message: `¡+${reward} Monedas!` };
     },
@@ -652,6 +681,16 @@ window.GameCenter = {
         saveState();
         updateMoonBlessingUI();
 
+        // [v9.9.2] Analítica — daily_bonus: solo en éxito para no saturar el canal.
+        // Registra cuánto ganó el usuario y si la Bendición Lunar contribuyó,
+        // lo que permite detectar días de mayor actividad y valor del buff.
+        window.GhostAnalytics?.track('daily_bonus', {
+            recompensa:   totalReward,
+            base:         baseReward,
+            luna:         moonBonus > 0 ? `+${moonBonus}` : 'no',
+            racha:        newStreak
+        });
+
         return {
             success:    true,
             reward:     totalReward,
@@ -715,7 +754,15 @@ window.GameCenter = {
         const COST = 100;
         const DURATION = 7 * 86_400_000; // 7 días en ms
 
-        if (store.coins < COST) return { success: false, reason: 'coins' };
+        if (store.coins < COST) {
+            // [v9.9.2] Fricción de usuario: saldo insuficiente para activar el buff.
+            window.GhostAnalytics?.track('insufficient_funds', {
+                wallpaper: 'Bendición Lunar (buff)',
+                precio:    `${COST} ⭐`,
+                saldo:     store.coins
+            });
+            return { success: false, reason: 'coins' };
+        }
 
         const now = Date.now();
         const isActive = store.buffs.moonBlessingExpiry > now;
@@ -1287,7 +1334,7 @@ applyIdentity();
 //   3. El countdown aparece oculto (updateCountdownDisplay no corrió aún)
 // Al delegarlo al inline script del <body>, se garantiza el orden correcto:
 //   updateStreakBar() → updateCountdownDisplay() → revealUI()
-// Todo en el mismo hilo, antes del primer paint.
+// Todos en el mismo hilo, antes del primer paint.
 
 // =====================================================
 // EVENT LISTENERS — DOMContentLoaded

@@ -1,8 +1,29 @@
 /**
- * analytics.js — Love Arcade v9.9.1
+ * analytics.js — Love Arcade v9.9.2
  * ─────────────────────────────────────────────────────────────────────────────
  * Sistema de Analíticas "Ghost" — Captura eventos de interacción y los envía
  * en tiempo real a un canal privado de Discord mediante Webhooks HTTP.
+ *
+ * CAMBIOS v9.9.2 (Hardening & Error Detection):
+ *  - De-duplicación de redeem_code: track() eliminado de app.js/redeemPromoCode();
+ *    el único punto de disparo es handleRedeem() en shop-logic.js (fin de la
+ *    cadena de éxito de UI), eliminando el doble reporte anterior.
+ *  - detected_error enriquecido con contexto forense: nueva función privada
+ *    _getExecutionContext() que añade url, online, mem_mb y vista a cada error
+ *    capturado por los handlers de window.error y unhandledrejection.
+ *  - Nuevo evento invalid_promo_code: disparado en handleRedeem() cuando el
+ *    código no existe en PROMO_CODES_HASHED, diferenciando intentos de adivinar
+ *    códigos de errores reales de lógica.
+ *  - Nuevo evento insufficient_funds: disparado en buyItem() y buyMoonBlessing()
+ *    de app.js, registra wallpaper, precio y saldo actual para diagnóstico de
+ *    precios elevados o HUD de saldo poco claro.
+ *  - Nuevo evento wishlist_add: disparado al añadir (no al quitar) un ítem a
+ *    la lista de deseos. Permite detectar tendencias de catálogo.
+ *  - Nuevo evento daily_bonus: disparado en claimDaily() en éxito; registra
+ *    recompensa base, bonus lunar y racha sin saturar el canal con intentos fallidos.
+ *  - Nuevo evento user_snapshot: enviado UNA SOLA VEZ por sesión (sessionStorage)
+ *    tras la carga del catálogo, con saldo, items comprados / disponibles, racha y
+ *    códigos canjeados. No se repite en navigations SPA ni retries del catálogo.
  *
  * CÓMO DIAGNOSTICAR DESDE DEVTOOLS:
  *
@@ -84,21 +105,35 @@
     // ── Metadatos visuales por tipo de evento ─────────────────────────────────
 
     const EVENT_COLORS = {
-        view_preview:   0x9b59ff,   // Violeta
-        click_download: 0x22d07a,   // Verde esmeralda
-        buy_item:       0xfbbf24,   // Dorado
-        redeem_code:    0xff59b4,   // Rosa neón
-        open_game:      0x00d4ff,   // Cyan Arcade
-        detected_error: 0xe11d48    // Carmesí
+        view_preview:        0x9b59ff,   // Violeta
+        click_download:      0x22d07a,   // Verde esmeralda
+        buy_item:            0xfbbf24,   // Dorado
+        redeem_code:         0xff59b4,   // Rosa neón
+        open_game:           0x00d4ff,   // Cyan Arcade
+        detected_error:      0xe11d48,   // Carmesí
+        // ── v9.9.2 ──────────────────────────────────────────────────────────
+        invalid_promo_code:  0xf97316,   // Naranja — intento de código incorrecto
+        insufficient_funds:  0xef4444,   // Rojo — intento de compra sin saldo
+        wishlist_add:        0xec4899,   // Rosa — ítem añadido a la lista de deseos
+        daily_bonus:         0x4ade80,   // Verde lima — bono diario reclamado
+        user_snapshot:       0x38bdf8,   // Celeste — instantánea de estado por sesión
+        sync_export:         0xa78bfa    // Violeta suave — exportación de partida
     };
 
     const EVENT_EMOJIS = {
-        view_preview:   '👁️',
-        click_download: '⬇️',
-        buy_item:       '🛒',
-        redeem_code:    '🎁',
-        open_game:      '🎮',
-        detected_error: '🚨'
+        view_preview:        '👁️',
+        click_download:      '⬇️',
+        buy_item:            '🛒',
+        redeem_code:         '🎁',
+        open_game:           '🎮',
+        detected_error:      '🚨',
+        // ── v9.9.2 ──────────────────────────────────────────────────────────
+        invalid_promo_code:  '🔑',
+        insufficient_funds:  '💸',
+        wishlist_add:        '💜',
+        daily_bonus:         '🌟',
+        user_snapshot:       '📊',
+        sync_export:         '💾'
     };
 
     // ── Logging condicional ───────────────────────────────────────────────────
@@ -142,7 +177,7 @@
                 title:       `${emoji} ${event.replace(/_/g, ' ').toUpperCase()}`,
                 description,
                 color,
-                footer:    { text: `Love Arcade · Ghost Analytics v9.9.1${isTest ? ' · TEST' : ''}` },
+                footer:    { text: `Love Arcade · Ghost Analytics v9.9.2${isTest ? ' · TEST' : ''}` },
                 timestamp: new Date().toISOString()
             }]
         };
@@ -335,6 +370,49 @@
         return url.startsWith(origin) || url.startsWith('/') || url.startsWith('./');
     }
 
+    // ── Contexto de ejecución forense (v9.9.2) ────────────────────────────────
+
+    /**
+     * Construye el contexto de ejecución forense para enriquecer los eventos
+     * detected_error. Nunca lanza — envuelto en try/catch para no afectar el
+     * flujo de reporte de errores.
+     *
+     * Campos devueltos:
+     *  - url      Ruta completa (máx 120 chars), útil para reproducir el error.
+     *  - online   'sí' | 'no' — distingue fallos de código de fallos de red.
+     *  - mem_mb   Heap JS usado en MB (solo Chrome/Edge; omitido en otros).
+     *  - vista    Vista SPA activa ('home' | 'shop') como breadcrumb.
+     *
+     * @returns {object}
+     */
+    function _getExecutionContext() {
+        try {
+            const ctx = {};
+
+            // Ruta completa — permite reproducir el error en el mismo contexto
+            const href = window.location.href;
+            ctx.url = href.length > 120 ? href.slice(0, 117) + '…' : href;
+
+            // Estado de red — si offline, el error probablemente es de red, no de código
+            ctx.online = navigator.onLine ? 'sí' : 'no';
+
+            // Memoria JS (Chrome/Edge únicamente; performance.memory es no-estándar)
+            // Útil para detectar fugas de memoria en gama baja que provoquen crashes.
+            const mem = performance?.memory;
+            if (mem?.usedJSHeapSize) {
+                ctx.mem_mb = (mem.usedJSHeapSize / 1_048_576).toFixed(1) + ' MB';
+            }
+
+            // Vista SPA activa: breadcrumb que indica dónde estaba el usuario
+            const view = window.SpaRouter?.getCurrentView?.();
+            if (view) ctx.vista = view;
+
+            return ctx;
+        } catch (_) {
+            return {}; // Nunca propagar un error desde el sistema de errores
+        }
+    }
+
     // ── Handler: errores síncronos (window.onerror) ───────────────────────────
     window.addEventListener('error', (e) => {
         try {
@@ -358,6 +436,9 @@
 
             // Añadir stack frame si aporta contexto
             if (frame) meta.stack = frame;
+
+            // [v9.9.2] Contexto forense: url, online, mem_mb, vista
+            Object.assign(meta, _getExecutionContext());
 
             track('detected_error', meta);
         } catch (_) { /* nunca propagar */ }
@@ -401,6 +482,9 @@
             const frame = _firstStackFrame(reason instanceof Error ? reason : null);
             if (frame) meta.stack = frame;
 
+            // [v9.9.2] Contexto forense: url, online, mem_mb, vista
+            Object.assign(meta, _getExecutionContext());
+
             track('detected_error', meta);
         } catch (_) { /* nunca propagar */ }
     });
@@ -409,7 +493,7 @@
     // Este log es el primer punto de diagnóstico: si no aparece, el <script>
     // no está incluido en index.html o hay un error de sintaxis en el módulo.
     console.log(
-        '[GhostAnalytics] ✅ Módulo listo (v9.9.1).',
+        '[GhostAnalytics] ✅ Módulo listo (v9.9.2).',
         '| test(): probar Webhook',
         '| debug(true): activar logs',
         '| status(): ver estado interno'
