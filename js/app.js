@@ -132,7 +132,7 @@ function debounce(fn, delay = 300) {
         timer = setTimeout(() => fn(...args), delay);
     };
 }
-window.debounce = debounce; // Disponible globalmente para shop.html
+window.debounce = debounce; // Disponible globalmente para shop-logic.js
 
 // =====================================================
 // TIEMPO DE RED — Fuente de verdad externa para el bono diario

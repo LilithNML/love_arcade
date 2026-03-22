@@ -288,7 +288,7 @@
         <!-- ═══════════════════════════════════════════
              VISTA: INICIO
              ═══════════════════════════════════════════ -->
-        <div id="view-home">
+        <div id="view-home" class="view-section">
 
             <!-- ── PLAYER HUD ── -->
             <div class="player-hud">
@@ -548,7 +548,7 @@
         <!-- ═══════════════════════════════════════════
              VISTA: TIENDA
              ═══════════════════════════════════════════ -->
-        <div id="view-shop" class="hidden">
+        <div id="view-shop" class="view-section hidden">
 
             <!-- ── SALE BANNER ── -->
             <div id="sale-banner" class="sale-banner hidden">
@@ -1185,6 +1185,15 @@
             refresh() {
                 updateCountdownDisplay();
                 updateStreakBar();
+            },
+            /**
+             * Llamado por spa-router.js al SALIR de la vista Inicio (v9.6).
+             * Reservado para liberar recursos futuros (observers, timers, etc.).
+             * Se implementa ahora para que el hook esté completo y no falle
+             * silenciosamente cuando se añadan recursos que requieran cleanup.
+             */
+            onLeave() {
+                // placeholder — listo para futuros IntersectionObservers o timers
             }
         };
 

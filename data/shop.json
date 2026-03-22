@@ -633,8 +633,8 @@
     "id": 64,
     "name": "Jane Doe Chibi",
     "price": 0,
-    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/jane_doe_chibi_2825e27f_thumbs",
-    "file": "jane_doe_chibi_2825e27f_thumbs.jpg",
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/jane_doe_chibi_2825e27f",
+    "file": "jane_doe_chibi_2825e27f.jpeg",
     "tags": [
       "Mobile"
     ]

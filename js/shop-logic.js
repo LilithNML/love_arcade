@@ -1288,7 +1288,13 @@ async function initiatePurchase(item, btn) {
     if (result.success) {
         filterItems();
         renderLibrary(allItems);
-        document.querySelectorAll('.coin-display').forEach(el => el.textContent = GameCenter.getBalance());
+        // Actualizar displays: navbar con formato abreviado, resto con valor exacto.
+        const bal = GameCenter.getBalance();
+        document.querySelectorAll('.navbar .coin-display').forEach(el => {
+            el.textContent = window.formatCoinsNavbar?.(bal) ?? bal;
+            el.closest('.coin-badge')?.setAttribute('title', `${bal} monedas`);
+        });
+        document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
         fireConfetti();
         const cbNote = result.cashback > 0 ? ` <strong>+${result.cashback} cashback</strong> devueltas.` : '';
         showToast(`"${item.name}" desbloqueado.${cbNote} Ve a <strong>Mis Tesoros</strong>.`, 'success');
@@ -1366,7 +1372,13 @@ async function handleRedeem() {
         showMsg(msg, result.message, 'var(--success)');
         input.value = '';
         input.style.borderColor = '';
-        document.querySelectorAll('.coin-display').forEach(el => el.textContent = GameCenter.getBalance());
+        // Actualizar displays: navbar con formato abreviado, resto con valor exacto.
+        const bal = GameCenter.getBalance();
+        document.querySelectorAll('.navbar .coin-display').forEach(el => {
+            el.textContent = window.formatCoinsNavbar?.(bal) ?? bal;
+            el.closest('.coin-badge')?.setAttribute('title', `${bal} monedas`);
+        });
+        document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
         if (!document.hidden) {
             confetti({ particleCount: 80, spread: 100, origin: { y: 0.4 }, colors: ['#fbbf24','#9b59ff','#22d07a'] });
         }
@@ -1601,9 +1613,15 @@ window.ShopView = {
     onEnter() {
         initEconomyInfo();
         renderMoonBlessingStatus();
-        // Actualizar saldo en el badge de coin-display de la navbar
-        document.querySelectorAll('.coin-display').forEach(el => {
-            el.textContent = window.GameCenter?.getBalance?.() ?? 0;
+        // Actualizar saldo en todos los coin-display:
+        // la navbar usa el formato abreviado (ej: "25.5k") y el resto el valor exacto.
+        const balance = window.GameCenter?.getBalance?.() ?? 0;
+        document.querySelectorAll('.navbar .coin-display').forEach(el => {
+            el.textContent = window.formatCoinsNavbar?.(balance) ?? balance;
+            el.closest('.coin-badge')?.setAttribute('title', `${balance} monedas`);
+        });
+        document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => {
+            el.textContent = balance;
         });
         // Re-aplicar filtros activos: si el usuario vuelve a la Tienda después de
         // navegar al Home, el catálogo se refiltra con el estado previo de activeFilter

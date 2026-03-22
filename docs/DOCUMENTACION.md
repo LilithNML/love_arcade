@@ -741,7 +741,7 @@ if (viewId === 'home') window.HomeView?.refresh?.();
 if (viewId === 'shop') window.ShopView?.onEnter?.();
 ```
 
-`HomeView.onLeave` es un método opcional (no existe en el inline script actual); el operador `?.` garantiza que no lanzará error si no está definido.
+`HomeView.onLeave` está implementado en el inline script de `index.html` como hook de ciclo de vida preparado para futuros recursos (observers, timers). Actualmente no libera ningún recurso; su presencia garantiza que el contrato de ciclo de vida esté completo y no falle silenciosamente.
 
 ### Eficiencia de datos
 
@@ -1121,8 +1121,8 @@ Ambos mantienen el borde de 1px con `--border-subtle`. Los pseudo-elementos `::b
 │   │  <nav class="bottom-nav">    ← Global, siempre visible      │   │
 │   │                                                             │   │
 │   │  <main class="container">                                   │   │
-│   │    <div id="view-home">   ← HUD, juegos, FAQ                │   │
-│   │    <div id="view-shop" class="hidden">  ← Tienda            │   │
+│   │    <div id="view-home" class="view-section">   ← HUD, juegos, FAQ  │   │
+│   │    <div id="view-shop" class="view-section hidden">  ← Tienda    │   │
 │   │  </main>                                                    │   │
 │   │                                                             │   │
 │   │  <!-- Modales — fuera de main, position:fixed seguro -->    │   │
@@ -1260,7 +1260,7 @@ Cuando la transición `opacity 0→1` empieza, el scroll ya está en `top: 0`.
 | `spa-router.js` | v9.1 → v9.2. Scroll reset reordenado. JSDoc actualizado. |
 | `DOCUMENTACION.md` | Sección 2i añadida. |
 
-> **Nota HTML:** añadir clase `view-section` a `#view-home` y `#view-shop` en `index.html` para activar las transiciones. Sin esta clase, las vistas siguen funcionando correctamente pero sin animación de entrada.
+> **Estado actual:** la clase `view-section` está aplicada en `#view-home` y `#view-shop` de `index.html` (corregido en v9.6). Las transiciones de entrada se disparan correctamente.
 
 ---
 
@@ -1859,9 +1859,9 @@ dailyBtn.addEventListener('click', async () => {
 
 ## 6. sync-worker.js — Web Worker
 
-**Sin cambios en v8.0.**
+**Actualizado en v9.6** — modernización de encoding; sin cambios en el protocolo de mensajes.
 
-El worker sigue manejando el checksum SHA-256 para los archivos `.txt` importados, garantizando que cualquier archivo cargado sea validado antes de aplicarse. El flujo completo es:
+El worker maneja el checksum SHA-256 para las operaciones de exportación e importación de partidas, garantizando integridad antes de aplicar cualquier dato al store. El flujo completo es:
 
 ```
 Usuario carga archivo .txt  →  FileReader lee el texto  →
@@ -1872,12 +1872,29 @@ GameCenter.importSave(code)  →  workerTask({action:'import', code, salt})
 ¿inválido? → rechazado con mensaje de error
 ```
 
-Los mensajes soportados son los mismos que en v7.5:
+Los mensajes soportados:
 
 | `action`   | Payload requerido       | Resultado devuelto                        |
 |---|---|---|
 | `'export'` | `{ store, salt }`       | `string` — código Base64 con checksum     |
 | `'import'` | `{ code, salt }`        | `{ data, valid, legacy }` — store + validez |
+
+### Cambios v9.6 — Modernización de encoding
+
+Las funciones `escape()` y `unescape()` estaban marcadas como **deprecadas** desde ES5 y han sido eliminadas de la especificación en ES2025. Se han reemplazado en ambas operaciones:
+
+| Operación | Antes (deprecado) | Después (moderno) |
+|---|---|---|
+| `exportStore` | `btoa(unescape(encodeURIComponent(payload)))` | `TextEncoder` → `Array.from` → `String.fromCharCode` → `btoa` |
+| `importStore` | `decodeURIComponent(escape(atob(code)))` | `atob` → `Uint8Array` → `TextDecoder` |
+
+El resultado codificado/decodificado es **byte-por-byte idéntico** al patrón anterior para contenido ASCII; la diferencia es relevante para payloads que contengan caracteres fuera del rango ASCII (nicknames con tildes, emojis en `saleLabel`, etc.), donde el patrón antiguo podía producir cadenas corruptas en motores estrictos.
+
+> **Compatibilidad de códigos existentes:** Los códigos exportados con versiones anteriores del worker siguen siendo válidos. `importStore` incluye un bloque de compatibilidad legada (`legacy: true`) que maneja stores sin checksum (v7.2 y anteriores).
+
+### Notas de versión
+
+El archivo declaraba `v7.5` en su cabecera JSDoc desde su creación. Actualizado a `v9.6` para mantener coherencia con el resto del proyecto.
 
 ---
 
@@ -1933,13 +1950,13 @@ El botón `#btn-retry-shop` es enlazado por `loadCatalog()` en `shop-logic.js`.
   <nav class="bottom-nav">                ← Global (Nav inferior móvil)
 
   <main class="container">
-    <div id="view-home">                  ← Vista Inicio
+    <div id="view-home" class="view-section">  ← Vista Inicio
       .player-hud
       #games.games-grid
       #faq
     </div>
 
-    <div id="view-shop" class="hidden">   ← Vista Tienda (oculta al inicio)
+    <div id="view-shop" class="view-section hidden">  ← Vista Tienda (oculta al inicio)
       #sale-banner
       .promo-toggle-wrap
       .shop-tabs
@@ -1997,6 +2014,13 @@ window.HomeView = {
     refresh() {
         updateCountdownDisplay(); // Refresca el countdown del bono diario
         updateStreakBar();         // Actualiza la barra de racha
+    },
+    /**
+     * Llamado por spa-router.js al SALIR de la vista Inicio (v9.6).
+     * Hook de ciclo de vida preparado para futuros observers/timers.
+     */
+    onLeave() {
+        // placeholder — listo para futuros recursos que requieran cleanup
     }
 };
 ```

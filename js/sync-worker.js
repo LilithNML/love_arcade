@@ -1,8 +1,16 @@
 /**
- * sync-worker.js — Love Arcade v7.5
+ * sync-worker.js — Love Arcade v9.6
  * Web Worker responsable de la codificación/decodificación Base64
  * y del cálculo de checksums SHA-256 para la sincronización de partidas.
  * Ejecuta operaciones pesadas en un hilo separado para no bloquear la UI.
+ *
+ * CAMBIOS v9.6 (sincronización de versión + modernización de encoding):
+ *  - Versión actualizada de v7.5 a v9.6 para coincidir con el proyecto.
+ *  - exportStore(): reemplaza btoa(unescape(encodeURIComponent())) —
+ *    funciones deprecadas en todos los motores modernos— por TextEncoder
+ *    + Array.from() + String.fromCharCode(), idéntico al fallback de app.js.
+ *  - importStore(): reemplaza decodeURIComponent(escape(atob())) por
+ *    TextDecoder sobre Uint8Array, sin funciones deprecadas.
  */
 
 /**
@@ -27,11 +35,15 @@ async function computeHash(text) {
  * @returns {Promise<string>} Código exportable.
  */
 async function exportStore(store, salt) {
-    const json     = JSON.stringify(store);
+    const json = JSON.stringify(store);
     const checksum = await computeHash(json + salt);
-    const payload  = JSON.stringify({ data: store, checksum });
-    // encodeURIComponent → unescape para soporte Unicode en btoa
-    return btoa(unescape(encodeURIComponent(payload)));
+    const payload = JSON.stringify({ data: store, checksum });
+    // TextEncoder → bytes → String.fromCharCode → btoa:
+    // reemplaza el patrón obsoleto btoa(unescape(encodeURIComponent()))
+    // que usa funciones deprecadas en motores modernos.
+    const bytes = new TextEncoder().encode(payload);
+    const binary = Array.from(bytes, b => String.fromCharCode(b)).join('');
+    return btoa(binary);
 }
 
 /**
@@ -41,9 +53,13 @@ async function exportStore(store, salt) {
  * @returns {Promise<{data: object, valid: boolean}>}
  */
 async function importStore(code, salt) {
-    const json    = decodeURIComponent(escape(atob(code.trim())));
+    // TextDecoder sobre Uint8Array reemplaza decodeURIComponent(escape(atob()))
+    // que usa funciones deprecadas en motores modernos.
+    const raw = atob(code.trim());
+    const bytes = Uint8Array.from(raw, c => c.charCodeAt(0));
+    const json = new TextDecoder().decode(bytes);
     const payload = JSON.parse(json);
-
+    
     // Compatibilidad con partidas antiguas (v7.2 y anteriores)
     // que no incluían campo checksum.
     if (!payload.checksum || !payload.data) {
@@ -54,11 +70,11 @@ async function importStore(code, salt) {
         }
         return { data: legacyStore, valid: true, legacy: true };
     }
-
+    
     const expected = await computeHash(JSON.stringify(payload.data) + salt);
     return {
-        data:   payload.data,
-        valid:  payload.checksum === expected,
+        data: payload.data,
+        valid: payload.checksum === expected,
         legacy: false
     };
 }
@@ -66,16 +82,16 @@ async function importStore(code, salt) {
 // ── Receptor de mensajes ──────────────────────────────────────────────────────
 self.addEventListener('message', async (e) => {
     const { id, action, ...data } = e.data;
-
+    
     try {
         if (action === 'export') {
             const result = await exportStore(data.store, data.salt);
             self.postMessage({ id, result });
-
+            
         } else if (action === 'import') {
             const result = await importStore(data.code, data.salt);
             self.postMessage({ id, result });
-
+            
         } else {
             self.postMessage({ id, error: `Acción desconocida: ${action}` });
         }
