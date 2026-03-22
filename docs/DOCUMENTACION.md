@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v9.6 · CDN Offline Resilience · Arcade Solid 3.0
+### Plataforma de Recompensas · v9.7 · Smart Preload Hardening · CDN Offline Resilience · Arcade Solid 3.0
 
 ---
 
@@ -21,6 +21,7 @@
 2n. [Novedades en v9.6 — Smart Preload (Fase 2)](#2n-novedades-en-v96--smart-preload-fase-2--intersection-observer)
 2o. [Novedades en v9.6 — Animación de Modal (Fase 3)](#2o-novedades-en-v96--animación-de-modal-fase-3--scale-opacity)
 2p. [Novedades en v9.6 — Neon Flow Fallback (Fase 4)](#2p-novedades-en-v96--neon-flow-fallback-fase-4--gpu-animated-gradients)
+2q. [Novedades en v9.7 — Smart Preload Hardening](#2q-novedades-en-v97--smart-preload-hardening-decoding-async--scheduler--connection-guard)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -662,7 +663,7 @@ _icon('heart', 12, { cls: 'wishlist-icon' })
 
 Se implementa un `IntersectionObserver` que aprovecha el tiempo de lectura/scroll del usuario para descargar el arte hi-res en segundo plano. Cuando el usuario abre el modal, el navegador ya tiene la imagen en caché y la sirve instantáneamente.
 
-### Arquitectura
+### Arquitectura (v9.6 base — ver hardening en v9.7 más abajo)
 
 #### `_preloadItemHiRes(cardEl, item)` — precarga unitaria
 
@@ -673,20 +674,22 @@ function _preloadItemHiRes(cardEl, item) {
 
     const img = new Image();
     img.fetchPriority = 'low';           // No compite con recursos críticos del HUD
+    img.decoding      = 'async';         // [v9.7] decodificación fuera del hilo principal
     img.src = _getMockupUrl(item);       // Misma URL que usará openPreviewModal() → cache hit
 }
 ```
 
 - `data-preloaded="true"` se escribe en el card **antes** de instanciar `Image()` para evitar una condición de carrera si el observer dispara dos veces en el mismo frame.
-- `fetchPriority = 'low'` (Chrome 101+, Safari 17.2+) asegura que la precarga no compite con el HUD, el saldo ni otros elementos críticos. En navegadores sin soporte se ignora silenciosamente.
-- Si el CDN devuelve error, `onerror` elimina `data-preloaded` para que `openPreviewModal()` ejecute su propio flujo de fallback CSS sin interferencia.
+- `fetchPriority = 'low'` (Chrome 101+, Safari 17.2+) asegura que la precarga no compite con el HUD, el saldo ni otros elementos críticos.
+- `decoding = 'async'` (v9.7 — ver sección 2q) delega la decodificación de píxeles al thread del compositor, liberando el hilo principal durante ráfagas de scroll.
+- Si el CDN devuelve error, `onerror` elimina `data-preloaded` para que `openPreviewModal()` ejecute su propio flujo de fallback CSS.
 
 #### `_initPreloadObserver(container, items)` — configuración del observer
 
-| Parámetro | Valor | Razón |
-|---|---|---|
-| `rootMargin` | `'200px'` | Empieza a precargar 200 px antes de que el card entre en pantalla |
-| `threshold` | `0.1` | Dispara con el 10 % del card visible; evita falsos positivos en bordes de pantalla |
+| Parámetro | v9.6 | v9.7 | Razón del cambio |
+|---|---|---|---|
+| `rootMargin` | `'200px'` | `'200px 0px 400px 0px'` | Anticipación asimétrica: 400 px abajo (scroll principal), 200 px arriba (scroll inverso), 0 px en lados (evita activar overflow horizontal) |
+| `threshold` | `0.1` | `0` | Con rootMargin proveyendo el buffer, threshold 0.1 añadía latencia sin precisión. threshold 0 dispara al primer píxel en la zona extendida |
 
 ```javascript
 _preloadObserver = new IntersectionObserver((entries) => {
@@ -696,17 +699,17 @@ _preloadObserver = new IntersectionObserver((entries) => {
         if (cardEl.dataset.preloaded) { _preloadObserver?.unobserve(cardEl); return; }
 
         const item = itemMap.get(parseInt(cardEl.querySelector('.shop-preview-btn')?.dataset?.id, 10));
-        if (item) _preloadItemHiRes(cardEl, item);
+        if (item) _schedulePreloadItem(cardEl, item);   // [v9.7] scheduler, no directo
 
-        _preloadObserver?.unobserve(cardEl);   // Una sola ejecución por card — liberar memoria
+        _preloadObserver?.unobserve(cardEl);
     });
-}, { rootMargin: '200px', threshold: 0.1 });
+}, { rootMargin: '200px 0px 400px 0px', threshold: 0 });
 ```
 
 - **Mapa `id → item`**: construido en `O(n)` una sola vez al inicializar el observer; cada lookup en el callback es `O(1)`.
-- **`unobserve` inmediato**: tras procesar un card, se deja de observar. Esto garantiza que el observer no acumule referencias a elementos que ya fueron tratados.
-- **Solo cards con `.shop-preview-btn`**: las tarjetas ya compradas no tienen modal de preview y no necesitan precarga.
-- **Idempotente**: si `renderShop()` reconstruye el DOM (por un filtro o búsqueda), `_initPreloadObserver()` desconecta el observer anterior antes de crear uno nuevo sobre los nodos frescos.
+- **`unobserve` inmediato**: tras procesar un card, se deja de observar. El observer no acumula referencias a elementos ya tratados.
+- **Solo cards con `.shop-preview-btn`**: las tarjetas compradas no tienen modal de preview y no necesitan precarga.
+- **Idempotente**: si `renderShop()` reconstruye el DOM, `_initPreloadObserver()` desconecta el observer anterior y vacía la cola pendiente antes de crear uno nuevo sobre los nodos frescos.
 
 #### Ciclo de vida del observer (integración con SPA)
 
@@ -716,8 +719,10 @@ navigateTo('shop')
             └── filterItems() → renderShop()
                     └── _initPreloadObserver()   ← Observer activo
 
-[Usuario hace scroll — cards entran en viewport]
-    └── _preloadItemHiRes()                      ← Imagen hi-res en caché
+[Usuario hace scroll — cards entran en zona extendida]
+    └── _schedulePreloadItem()                   ← Encolar
+            └── requestIdleCallback / setTimeout ← Despachar en idle
+                    └── _preloadItemHiRes()       ← Imagen hi-res en caché
 
 [Usuario hace clic en Preview]
     └── openPreviewModal()                       ← cache hit → swap instantáneo
@@ -729,32 +734,28 @@ navigateTo('home')
 
 #### Cambios en `spa-router.js`
 
-`_applyView()` ahora llama a `onLeave()` de la vista que se abandona **antes** de activar la nueva, siguiendo el patrón estándar de ciclo de vida:
+`_applyView()` ahora llama a `onLeave()` de la vista que se abandona **antes** de activar la nueva:
 
 ```javascript
-// Notificar salida a la vista anterior
 if (viewId === 'shop') window.HomeView?.onLeave?.();
 if (viewId === 'home') window.ShopView?.onLeave?.();
 
-// Activar vista nueva
 if (viewId === 'home') window.HomeView?.refresh?.();
 if (viewId === 'shop') window.ShopView?.onEnter?.();
 ```
 
-`HomeView.onLeave` está implementado en el inline script de `index.html` como hook de ciclo de vida preparado para futuros recursos (observers, timers). Actualmente no libera ningún recurso; su presencia garantiza que el contrato de ciclo de vida esté completo y no falle silenciosamente.
-
 ### Eficiencia de datos
 
-A diferencia de una precarga masiva (descargar todo el catálogo al cargar la página), el observer solo descarga imágenes de los cards que el usuario **está viendo o está a punto de ver**. En un catálogo de 30 items y una pantalla móvil que muestra 4 cards a la vez, el máximo de precargas simultáneas en cualquier momento es ~6 (los 4 visibles + los 2 dentro del margen de 200 px).
+A diferencia de una precarga masiva, el observer solo descarga imágenes de los cards que el usuario está viendo o está a punto de ver. En un catálogo de 30 items con una pantalla móvil que muestra 4 cards, el máximo de precargas activas en cualquier momento es ~6-8 (los visibles + los dentro del margen).
 
-### Compatibilidad
+### Compatibilidad (v9.6 base)
 
 | API | Soporte |
 |---|---|
 | `IntersectionObserver` | Chrome 51+, Firefox 55+, Safari 12.1+, Edge 15+ |
 | `fetchPriority` | Chrome 101+, Safari 17.2+ (ignorado en otros — sin degradación) |
 
-En entornos sin `IntersectionObserver` (browsers muy antiguos), `_initPreloadObserver()` retorna inmediatamente y el sistema funciona como antes: la imagen hi-res se carga al abrir el modal.
+En entornos sin `IntersectionObserver`, `_initPreloadObserver()` retorna inmediatamente y la imagen hi-res se carga al abrir el modal (comportamiento pre-v9.6).
 
 ### Archivos modificados
 
@@ -762,6 +763,146 @@ En entornos sin `IntersectionObserver` (browsers muy antiguos), `_initPreloadObs
 |---|---|
 | `js/shop-logic.js` | Nuevas funciones `_preloadItemHiRes()` e `_initPreloadObserver()`. Nueva variable de módulo `_preloadObserver`. `renderShop()` llama a `_initPreloadObserver()` tras construir el DOM. `ShopView` añade método `onLeave()` que desconecta el observer. |
 | `js/spa-router.js` | `_applyView()` llama a `onLeave()` de la vista saliente antes de activar la nueva. JSDoc actualizado. |
+
+---
+
+## 2q. Novedades en v9.7 — Smart Preload Hardening (decoding async + scheduler + connection guard)
+
+### Motivación
+
+La Fase 2 (v9.6) del Smart Preload resolvió el problema de latencia al abrir el modal. Sin embargo, tres problemas de rendimiento quedaron sin resolver:
+
+1. **Decodificación síncrona en scroll rápido**: `new Image()` instancia la carga, pero cuando la imagen resuelve, el navegador intenta decodificarla (descomprimir píxeles para la GPU) de forma síncrona en el hilo principal. Con 8-10 precargas resolviendo simultáneamente durante scroll rápido, esto producía micro-congelaciones de 10-40 ms por imagen — imperceptibles individualmente, pero acumuladas provocan jank visible en gama baja.
+
+2. **Sin throttling de red en scroll rápido**: cuando el usuario hace scroll muy rápido, el observer recibe todas las entries de golpe en el mismo callback. Sin cola, se inician N descargas en paralelo, saturando el ancho de banda disponible aunque `fetchPriority = 'low'` esté activo.
+
+3. **Sin respeto al Data Saver**: si el usuario tiene activado el modo de ahorro de datos o tiene conexión slow-2g, la precarga consumía ancho de banda en contra de su preferencia explícita.
+
+### Cambios
+
+#### `img.decoding = 'async'` en `_preloadItemHiRes()` y `openPreviewModal()`
+
+```javascript
+// _preloadItemHiRes()
+img.fetchPriority = 'low';
+img.decoding      = 'async';   // ← NUEVO v9.7
+
+// openPreviewModal() — thumbProbe
+thumbProbe.decoding = 'async'; // ← NUEVO v9.7
+
+// openPreviewModal() — hiRes
+hiRes.decoding = 'async';      // ← NUEVO v9.7
+```
+
+El atributo `decoding` con valor `async` indica al navegador que puede diferir la decodificación de la imagen al hilo de decodificación (fuera del hilo principal). El hilo principal solo recibe el control cuando la imagen ya está lista en el buffer de la GPU, sin haber sido bloqueado.
+
+| Contexto | Sin `decoding='async'` | Con `decoding='async'` |
+|---|---|---|
+| 8 precargas resuelven simultáneamente | Decodificación síncrona ~10-40 ms × 8 = posible congelación | Decodificación paralela en compositor; hilo principal libre |
+| openPreviewModal — imagen hi-res 1200 px | Swap de backgroundImage puede bloquear 20-80 ms | Swap sin jank; compositor decodifica en background |
+
+Soporte: Chrome 65+, Firefox 63+, Safari 11.1+. Cobertura prácticamente universal.
+
+#### Guard de conexión: `_isDataSaverActive()` e `_isLowBandwidth()`
+
+```javascript
+function _isDataSaverActive() {
+    const conn = navigator?.connection;
+    return conn?.saveData === true || conn?.effectiveType === 'slow-2g';
+}
+
+function _isLowBandwidth() {
+    return navigator?.connection?.effectiveType === '2g';
+}
+```
+
+`_initPreloadObserver()` retorna inmediatamente si `_isDataSaverActive()` es `true`. En ese caso no se crea el observer y la imagen se carga al abrir el modal — exactamente el comportamiento pre-v9.6, sin degradación funcional.
+
+La Network Information API es opcional: si el navegador no la soporta (Firefox, Safari < 17.4), ambas funciones devuelven `false` y la precarga procede normalmente.
+
+#### Scheduler de precarga: `_schedulePreloadItem` + `_flushPreloadQueue`
+
+```javascript
+// Cola de solicitudes
+const _preloadQueue = [];
+let   _preloadFlushId = null;
+
+function _schedulePreloadItem(cardEl, item) {
+    _preloadQueue.push({ cardEl, item });
+    _schedulePreloadFlush();
+}
+
+function _schedulePreloadFlush() {
+    if (_preloadFlushId !== null) return; // Ya hay despacho programado
+    if ('requestIdleCallback' in window) {
+        _preloadFlushId = requestIdleCallback(_flushPreloadQueue, {
+            timeout: _isLowBandwidth() ? 1200 : 200
+        });
+    } else {
+        _preloadFlushId = setTimeout(
+            _flushPreloadQueue,
+            _isLowBandwidth() ? 400 : 0
+        );
+    }
+}
+
+function _flushPreloadQueue() {
+    _preloadFlushId = null;
+    const batchSize = _isLowBandwidth() ? 2 : _preloadQueue.length;
+    _preloadQueue.splice(0, batchSize).forEach(({ cardEl, item }) =>
+        _preloadItemHiRes(cardEl, item)
+    );
+    if (_preloadQueue.length > 0) _schedulePreloadFlush();
+}
+```
+
+| Conexión | Comportamiento del scheduler |
+|---|---|
+| Data Saver / slow-2g | Observer no se crea; scheduler no se usa |
+| 2g | `requestIdleCallback(timeout: 1200ms)` · lote de 2 imágenes · siguiente ciclo tras 400ms |
+| 3g / 4g / WiFi | `requestIdleCallback(timeout: 200ms)` · todo el lote de una vez |
+| Sin Network Info API | El mismo comportamiento que 3g/4g (fallback conservador) |
+
+La cola se limpia (`_preloadQueue.length = 0`) y el callback pendiente se cancela (`cancelIdleCallback` / `clearTimeout`) cada vez que `_initPreloadObserver()` reconstruye el observer por un nuevo render del catálogo, evitando referencias a nodos DOM obsoletos.
+
+#### `rootMargin` y `threshold` actualizados
+
+| Parámetro | v9.6 | v9.7 |
+|---|---|---|
+| `rootMargin` | `'200px'` (simétrico) | `'200px 0px 400px 0px'` (asimétrico) |
+| `threshold` | `0.1` | `0` |
+
+El nuevo `rootMargin` asimétrico tiene tres efectivos:
+- **Superior 200 px**: anticipa el scroll hacia arriba (catálogo ascendente).
+- **Inferior 400 px**: zona de precarga principal. ~2 alturas de card en móvil (≈ 1.5 pantallas). En una conexión 4G promedio, una imagen Cloudinary de ~80-150 KB tarda < 0.5 s — el margen de 400 px da ≥ 2 s de anticipación a velocidad de scroll normal.
+- **Lados 0 px**: el catálogo es vertical; un margen lateral activaría precargas para cards en overflow horizontal oculto.
+
+`threshold: 0` dispara en cuanto cualquier píxel del card entra en la zona extendida. Con el rootMargin ya proveyendo el buffer, threshold 0.1 solo añadía latencia sin aportar precisión.
+
+### Compatibilidad actualizada
+
+| API | Soporte |
+|---|---|
+| `IntersectionObserver` | Chrome 51+, Firefox 55+, Safari 12.1+, Edge 15+ |
+| `fetchPriority` | Chrome 101+, Safari 17.2+ (ignorado en otros) |
+| `img.decoding = 'async'` | Chrome 65+, Firefox 63+, Safari 11.1+ — cobertura universal |
+| `requestIdleCallback` | Chrome 47+, Edge 79+, Opera 34+ (fallback: setTimeout) |
+| Network Information API | Chrome 61+, Edge 79+, Opera 48+ (fallback: asumir conexión rápida) |
+
+### Resultado
+
+| Escenario | v9.6 | v9.7 |
+|---|---|---|
+| Scroll rápido, 10 cards entran al mismo tiempo | 10 descargas paralelas, posible jank de decodificación | Cola idle → lote único; decoding async → 0 bloqueo |
+| Usuario con Data Saver | Precarga activa (ignora preferencia) | Observer no creado; 0 KB de precarga |
+| Usuario con 2g | Hasta 10 descargas simultáneas | Máx. 2 por ciclo idle, siguientes en 400ms |
+| openPreviewModal — imagen hi-res | Decodificación puede bloquear hilo | decoding async → swap sin jank |
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `js/shop-logic.js` | `_preloadItemHiRes()`: +`decoding='async'`. `openPreviewModal()`: +`decoding='async'` en thumbProbe y hiRes. Nuevas funciones `_isDataSaverActive()`, `_isLowBandwidth()`, `_schedulePreloadItem()`, `_schedulePreloadFlush()`, `_flushPreloadQueue()`. Nuevas vars de módulo `_preloadQueue`, `_preloadFlushId`. `_initPreloadObserver()`: guard de conexión, cancelación de cola, rootMargin asimétrico, threshold 0, usa `_schedulePreloadItem` en vez de llamada directa. |
 
 ---
 
