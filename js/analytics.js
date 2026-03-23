@@ -1,8 +1,23 @@
 /**
- * analytics.js — Love Arcade v9.9.2
+ * analytics.js — Love Arcade v10.0
  * ─────────────────────────────────────────────────────────────────────────────
  * Sistema de Analíticas "Ghost" — Captura eventos de interacción y los envía
  * en tiempo real a un canal privado de Discord mediante Webhooks HTTP.
+ *
+ * CAMBIOS v10.0 (Shadow-Gate — Developer Exclusion Filter):
+ *  - Nuevo filtro Shadow-Gate: detecta el token ofuscado `?ref=x92_v0id_z1`
+ *    en window.location.search al cargar el script.
+ *  - Si el token está presente, se persiste un flag en sessionStorage bajo
+ *    la clave `ghost_ignore` con valor `'true'`.
+ *  - La exclusión se mantiene activa mientras la pestaña esté abierta
+ *    (incluyendo navegaciones SPA y refrescos), y se anula al cerrar la pestaña.
+ *  - track() verifica el flag en cada llamada mediante _isShadowGated().
+ *    Si la exclusión está activa, el evento se descarta silenciosamente.
+ *  - Los handlers de error globales (window.error / unhandledrejection) también
+ *    quedan silenciados cuando Shadow-Gate está activo.
+ *  - status() ahora informa si la sesión está bajo Shadow-Gate.
+ *  - El token no contiene palabras como "admin" o "dev" para pasar desapercibido
+ *    como un parámetro de tracking genérico en logs de red.
  *
  * CAMBIOS v9.9.2 (Hardening & Error Detection):
  *  - De-duplicación de redeem_code: track() eliminado de app.js/redeemPromoCode();
@@ -38,8 +53,21 @@
  *      → También resetea el rate limiter para poder re-disparar eventos
  *         sin esperar los 3 s.
  *
- *   4. Ver el estado interno actual (rate limiter, modo debug, etc.):
+ *   4. Ver el estado interno actual (rate limiter, modo debug, Shadow-Gate, etc.):
  *      window.GhostAnalytics.status()
+ *
+ * ACTIVAR SHADOW-GATE (exclusión de analíticas para el desarrollador):
+ *
+ *   Abre la plataforma con el token en la URL:
+ *     https://tudominio.com/?ref=x92_v0id_z1
+ *
+ *   El flag se guarda en sessionStorage. A partir de ese momento, track()
+ *   no enviará ningún evento durante toda la sesión, aunque navegues por
+ *   otras páginas o refresques. Al cerrar la pestaña el flag se elimina.
+ *
+ *   Para verificar que está activo:
+ *     window.GhostAnalytics.status()
+ *     → "Shadow-Gate: ACTIVO 🔕 — esta sesión está excluida de las analíticas"
  *
  * PRINCIPIOS DE DISEÑO:
  *  - Fire-and-forget: fetch nunca bloquea el hilo principal.
@@ -61,6 +89,50 @@
 
 (function () {
     'use strict';
+
+    // ── Shadow-Gate v10.0 — Developer Exclusion Filter ────────────────────────
+    //
+    // Token de alta entropía diseñado para pasar desapercibido como un
+    // parámetro UTM/tracking genérico en logs de red y herramientas de QA.
+    // No contiene palabras clave como "admin", "dev" o "test".
+    //
+    // URL de activación:  https://tudominio.com/?ref=x92_v0id_z1
+    //
+    // Una vez activado, el flag `ghost_ignore` en sessionStorage persiste
+    // mientras la pestaña esté abierta (incluyendo refrescos y navegación SPA).
+    // Al cerrar la pestaña sessionStorage se vacía automáticamente.
+    //
+    const _SHADOW_TOKEN = 'x92_v0id_z1';
+    const _SHADOW_KEY   = 'ghost_ignore';
+
+    /**
+     * Detecta el token Shadow-Gate en la URL y activa la exclusión.
+     * Se ejecuta de forma inmediata al cargar el script, antes de que
+     * cualquier evento o función del módulo pueda dispararse.
+     */
+    (function _shadowGateInit() {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('ref') === _SHADOW_TOKEN) {
+                sessionStorage.setItem(_SHADOW_KEY, 'true');
+            }
+        } catch (_) { /* silencioso — sessionStorage puede estar bloqueado en modo privado */ }
+    })();
+
+    /**
+     * Devuelve true si la sesión actual está bajo Shadow-Gate.
+     * Envuelto en try/catch para no romper el módulo si sessionStorage
+     * no está disponible (p. ej. iframes con sandbox estricto).
+     *
+     * @returns {boolean}
+     */
+    function _isShadowGated() {
+        try {
+            return sessionStorage.getItem(_SHADOW_KEY) === 'true';
+        } catch (_) {
+            return false;
+        }
+    }
 
     // ── Endpoint — ofuscación XOR (clave: 42) ────────────────────────────────
     //
@@ -177,7 +249,7 @@
                 title:       `${emoji} ${event.replace(/_/g, ' ').toUpperCase()}`,
                 description,
                 color,
-                footer:    { text: `Love Arcade · Ghost Analytics v9.9.2${isTest ? ' · TEST' : ''}` },
+                footer:    { text: `Love Arcade · Ghost Analytics v10.0${isTest ? ' · TEST' : ''}` },
                 timestamp: new Date().toISOString()
             }]
         };
@@ -236,11 +308,17 @@
      *   window.GhostAnalytics.track('open_game',      { juego: 'dodge' });
      *   window.GhostAnalytics.track('detected_error', { mensaje: '...', tipo: '...' });
      *
+     * Si Shadow-Gate está activo (_isShadowGated() === true), el evento se
+     * descarta silenciosamente sin enviar ninguna petición HTTP.
+     *
      * @param {string} event   Nombre del evento.
      * @param {object} [meta]  Metadatos opcionales.
      */
     function track(event, meta) {
         try {
+            // ── Shadow-Gate: salida temprana si la sesión está excluida ──────
+            if (_isShadowGated()) return;
+
             if (!event || typeof event !== 'string') return;
             const key = `${event}:${JSON.stringify(meta || {})}`;
             if (_isRateLimited(key)) return;
@@ -255,9 +333,21 @@
      * Envía un evento de prueba a Discord, saltando el rate limiter.
      * Confirma que el Webhook está activo y que el módulo está funcionando.
      *
+     * Nota: test() respeta Shadow-Gate. Si la sesión está excluida, se
+     * muestra un aviso en consola en lugar de enviar la petición.
+     *
      * Ejecutar desde DevTools:  window.GhostAnalytics.test()
      */
     function test() {
+        if (_isShadowGated()) {
+            console.warn(
+                '%c[GhostAnalytics] 🔕 Shadow-Gate activo',
+                'color:#f97316;font-weight:bold',
+                '— test() bloqueado. Esta sesión está excluida de las analíticas.',
+                '\n  Para desactivar: sessionStorage.removeItem(\'ghost_ignore\') y recarga.'
+            );
+            return;
+        }
         console.log('[GhostAnalytics] Enviando evento de prueba…');
         _send('open_game', {
             juego: '✅ TEST — Webhook activo y módulo cargado correctamente'
@@ -295,20 +385,24 @@
 
     /**
      * Muestra el estado interno del módulo en consola.
-     * Útil para verificar qué eventos están siendo rate-limitados.
+     * Incluye el estado de Shadow-Gate, modo debug y rate limiter.
      *
      * Ejecutar desde DevTools:  window.GhostAnalytics.status()
      */
     function status() {
-        const now  = Date.now();
-        const keys = Object.keys(_lastSent);
-        const rl   = keys.map(k => {
+        const now      = Date.now();
+        const keys     = Object.keys(_lastSent);
+        const gated    = _isShadowGated();
+        const rl       = keys.map(k => {
             const remainingMs = RATE_LIMIT_MS - (now - _lastSent[k]);
             return `  · ${k}  →  ${remainingMs > 0 ? `rate-limited (${Math.ceil(remainingMs / 1000)}s)` : 'libre'}`;
         });
         console.log(
             '%c[GhostAnalytics] Estado actual',
             'color:#9b59ff;font-weight:bold',
+            `\n  Shadow-Gate: ${gated
+                ? '🔕 ACTIVO — esta sesión está excluida de las analíticas'
+                : '✅ inactivo — analíticas operativas'}`,
             `\n  Debug mode: ${_debugMode}`,
             `\n  Rate limiter (${keys.length} clave${keys.length !== 1 ? 's' : ''}):\n${rl.join('\n') || '  (vacío)'}`
         );
@@ -416,6 +510,9 @@
     // ── Handler: errores síncronos (window.onerror) ───────────────────────────
     window.addEventListener('error', (e) => {
         try {
+            // Shadow-Gate: silenciar también los handlers de error globales
+            if (_isShadowGated()) return;
+
             const err  = e.error;
             const tipo = _classifyError(err);
             const frame = _firstStackFrame(err);
@@ -447,6 +544,9 @@
     // ── Handler: promesas rechazadas sin capturar ─────────────────────────────
     window.addEventListener('unhandledrejection', (e) => {
         try {
+            // Shadow-Gate: silenciar también los handlers de error globales
+            if (_isShadowGated()) return;
+
             // Evitar feedback loop: ignorar rechazos que vienen de nuestros propios fetchs
             if (_pendingFetches.has(e.promise)) return;
 
@@ -492,12 +592,23 @@
     // ── Confirmación de carga ─────────────────────────────────────────────────
     // Este log es el primer punto de diagnóstico: si no aparece, el <script>
     // no está incluido en index.html o hay un error de sintaxis en el módulo.
-    console.log(
-        '[GhostAnalytics] ✅ Módulo listo (v9.9.2).',
-        '| test(): probar Webhook',
-        '| debug(true): activar logs',
-        '| status(): ver estado interno'
-    );
+    // Si Shadow-Gate está activo, se indica explícitamente para que el
+    // desarrollador sepa que la sesión está en modo silencioso.
+    if (_isShadowGated()) {
+        console.log(
+            '%c[GhostAnalytics] 🔕 Módulo cargado en modo silencioso (v10.0) — Shadow-Gate activo.',
+            'color:#f97316;font-weight:bold',
+            '| Esta sesión está excluida de las analíticas.',
+            '| status(): ver estado | debug(true): activar logs'
+        );
+    } else {
+        console.log(
+            '[GhostAnalytics] ✅ Módulo listo (v10.0).',
+            '| test(): probar Webhook',
+            '| debug(true): activar logs',
+            '| status(): ver estado interno'
+        );
+    }
 
     // ── Exposición global ─────────────────────────────────────────────────────
     window.GhostAnalytics = Object.freeze({ track, test, debug, status });
