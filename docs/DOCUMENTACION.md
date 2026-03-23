@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v9.9.2 · Hardening & Error Detection · Ghost Analytics · Mobile Performance Pass · Smart Preload Hardening · CDN Offline Resilience
+### Plataforma de Recompensas · v10.0 · Shadow-Gate Developer Filter · Hardening & Error Detection · Ghost Analytics · Mobile Performance Pass · Smart Preload Hardening · CDN Offline Resilience
 
 ---
 
@@ -26,6 +26,7 @@
 2s. [Novedades en v9.9 — Ghost Analytics](#2s-novedades-en-v99--ghost-analytics)
 2t. [Novedades en v9.9.1 — Ghost Analytics: producción](#2t-novedades-en-v991--ghost-analytics-producción)
 2u. [Novedades en v9.9.2 — Hardening & Error Detection](#2u-novedades-en-v992--hardening--error-detection)
+2v. [Novedades en v10.0 — Shadow-Gate Developer Filter](#2v-novedades-en-v100--shadow-gate-developer-filter)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -3589,5 +3590,145 @@ Devuelve el número de códigos promocionales ya canjeados (longitud de `store.r
 
 ---
 
-*Love Arcade · Documentación técnica v9.9.2 · Hardening & Error Detection*
+## 2v. Novedades en v10.0 — Shadow-Gate Developer Filter
+
+Mecanismo de exclusión de analíticas para el desarrollador, diseñado para evitar la contaminación de datos de producción durante sesiones de prueba, QA y desarrollo local.
+
+### Motivación
+
+Sin este filtro, cualquier sesión de desarrollo genera eventos reales en el canal de Discord (compras de prueba, errores artificiales, snapshots de estado vacíos, etc.), contaminando las métricas de usuarios reales y dificultando el diagnóstico de tendencias genuinas.
+
+El filtro usa un **token de alta entropía** en la URL en lugar de parámetros obvios como `?dev=true` o `?admin=1`, de modo que parece un identificador de tracking genérico en logs de red y herramientas de terceros.
+
+---
+
+### Implementación
+
+#### Token y clave de sesión
+
+```javascript
+// analytics.js — constantes privadas del módulo
+const _SHADOW_TOKEN = 'x92_v0id_z1';   // valor del parámetro ?ref=
+const _SHADOW_KEY   = 'ghost_ignore';   // clave en sessionStorage
+```
+
+El token es opaco por diseño: no contiene palabras clave como `admin`, `dev` o `test`. El parámetro `ref` es indistinguible de un UTM de tracking en logs de red.
+
+#### Detección al cargar (`_shadowGateInit`)
+
+```javascript
+(function _shadowGateInit() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('ref') === _SHADOW_TOKEN) {
+            sessionStorage.setItem(_SHADOW_KEY, 'true');
+        }
+    } catch (_) { /* silencioso */ }
+})();
+```
+
+Se ejecuta de forma **inmediata** al cargar `analytics.js`, antes de que cualquier evento, `DOMContentLoaded` o llamada a `track()` pueda dispararse. Si `sessionStorage` no está disponible (iframes con sandbox estricto, modo privado con restricciones estrictas), el error se captura silenciosamente y el módulo opera en modo normal.
+
+#### Verificación en cada llamada (`_isShadowGated`)
+
+```javascript
+function _isShadowGated() {
+    try {
+        return sessionStorage.getItem(_SHADOW_KEY) === 'true';
+    } catch (_) {
+        return false;
+    }
+}
+```
+
+#### Salida temprana en `track()`
+
+```javascript
+function track(event, meta) {
+    try {
+        if (_isShadowGated()) return;   // ← Shadow-Gate: salida sin enviar nada
+        // ... lógica normal
+    }
+}
+```
+
+Los handlers de error globales (`window.error`, `unhandledrejection`) también verifican `_isShadowGated()` antes de llamar a `track()`, silenciando por completo el módulo cuando la exclusión está activa.
+
+---
+
+### Persistencia
+
+| Mecanismo | Comportamiento |
+|---|---|
+| **`sessionStorage`** | El flag persiste mientras la pestaña esté abierta. |
+| **Navegación SPA** | Las vistas `home` / `shop` comparten el mismo origen y pestaña: el flag se mantiene. |
+| **Refresco de página** | `sessionStorage` sobrevive a `F5` / `Ctrl+R` dentro de la misma pestaña. |
+| **Nueva pestaña** | `sessionStorage` NO se comparte entre pestañas. Cada nueva pestaña es una sesión independiente. |
+| **Cerrar pestaña** | `sessionStorage` se vacía automáticamente. La siguiente apertura opera en modo normal. |
+
+---
+
+### Activación
+
+Navega a la plataforma con el token en la URL:
+
+```
+https://tudominio.com/?ref=x92_v0id_z1
+```
+
+El flag queda guardado en `sessionStorage`. A partir de ese momento, **todas las funciones de tracking de esa pestaña son no-operativas**, aunque navegues a cualquier otra ruta SPA.
+
+Para verificar que Shadow-Gate está activo desde DevTools:
+
+```javascript
+window.GhostAnalytics.status()
+// → Shadow-Gate: 🔕 ACTIVO — esta sesión está excluida de las analíticas
+```
+
+Para desactivarlo manualmente sin cerrar la pestaña:
+
+```javascript
+sessionStorage.removeItem('ghost_ignore');
+// Recargar la página para que el módulo reestablezca su estado.
+```
+
+---
+
+### Comportamiento de `test()` bajo Shadow-Gate
+
+`test()` también respeta el filtro. En lugar de enviar un evento de prueba al Webhook, muestra un aviso en consola:
+
+```
+[GhostAnalytics] 🔕 Shadow-Gate activo — test() bloqueado.
+Esta sesión está excluida de las analíticas.
+Para desactivar: sessionStorage.removeItem('ghost_ignore') y recarga.
+```
+
+---
+
+### Mensaje de carga bajo Shadow-Gate
+
+Cuando `_isShadowGated()` es `true` al cargar el script, el mensaje de confirmación en consola cambia de verde a naranja y deja claro que el módulo está en modo silencioso:
+
+```
+// Modo normal:
+[GhostAnalytics] ✅ Módulo listo (v10.0). | test(): probar Webhook | ...
+
+// Bajo Shadow-Gate:
+[GhostAnalytics] 🔕 Módulo cargado en modo silencioso (v10.0) — Shadow-Gate activo.
+Esta sesión está excluida de las analíticas. | status(): ver estado | ...
+```
+
+---
+
+### Resumen de cambios por archivo (v10.0)
+
+| Archivo | Cambio |
+|---|---|
+| `js/analytics.js` | v10.0: constantes `_SHADOW_TOKEN` / `_SHADOW_KEY`, IIFE `_shadowGateInit()`, función `_isShadowGated()`, salida temprana en `track()`, verificación en ambos handlers de error globales, `test()` con aviso bajo Shadow-Gate, `status()` con campo Shadow-Gate, mensaje de carga condicional, versión actualizada a v10.0 |
+| `DOCUMENTACION.md` | Sección §2v añadida; título, ToC y footer actualizados a v10.0 |
+
+---
+
+*Love Arcade · Documentación técnica v10.0 · Shadow-Gate Developer Filter*
 *Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*
