@@ -1,5 +1,5 @@
 # 🎯 Sistema de Eventos LTE — Love Arcade
-### Documentación técnica · v10.2
+### Documentación técnica · v10.3
 
 ---
 
@@ -13,6 +13,7 @@
    - [coin_multiplier](#51-coin_multiplier)
    - [streak_boost](#52-streak_boost)
 6. [Panel de control — events.json](#6-panel-de-control--eventsjson)
+   - [Zona horaria en endDate (CRÍTICO)](#zona-horaria-en-enddate--crítico)
 7. [Integración con app.js](#7-integración-con-appjs)
    - [completeLevel() — multiplicador de monedas](#71-completelevel--multiplicador-de-monedas)
    - [claimDaily() — boost de racha](#72-claimdaily--boost-de-racha)
@@ -31,7 +32,7 @@ El **Sistema de Eventos por Tiempo Limitado (LTE)** permite activar bonificacion
 
 Cada evento define:
 - Su **tipo** (multiplicador de monedas, boost de racha…).
-- Su **fecha de expiración**.
+- Su **fecha de expiración** (con offset de zona horaria explícito).
 - Sus **metadatos visuales** (icono, color de acento).
 
 La lógica de negocio en `app.js` consulta el sistema de forma síncrona a través de `isEventActive(id)` para aplicar los efectos en el momento exacto en que ocurren (completar un nivel, reclamar el bono diario).
@@ -48,7 +49,9 @@ data/events.json          ← Panel de control (sin tocar JS)
 event-logic.js            ← Módulo LTE
   ├── _loadEvents()       ← Carga, cacheo en memoria Y escritura en localStorage
   ├── isEventActive(id)   ← API síncrona (usa caché de memoria)
+  ├── _formatTimeLeft()   ← Formato h + min exacto (v10.3)
   ├── _renderEventsView() ← UI de la vista #view-events
+  ├── setInterval 60 s    ← Countdown en vivo (v10.3)
   └── window.EventView    ← Ciclo de vida SPA
         │
         │  ① window.isEventActive (global — implementación real)
@@ -79,7 +82,7 @@ Script parseado
       ├─ fetch('data/events.json') — INMEDIATO
       │         │
       │         └── Resuelve → _eventsCache = data
-      │                        localStorage['love_arcade_events_v1'] = { data, ts }  ← v10.2
+      │                        localStorage['love_arcade_events_v1'] = { data, ts }
       │                        window.isEventActive = implementación real
       │
 DOMContentLoaded
@@ -206,7 +209,7 @@ Este archivo es el **único punto de control** para activar, desactivar o modifi
       "title":       "Invasión de Monedas",
       "subtitle":    "×1.5 en todos los juegos",
       "description": "Descripción corta (no se muestra en la UI actual).",
-      "endDate":     "2026-06-30T00:00:00Z",
+      "endDate":     "2026-06-30T23:59:59-06:00",
       "icon":        "zap",
       "accentColor": "#00d4ff"
     }
@@ -214,19 +217,66 @@ Este archivo es el **único punto de control** para activar, desactivar o modifi
 }
 ```
 
+---
+
+### Zona horaria en `endDate` — CRÍTICO
+
+> ⚠️ **Este es el punto de error más común al configurar eventos.**
+
+El campo `endDate` debe incluir siempre el **offset de zona horaria explícito** correspondiente a la hora local de referencia del evento.
+
+#### ¿Por qué importa?
+
+`Date.parse()` en JavaScript interpreta cadenas ISO 8601 terminadas en `Z` como UTC. Si el evento debe terminar a las 23:59 hora de México (UTC-6) pero `endDate` está definido como `"2026-03-23T23:59:59Z"`, el sistema lo cerrará a las **17:59 hora local** — 6 horas antes de lo esperado. El countdown también mostrará menos tiempo del real por la misma razón.
+
+#### Regla de oro
+
+```
+❌  "2026-03-23T23:59:59Z"         → Expira a las 17:59 en México (UTC-6)
+✅  "2026-03-23T23:59:59-06:00"    → Expira a las 23:59 en México (UTC-6)
+```
+
+#### Offsets de referencia
+
+| Zona horaria                              | Offset   |
+|-------------------------------------------|----------|
+| México (CDMX, Guadalajara, Monterrey)     | `-06:00` |
+| España (Península)                        | `+01:00` |
+| UTC / GMT                                 | `+00:00` |
+| EST — Nueva York                          | `-05:00` |
+| PST — Los Ángeles                         | `-08:00` |
+
+> **Nota:** México abolió el horario de verano en 2023 para la mayor parte del territorio. La zona horaria central (CDMX) es UTC-6 de forma permanente durante todo el año.
+
+#### ¿Qué ocurre internamente?
+
+La comparación en `isEventActive()` y `_formatTimeLeft()` opera sobre timestamps UTC puros (`getTime()`). El resultado es exacto siempre que `endDate` lleve offset explícito:
+
+```js
+// isEventActive — event-logic.js
+return Date.now() < new Date(ev.endDate).getTime();
+
+// Con "2026-03-23T23:59:59-06:00":
+//   Date.now()                        → ms UTC actuales
+//   new Date("…-06:00").getTime()     → ms UTC de las 23:59 en UTC-6
+//   Resultado: expira exactamente a las 23:59 hora de México ✅
+```
+
+---
+
 ### Activar un evento
 
-Agregar el objeto al array `activeEvents` con una `endDate` futura.
+Agregar el objeto al array `activeEvents` con una `endDate` futura con offset explícito.
 
 ### Desactivar un evento
 
 Dos opciones equivalentes:
 1. **Eliminar** el objeto del array.
-2. **Cambiar `endDate`** a una fecha pasada (ej: `"2020-01-01T00:00:00Z"`).
+2. **Cambiar `endDate`** a una fecha pasada (ej: `"2020-01-01T00:00:00-06:00"`).
 
 ### Cambiar la duración
 
-Modificar el campo `endDate` a la fecha deseada en formato ISO 8601 UTC.
+Modificar el campo `endDate` con el nuevo timestamp en formato ISO 8601 con offset explícito.
 
 ---
 
@@ -338,7 +388,7 @@ Si el fetch falla, `_eventsCache = { activeEvents: [] }` y el caché de localSto
 ```js
 window.EventView = {
     onEnter(),  // Llamado por spa-router.js al navegar a #view-events
-    onLeave()   // Llamado al salir de la vista (sin recursos que liberar actualmente)
+    onLeave()   // Llamado al salir de la vista — cancela el countdown en vivo
 }
 ```
 
@@ -347,8 +397,13 @@ window.EventView = {
 1. Si es la primera visita, muestra un skeleton de carga.
 2. Llama a `_loadEvents()` (que devuelve el caché si ya está disponible).
 3. Llama a `_renderEventsView()` con los datos.
+4. **[v10.3]** Inicia un `setInterval` de 60 segundos que re-renderiza la vista automáticamente para mantener el countdown exacto sin recargar la página.
 
 Las visitas subsiguientes **no** muestran skeleton porque `_rendered = true`; la vista se re-renderiza directamente con el caché disponible.
+
+### `onLeave()`
+
+**[v10.3]** Cancela el `setInterval` del countdown via `clearInterval()`. Esto evita que se acumulen timers activos mientras la vista no es visible y que el DOM se actualice en segundo plano innecesariamente.
 
 ---
 
@@ -362,11 +417,13 @@ Las visitas subsiguientes **no** muestran skeleton porque `_rendered = true`; la
   "type":        "mi_tipo",
   "title":       "Nombre del evento",
   "subtitle":    "Descripción corta",
-  "endDate":     "2026-09-01T00:00:00Z",
+  "endDate":     "2026-09-01T23:59:59-06:00",
   "icon":        "sparkles",
   "accentColor": "#a855f7"
 }
 ```
+
+> Recuerda incluir el offset de zona horaria en `endDate`. Ver §6 — Zona horaria en endDate.
 
 ### Paso 2 — Registrar metadatos visuales en `event-logic.js`
 
@@ -409,7 +466,7 @@ Convención: `{slug_tipo}_{variante}_v{N}`. Ejemplos: `coin_invasion_v2`, `flash
 | `title`       | string   | ✅        | Nombre visible en la tarjeta de evento. |
 | `subtitle`    | string   | —         | Texto secundario (no visible en la UI actual; reservado). |
 | `description` | string   | —         | Descripción larga (no visible en la UI actual). |
-| `endDate`     | ISO 8601 | ✅        | Fecha y hora de expiración en UTC. Ejemplo: `"2026-12-31T00:00:00Z"`. |
+| `endDate`     | ISO 8601 | ✅        | Fecha y hora de expiración **con offset de zona horaria explícito**. Ejemplo: `"2026-12-31T23:59:59-06:00"`. ⚠️ No usar `Z` si la hora de referencia es local. Ver §6. |
 | `icon`        | string   | —         | Nombre del icono del sprite SVG (sin prefijo `icon-`). Default: `sparkles`. |
 | `accentColor` | string   | —         | Color CSS del acento visual (hex, rgb, etc.). |
 | `multiplier`  | number   | ⚠️        | Solo para `coin_multiplier`. Factor de multiplicación. Default implícito: `1.5`. |
@@ -422,10 +479,11 @@ Convención: `{slug_tipo}_{variante}_v{N}`. Ejemplos: `coin_invasion_v2`, `flash
 
 | Versión | Cambio |
 |---------|--------|
+| **v10.3** | [FIX CRÍTICO] Eventos que expiraban antes de tiempo: la causa raíz era el uso del sufijo `Z` (UTC) en `endDate` sin offset de zona horaria. Para un servidor en UTC-6, esto provocaba que los eventos cerraran 6 horas antes de lo esperado y que el countdown mostrara menos tiempo del real. Corrección aplicada en `events.json` (offset `-06:00` explícito). Documentación de la convención de zona horaria añadida en §6. [FIX] `_formatTimeLeft()` reescrita: ahora muestra horas y minutos combinados cuando quedan menos de 24 h (p.ej. "5 h 42 min" en lugar de solo "5 h"), eliminando la ambigüedad visual de tiempo restante. Eliminado el caso "Mañana" que ocultaba la cantidad exacta de horas. [MEJORA] Countdown en vivo: `onEnter()` inicia un `setInterval` de 60 s que re-renderiza la vista de eventos. `onLeave()` lo cancela con `clearInterval()` para no acumular timers en navegación entre vistas. |
 | **v10.2** | [FIX] Multiplicador de monedas en juegos externos: `event-logic.js` persiste los eventos en `localStorage['love_arcade_events_v1']` tras cada carga exitosa. El stub de `app.js` ahora lee ese caché en lugar de devolver siempre `false`. Los juegos en `games/*.html` aplican correctamente el multiplicador ×1.5 y el boost de racha. TTL del caché: 24 horas. Rediseño completo de la vista de eventos: tarjetas tipo "banner de evento" con fondo degradado por tipo, elementos decorativos flotantes, valor del efecto en tipografía gigante (×1.5 / +2), badge EN VIVO animado, descripción del efecto. Rejilla de 2 columnas en tablet (≥ 640px). Texto completo en español; "Hot Streak Weekend" renombrado a "Fin de Semana de Racha". |
 | **v10.1** | Eliminación completa del Gachapón. Carga de `events.json` movida al parse del módulo (fix race condition). `getStreakInfo()` actualizado para reflejar el boost de racha. Nueva UI de tarjetas LTE. |
 | **v10.0** | Lanzamiento del sistema LTE. Integración de `coin_invasion_v1` en `completeLevel()` y `streak_boost_v1` en `claimDaily()`. |
 
 ---
 
-*Documentación mantenida por el equipo de Love Arcade · v10.2*
+*Documentación mantenida por el equipo de Love Arcade · v10.3*
