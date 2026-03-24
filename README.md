@@ -34,10 +34,12 @@ love_arcade/
 ├── js/
 │   ├── app.js          — Motor principal: GameCenter API, store, economía
 │   ├── shop-logic.js   — Módulo de Tienda (catálogo, compras, sync)
+│   ├── event-logic.js  — Sistema LTE: Gachapón, eventos activos, pity
 │   ├── spa-router.js   — Router SPA con History API
 │   └── sync-worker.js  — Web Worker: Base64 + SHA-256
 ├── data/
-│   └── shop.json       — Catálogo de wallpapers
+│   ├── shop.json       — Catálogo de wallpapers
+│   └── events.json     — Eventos activos (LTE, Gachapón)
 └── games/              — Minijuegos independientes (HTML/JS)
 ```
 
@@ -45,6 +47,8 @@ love_arcade/
 
 ## Características principales
 
+- **Sistema de Eventos LTE** — `data/events.json` define eventos activos sin tocar JS. Incluye: Gachapón de Wallpapers (5⭐/4⭐/3⭐ con pity system), Hot Streak Weekend (+2 racha por reclamo) e Invasión de Monedas (×1.5 en todos los juegos).
+- **Gachapón de Wallpapers** — Banner limitado con tirada ×1 (100 monedas) y ×10 (900 monedas). Garantía épica cada 10 tiradas. Aleatoriedad con `crypto.getRandomValues()`. Shimmer animado según rareza.
 - **Economía central** — `window.GameCenter` expone una API pública para que cualquier minijuego integrado deposite monedas mediante `completeLevel(gameId, levelId, coins)`.
 - **Tienda con descuentos y cashback** — El objeto `ECONOMY` en `app.js` controla ofertas globales y porcentaje de devolución desde un único punto.
 - **Bono Diario con racha** — Recompensa escalable (20 → 60 monedas) con verificación de tiempo de red en segundo plano para prevenir manipulación de reloj.
@@ -88,9 +92,10 @@ Consulta `love-arcade-coin-system.md` para el contrato completo de integración.
 | `ECONOMIA.md` | Guía de configuración de ofertas, descuentos y cashback |
 | `love-arcade-coin-system.md` | Manual de integración para desarrolladores de minijuegos |
 | `love-arcade-minigame-dev-manual.md` | Guía de desarrollo de nuevos minijuegos |
+| `data/events.json` | Panel de control de eventos LTE activos (sin tocar JS) |
 
 ---
 
 ## Versión
 
-**v9.6** — CDN Offline Resilience · SVG Sprite · Smart Preload · Neon Flow Fallback
+**v10.0** — LTE Events System · Gachapón de Wallpapers · Hot Streak Weekend · Invasión de Monedas

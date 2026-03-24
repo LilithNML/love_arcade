@@ -1,7 +1,10 @@
 /**
- * spa-router.js — Love Arcade v9.6
+ * spa-router.js — Love Arcade v10.0
  * ─────────────────────────────────────────────────────────────────────────────
  * Router de navegación para la arquitectura Single Page Application.
+ *
+ * [v10.0] Añadida vista 'events' al array VIEWS. Registra EventView.onEnter()
+ *         y EventView.onLeave() en el ciclo de vida de _applyView().
  *
  * RESPONSABILIDADES:
  *  - Interceptar los clics en [data-view] de la navbar y la bottom-nav.
@@ -46,7 +49,7 @@
 (function() {
     'use strict';
     
-    const VIEWS = ['home', 'shop'];
+    const VIEWS = ['home', 'shop', 'events'];
     
     /** @type {Object.<string, HTMLElement>} */
     let viewEls = {};
@@ -102,9 +105,12 @@
         // recursos cuando el catálogo no es visible.
         if (viewId === 'shop') window.HomeView?.onLeave?.();
         if (viewId === 'home') window.ShopView?.onLeave?.();
+        // [v10.0] EventView lifecycle
+        if (viewId !== 'events') window.EventView?.onLeave?.();
         
         if (viewId === 'home') window.HomeView?.refresh?.();
         if (viewId === 'shop') window.ShopView?.onEnter?.();
+        if (viewId === 'events') window.EventView?.onEnter?.();
     }
     
     // ── API pública ───────────────────────────────────────────────────────────

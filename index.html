@@ -218,6 +218,12 @@
         <symbol id="icon-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
         </symbol>
+        <symbol id="icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </symbol>
+        <symbol id="icon-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </symbol>
     </svg>
 
     <!-- ══════════════════════════════════════════════════════════
@@ -236,6 +242,7 @@
             <li><a href="#" class="nav-link active" data-view="home">Inicio</a></li>
             <li><a href="#" class="nav-link" data-view="home" data-anchor="games">Juegos</a></li>
             <li><a href="#" class="nav-link" data-view="shop">Tienda</a></li>
+            <li><a href="#" class="nav-link" data-view="events">Eventos</a></li>
             <li><a href="#" class="nav-link" data-view="home" data-anchor="faq">Ayuda</a></li>
         </ul>
 
@@ -272,6 +279,10 @@
         <a href="#" class="b-nav-item" data-view="shop">
             <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#icon-shopping-bag"></use></svg>
             <span>Tienda</span>
+        </a>
+        <a href="#" class="b-nav-item" data-view="events">
+            <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#icon-sparkles"></use></svg>
+            <span>Eventos</span>
         </a>
         <a href="#" class="b-nav-item" data-view="home" data-anchor="faq">
             <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#icon-help-circle"></use></svg>
@@ -880,6 +891,15 @@
 
         </div><!-- /#view-shop -->
 
+        <!-- ═══════════════════════════════════════════
+             VISTA: EVENTOS (v10.0 — LTE System)
+             Cargada de forma lazy por event-logic.js al navegar aquí.
+             El contenido interno es inyectado por _renderEventsView().
+             ═══════════════════════════════════════════ -->
+        <div id="view-events" class="view-section hidden">
+            <!-- Contenido inyectado por event-logic.js onEnter() -->
+        </div><!-- /#view-events -->
+
     </main><!-- /.container -->
 
 
@@ -889,7 +909,11 @@
          Soluciona el bug de scroll causado por overflow/stacking.
          ══════════════════════════════════════════════════════════ -->
 
-    <!-- ── IDENTITY MODAL — Bienvenida (primer acceso y edición de perfil) ── -->
+    <!-- ── IDENTITY MODAL — Bienvenida (primer acceso y edición de perfil) ──
+
+    <!-- Gacha reward modal eliminado en v10.1 -->
+
+    <!-- ── IDENTITY MODAL (original) ── -->
     <!--
       Comienza oculto (.hidden). El inline script lo muestra síncronamente si
       window.GameCenter.hasIdentity() es false, manteniendo .player-hud en
@@ -1090,6 +1114,7 @@
     <script src="js/app.js"></script>
     <script src="js/shop-logic.js"></script>
     <script src="js/spa-router.js"></script>
+    <script src="js/event-logic.js"></script>
 
     <script>
 

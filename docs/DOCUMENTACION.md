@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v10.0 · Shadow-Gate Developer Filter · Hardening & Error Detection · Ghost Analytics · Mobile Performance Pass · Smart Preload Hardening · CDN Offline Resilience
+### Plataforma de Recompensas · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics · Mobile Performance Pass · CDN Offline Resilience
 
 ---
 
@@ -27,6 +27,7 @@
 2t. [Novedades en v9.9.1 — Ghost Analytics: producción](#2t-novedades-en-v991--ghost-analytics-producción)
 2u. [Novedades en v9.9.2 — Hardening & Error Detection](#2u-novedades-en-v992--hardening--error-detection)
 2v. [Novedades en v10.0 — Shadow-Gate Developer Filter](#2v-novedades-en-v100--shadow-gate-developer-filter)
+2w. [Novedades en v10.0 — LTE Events System (Gachapón)](#2w-novedades-en-v100--lte-events-system-gachapón)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -3730,5 +3731,131 @@ Esta sesión está excluida de las analíticas. | status(): ver estado | ...
 
 ---
 
-*Love Arcade · Documentación técnica v10.0 · Shadow-Gate Developer Filter*
+## 2w. Novedades en v10.0 — LTE Events System (Gachapón)
+
+### Contexto
+
+Se implementa el **Sistema de Eventos por Tiempo Limitado (LTE)** inspirado en la mecánica de banners gacha de Genshin Impact. El objetivo es fomentar la retención diaria y el consumo de monedas mediante eventos dinámicos configurables sin modificar el código JavaScript.
+
+### Archivos nuevos
+
+| Archivo | Descripción |
+|---|---|
+| `js/event-logic.js` | Motor completo del sistema LTE: carga de `events.json`, renderizado de la vista Eventos, motor de tiradas del Gachapón, pity system, modal de recompensa |
+| `data/events.json` | Fuente de verdad de los eventos activos. Modificar aquí para activar/desactivar eventos o cambiar fechas sin tocar JS |
+
+### Tipos de evento soportados (v10.0)
+
+| `type` | ID de ejemplo | Efecto |
+|---|---|---|
+| `gacha` | `gacha_estelar_v1` | Activa el banner de Gachapón con el pool de ítems del campo `featured` |
+| `streak_boost` | `streak_boost_v1` | `claimDaily()` incrementa la racha en +2 en lugar de +1 |
+| `coin_multiplier` | `coin_invasion_v1` | `completeLevel()` multiplica el reward × 1.5 antes de acreditarlo |
+
+### Motor del Gachapón
+
+**Probabilidades configurables por evento en `events.json`:**
+
+```json
+"rates": {
+  "legendary": 0.016,
+  "epic":      0.10,
+  "common":    0.884
+}
+```
+
+**Pity System:**
+- `pityCount` define cuántas tiradas sin épico activan la garantía.
+- El contador se persiste en `localStorage` con la clave `la_gacha_pity_{eventId}`.
+- Al obtener un épico o legendario, el contador se reinicia a 0.
+
+**Aleatoriedad:**
+- Todas las tiradas usan `crypto.getRandomValues()` en lugar de `Math.random()` para mayor entropía y resistencia a manipulación desde DevTools.
+
+**Costos:**
+- `cost1`: precio de la tirada individual (por defecto 100 monedas).
+- `cost10`: precio del paquete de 10 (por defecto 900 — ahorro del 10%).
+
+### Integración con app.js
+
+`event-logic.js` expone `window.isEventActive(id)` globalmente. `app.js` define un **stub** de esta función antes de que event-logic.js cargue:
+
+```javascript
+// app.js — stub seguro (no lanza ReferenceError si event-logic.js no está)
+if (typeof window.isEventActive !== 'function') {
+    window.isEventActive = function() { return false; };
+}
+```
+
+Las dos modificaciones en `app.js`:
+
+```javascript
+// completeLevel() — coin_invasion_v1
+let finalAmount = rewardAmount;
+if (window.isEventActive('coin_invasion_v1')) {
+    finalAmount = Math.floor(rewardAmount * 1.5);
+}
+
+// claimDaily() — streak_boost_v1
+const streakBoost = window.isEventActive('streak_boost_v1') ? 2 : 1;
+const newStreak = diffDays === 1 ? streak + streakBoost : 1;
+```
+
+### Persistencia de ítems del Gachapón
+
+Los wallpapers obtenidos se registran en `store.inventory` (la misma estructura que las compras de la tienda) mediante escritura directa al `localStorage` con la clave `CONFIG.stateKey`. Esto garantiza que aparezcan automáticamente en **Mis Tesoros** de `shop-logic.js` sin ningún cambio en ese módulo.
+
+**Ítems duplicados:** si el usuario ya posee el wallpaper, recibe una compensación en monedas equivalente al 10% del precio original del ítem.
+
+**Ítems comunes (3⭐):** generan entre 10 y 30 monedas de relleno en lugar de un wallpaper.
+
+### Integración SPA
+
+| Componente | Cambio |
+|---|---|
+| `spa-router.js` | `VIEWS` pasa de `['home', 'shop']` a `['home', 'shop', 'events']`. Se registran los callbacks `EventView.onLeave()` y `EventView.onEnter()` en `_applyView()` |
+| `index.html` | Nueva sección `<div id="view-events" class="view-section hidden">` en la zona de vistas. Nuevas entradas en la navbar y bottom-nav. Modal `#gacha-reward-modal`. Script tag para `js/event-logic.js` |
+| `styles.css` | ~350 líneas nuevas: `.event-card`, `.gacha-banner`, `.gacha-preview`, `.gacha-rates`, `.gacha-pity-bar`, `.gacha-actions`, `.gacha-btn`, `.gacha-modal`, `.gacha-results-grid`, shimmers de rareza (`@keyframes shimmerLegendary` / `shimmerEpic`) |
+
+### Cómo configurar un nuevo evento
+
+1. Abrir `data/events.json`.
+2. Añadir un objeto al array `activeEvents` con los campos requeridos según el `type`.
+3. Para eventos gacha, listar los IDs de `shop.json` en el campo `featured`.
+4. Ajustar `endDate` al ISO date de cierre del evento.
+5. No se requiere ningún cambio en JS ni en HTML.
+
+```json
+{
+  "id": "gacha_navidad_2026",
+  "type": "gacha",
+  "title": "Navidad Estelar",
+  "subtitle": "Banner · Diciembre 2026",
+  "description": "Obtén wallpapers navideños exclusivos durante diciembre.",
+  "endDate": "2027-01-01T00:00:00Z",
+  "bannerColor": "linear-gradient(135deg,#0d2b1a,#1a0d0d)",
+  "featured": [10, 12, 15],
+  "pityCount": 10,
+  "cost1": 100,
+  "cost10": 900,
+  "rates": { "legendary": 0.016, "epic": 0.10, "common": 0.884 }
+}
+```
+
+### Resumen de cambios por archivo (v10.0 LTE Events)
+
+| Archivo | Cambio |
+|---|---|
+| `js/event-logic.js` | **NUEVO** — Motor completo LTE: fetch de events.json, isEventActive(), motor gacha con crypto.getRandomValues(), pity system, renderizado de vista, modal de recompensa, ciclo de vida EventView |
+| `data/events.json` | **NUEVO** — 3 eventos preconfigurados: gacha_estelar_v1, streak_boost_v1, coin_invasion_v1 |
+| `js/app.js` | v10.0: stub `isEventActive`, coin_invasion en `completeLevel()`, streak_boost en `claimDaily()`, cabecera actualizada |
+| `js/spa-router.js` | v10.0: `VIEWS` incluye `'events'`, hooks `EventView.onEnter/onLeave` en `_applyView()` |
+| `index.html` | v10.0: `<div id="view-events">`, modal `#gacha-reward-modal`, nav links Eventos (navbar + bottom-nav), iconos `icon-clock` / `icon-calendar` al sprite, `<script src="js/event-logic.js">` |
+| `styles.css` | v10.0: ~350 líneas LTE Events (event cards, gacha banner, gacha modal, shimmer rareza, pity bar, botones de tirada, estados vacíos, reduced-motion) |
+| `README.md` | v10.0: mención de LTE Events System en características y estructura de archivos |
+| `DOCUMENTACION.md` | Sección §2w añadida; ToC y footer actualizados |
+
+---
+
+*Love Arcade · Documentación técnica v10.0 LTE Events · Shadow-Gate Developer Filter*
 *Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*
