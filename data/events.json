@@ -4,9 +4,9 @@
       "id": "streak_boost_v1",
       "type": "streak_boost",
       "title": "Fin de Semana de Racha",
-      "subtitle": "Potenciador de Racha",
-      "description": "Cada reclamo del bono diario suma +2 a tu racha en lugar de +1. ¡Sube al máximo más rápido!",
-      "endDate": "2026-12-31T00:00:00Z",
+      "subtitle": "¡ÚLTIMAS HORAS!",
+      "description": "Cada reclamo del bono diario suma +2 a tu racha. ¡El evento termina esta medianoche!",
+      "endDate": "2026-03-23T23:59:59Z",
       "icon": "flame",
       "accentColor": "#f59e0b"
     },
@@ -15,9 +15,9 @@
       "type": "coin_multiplier",
       "multiplier": 1.5,
       "title": "Invasión de Monedas",
-      "subtitle": "×1.5 en todos los juegos",
-      "description": "Todos los minijuegos otorgan un 50% más de monedas. ¡Aprovecha cada partida!",
-      "endDate": "2026-12-31T00:00:00Z",
+      "subtitle": "¡EXPIRA HOY!",
+      "description": "Todos los minijuegos otorgan un 50% más de monedas. ¡Aprovecha antes de que se agoten!",
+      "endDate": "2026-03-23T23:59:59Z",
       "icon": "zap",
       "accentColor": "#00d4ff"
     }
