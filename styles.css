@@ -3252,3 +3252,384 @@ svg { stroke-width: 2; }
         transform: none !important;
     }
 }
+
+/* ================================================================
+   LOVE ARCADE — LTE EVENTS SYSTEM v10.0
+   Gachapón, Events View, Event Cards, Gacha Modal
+   ================================================================ */
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   EVENTS VIEW — LTE Cards v10.2
+   Diseño tipo "banner de evento" de alto impacto visual.
+   Estructura: hero header + tarjetas con fondo degradado, arte decorativo
+   (emoji flotantes), valor del efecto en tipografía gigante y badge EN VIVO.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.events-view-inner {
+    padding-bottom: 88px;
+}
+
+/* ── Hero Header ─────────────────────────────────────────────────────────── */
+
+.lte-hero {
+    padding: 30px 0 28px;
+    text-align: center;
+}
+
+.lte-hero__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.63rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 4px 13px;
+    border-radius: 20px;
+    margin-bottom: 12px;
+    background: rgba(0, 212, 255, 0.10);
+    color: #00d4ff;
+    border: 1px solid rgba(0, 212, 255, 0.28);
+}
+
+.lte-hero__eyebrow--empty {
+    background: rgba(255,255,255,0.04);
+    color: var(--text-low, #6a6a82);
+    border-color: rgba(255,255,255,0.07);
+}
+
+.lte-hero__title {
+    font-family: var(--font-display, 'Exo 2', sans-serif);
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--text-high, #f0f0f8);
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+}
+
+.lte-hero__sub {
+    font-size: 0.82rem;
+    color: var(--text-low, #6a6a82);
+    margin: 0;
+    max-width: 280px;
+    margin-inline: auto;
+    line-height: 1.5;
+}
+
+/* ── Cards List ──────────────────────────────────────────────────────────── */
+
+.lte-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+/* ── LTE Card — Banner de Evento ─────────────────────────────────────────── */
+
+.lte-card {
+    position: relative;
+    border-radius: 22px;
+    overflow: hidden;
+    /* background y box-shadow se inyectan inline por tipo de evento */
+    box-shadow: 0 0 0 1px var(--ev-border, rgba(255,255,255,0.1)),
+                0 12px 40px var(--ev-glow, rgba(0,0,0,0.2));
+    padding: 20px 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 210px;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    cursor: default;
+}
+
+.lte-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 0 1px var(--ev-border, rgba(255,255,255,0.18)),
+                0 20px 50px var(--ev-glow, rgba(0,0,0,0.3));
+}
+
+.lte-card--expired {
+    opacity: 0.38;
+    pointer-events: none;
+    filter: grayscale(0.6);
+}
+
+/* Barra de acento superior (línea fina de color del evento) */
+.lte-card__accent-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 22px 22px 0 0;
+}
+
+/* ── Arte decorativo (emoji flotando en el fondo) ────────────────────────── */
+
+.lte-art {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: 22px;
+}
+
+.lte-art__deco {
+    position: absolute;
+    font-size: 3.4rem;
+    line-height: 1;
+    opacity: 0.09;
+    user-select: none;
+    will-change: transform;
+}
+
+/* Posiciones y rotaciones de los 4 decorativos */
+.lte-art__deco--1 {
+    top: -10px; right: -8px;
+    font-size: 5rem;
+    opacity: 0.11;
+    animation: lteArtFloat 6s ease-in-out infinite;
+}
+.lte-art__deco--2 {
+    bottom: 10px; right: 50px;
+    font-size: 2.8rem;
+    opacity: 0.08;
+    animation: lteArtFloat 8s ease-in-out infinite 1.5s;
+    transform: rotate(-15deg);
+}
+.lte-art__deco--3 {
+    top: 40px; right: 80px;
+    font-size: 2.2rem;
+    opacity: 0.07;
+    animation: lteArtFloat 7s ease-in-out infinite 3s;
+    transform: rotate(20deg);
+}
+.lte-art__deco--4 {
+    bottom: -8px; left: 28px;
+    font-size: 3rem;
+    opacity: 0.06;
+    animation: lteArtFloat 9s ease-in-out infinite 0.5s;
+    transform: rotate(-8deg);
+}
+
+@keyframes lteArtFloat {
+    0%, 100% { transform: translateY(0)    rotate(var(--r, 0deg)); }
+    50%       { transform: translateY(-8px) rotate(var(--r, 0deg)); }
+}
+
+/* ── Cabecera: badge estado + timer ──────────────────────────────────────── */
+
+.lte-card__head {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* Badge EN VIVO */
+.lte-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.60rem;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    padding: 3px 10px 3px 8px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.06);
+    color: var(--text-med, #94a3b8);
+    border: 1px solid rgba(255,255,255,0.10);
+}
+
+.lte-status-badge--live {
+    background: rgba(255,255,255,0.08);
+    color: var(--text-high, #f0f0f8);
+    border-color: rgba(255,255,255,0.14);
+}
+
+.lte-status-badge--expired {
+    color: var(--text-low, #6a6a82);
+    border-color: rgba(255,255,255,0.06);
+}
+
+/* Punto pulsante del badge EN VIVO */
+.lte-live-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--dot-color, #00d4ff);
+    flex-shrink: 0;
+    animation: lteDotPulse 2s ease-in-out infinite;
+}
+
+@keyframes lteDotPulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* Píldora de tiempo restante */
+.lte-timer-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+/* ── Valor héroe (número/multiplicador grande) ───────────────────────────── */
+
+.lte-card__hero-wrap {
+    position: relative;
+    z-index: 2;
+    margin: 6px 0 4px;
+}
+
+.lte-hero-value {
+    font-family: var(--font-display, 'Exo 2', sans-serif);
+    font-size: 4.2rem;
+    font-weight: 900;
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    display: block;
+    /* text-shadow se inyecta inline */
+}
+
+/* ── Nombre y descripción ────────────────────────────────────────────────── */
+
+.lte-card__info {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.lte-card__name {
+    font-family: var(--font-display, 'Exo 2', sans-serif);
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--text-high, #f0f0f8);
+    margin: 0;
+    line-height: 1.2;
+}
+
+.lte-card__desc {
+    font-size: 0.80rem;
+    color: var(--text-med, #94a3b8);
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* ── Leyenda informativa ─────────────────────────────────────────────────── */
+
+.lte-legend {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    font-size: 0.73rem;
+    color: var(--text-low, #6a6a82);
+    padding: 8px 2px 0;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* ── Empty State ─────────────────────────────────────────────────────────── */
+
+.lte-empty {
+    text-align: center;
+    padding: 64px 20px;
+    color: var(--text-low, #6a6a82);
+}
+
+.lte-empty p    { font-size: 0.95rem; margin: 16px 0 5px; color: var(--text-med, #94a3b8); }
+.lte-empty span { font-size: 0.8rem; }
+
+/* ── Skeleton (estado de carga) ──────────────────────────────────────────── */
+
+.lte-skeleton {
+    border-radius: 22px;
+    background: linear-gradient(90deg,
+        rgba(255,255,255,0.03) 25%,
+        rgba(255,255,255,0.06) 50%,
+        rgba(255,255,255,0.03) 75%);
+    background-size: 200% 100%;
+    animation: lteShimmer 1.5s infinite;
+}
+
+.lte-skeleton--hero {
+    height: 120px;
+    margin-bottom: 24px;
+    border-radius: 16px;
+}
+
+.lte-skeleton--card {
+    height: 210px;
+    margin-bottom: 16px;
+}
+
+.lte-skeleton--card-2 {
+    opacity: 0.55;
+}
+
+@keyframes lteShimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── Modal close btn (genérico, conservado para otros modales) ───────────── */
+
+.modal-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: none;
+    color: var(--text-med, #94a3b8);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    z-index: 2;
+}
+.modal-close-btn:hover { background: rgba(255,255,255,0.14); }
+
+/* ── Reduce motion ───────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    .lte-skeleton,
+    .lte-art__deco,
+    .lte-live-dot    { animation: none !important; }
+    .lte-card        { transition: none !important; }
+}
+
+/* ── Tablet: 2 columnas ──────────────────────────────────────────────────── */
+
+@media (min-width: 640px) {
+    .lte-cards-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+}
+
+/* ── Mobile pequeño ──────────────────────────────────────────────────────── */
+
+@media (max-width: 360px) {
+    .lte-hero-value  { font-size: 3.4rem; }
+    .lte-card__name  { font-size: 0.95rem; }
+    .lte-card        { min-height: 190px; padding: 16px 16px 18px; }
+}
