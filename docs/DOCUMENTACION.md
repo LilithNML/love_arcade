@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics · Mobile Performance Pass · CDN Offline Resilience
+### Plataforma de Recompensas · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics · Mobile Performance Pass · CDN Offline Resilience
 
 ---
 
@@ -28,6 +28,7 @@
 2u. [Novedades en v9.9.2 — Hardening & Error Detection](#2u-novedades-en-v992--hardening--error-detection)
 2v. [Novedades en v10.0 — Shadow-Gate Developer Filter](#2v-novedades-en-v100--shadow-gate-developer-filter)
 2w. [Novedades en v10.0 — LTE Events System (Gachapón)](#2w-novedades-en-v100--lte-events-system-gachapón)
+2x. [Novedades en v11.0 — Meta-Gameplay & Event Engine](#2x-novedades-en-v110--meta-gameplay--event-engine)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -3857,5 +3858,215 @@ Los wallpapers obtenidos se registran en `store.inventory` (la misma estructura 
 
 ---
 
-*Love Arcade · Documentación técnica v10.0 LTE Events · Shadow-Gate Developer Filter*
+## 2x. Novedades en v11.0 — Meta-Gameplay & Event Engine
+
+### Contexto
+
+La v11.0 transforma el sistema de eventos pasivos (LTE) en un **motor de juego interactivo** con cuatro mecánicas nuevas, un motor de tiempos basado en hora local del dispositivo, y un panel de estadísticas diarias persistente.
+
+---
+
+### Motor de Tiempos — Naive Local Time
+
+**Problema anterior:** el uso de sufijos de zona horaria explícitos (e.g. `-06:00`) en `events.json` era correcto pero frágil: un copiar-pegar con `Z` causaba que los eventos expiraran horas antes de lo esperado para el usuario de CDMX.
+
+**Solución v11.0:** las fechas en `events.json` se declaran **sin sufijo de zona horaria** (`"2026-03-24T00:00:00"`). El constructor `new Date()` de JavaScript interpreta estas cadenas como **hora local del dispositivo**, sin importar si el usuario está en Ciudad de México, Hermosillo o cualquier otra zona. El cálculo de inicio/fin es completamente agnóstico a UTC.
+
+```javascript
+// event-logic.js — _isEventLive()
+function _isEventLive(event) {
+    const now   = Date.now();
+    const start = event.startDate ? new Date(event.startDate).getTime() : 0;
+    const end   = event.endDate   ? new Date(event.endDate).getTime()   : Infinity;
+    return now >= start && now < end;
+}
+```
+
+**Ciclo de vida completo:**
+
+| Condición | Resultado en UI |
+|---|---|
+| `now < startDate` | Evento invisible (no renderizado) |
+| `now >= startDate && now < endDate` | Evento activo, renderizado en #view-events |
+| `now >= endDate` | Evento eliminado automáticamente de la UI y del caché de localStorage |
+
+---
+
+### Mecánica: Cacería de Tesoros (`interactive_hunt`)
+
+**Flujo:**
+1. `_loadEvents()` detecta un evento activo de tipo `interactive_hunt`.
+2. `_initHunt()` inyecta elementos `<button class="treasure-item">` en los selectores CSS definidos en `config.anchors`.
+3. El usuario hace clic en los objetos flotantes. El progreso se persiste bajo dos claves en `localStorage`:
+   - `la_hunt_progress_ids`: array de IDs de objetos recogidos.
+   - `la_hunt_progress_count`: conteo numérico para la UI (evita des-ofuscación en cada render).
+4. Al completar `config.total` objetos, se invoca `window.GameCenter.addCoins(config.reward)`.
+
+**Seguridad:** los IDs se guardan con ofuscación ligera (XOR posicional) para dificultar la manipulación trivial en DevTools. No es criptografía fuerte; la integridad real de la partida completa está garantizada por el checksum SHA-256 del `sync-worker.js`.
+
+**Configuración en `events.json`:**
+
+```json
+{
+  "id": "hunt_2026_01",
+  "type": "interactive_hunt",
+  "startDate": "2026-03-24T00:00:00",
+  "endDate": "2026-03-26T23:59:59",
+  "config": {
+    "itemEmoji": "⭐",
+    "anchors": [".hero", ".shop-grid", ".faq-item", ".game-card", ".player-hud"],
+    "total": 5,
+    "reward": 500
+  },
+  "ui": { "title": "Cacería Estelar", "accentColor": "#7c3aed" }
+}
+```
+
+---
+
+### Mecánica: Hitos Personales (`personal_milestone`)
+
+**Flujo:**
+1. `_initMilestoneListener()` registra un listener para el `CustomEvent` `'la:levelcomplete'` en `document`.
+2. `app.js::completeLevel()` despacha `'la:levelcomplete'` tras cada nivel pagado exitosamente.
+3. Cada dispatch incrementa el contador del hito (clave `la_milestone_progress_{eventId}` en `localStorage`, con reinicio diario automático).
+4. Al alcanzar `config.target` partidas, se invoca `window.GameCenter.activateBonusMultiplier(multiplier, durationMs)`.
+5. `completeLevel()` lee el multiplicador activo desde `store.bonus_multiplier` y lo aplica si `Date.now() < store.bonus_multiplier_expires`.
+
+**Acoplamiento desacoplado:** el CustomEvent `'la:levelcomplete'` elimina la dependencia directa entre `app.js` y `event-logic.js`. Cualquier módulo futuro puede escuchar este evento sin modificar el núcleo.
+
+**Configuración en `events.json`:**
+
+```json
+{
+  "id": "milestone_2026_01",
+  "type": "personal_milestone",
+  "config": {
+    "target": 5,
+    "multiplier": 2,
+    "multiplierDurationMs": 3600000
+  }
+}
+```
+
+---
+
+### Mecánica: Gachapón Relámpago (`gacha_flash`)
+
+**Flujo:**
+1. La tarjeta del Gachapón solo se renderiza si `_isEventLive(event)` es `true`.
+2. Al pulsar "Girar ruleta", se invoca `_spinGacha(event)`:
+   - `GameCenter.spendCoins(cost)` deduce las monedas del saldo.
+   - `crypto.getRandomValues()` genera un número aleatorio de alta entropía.
+   - Se aplica una distribución en tres bandas: 70% recompensas bajas, 20% medias, 10% altas.
+   - `GameCenter.addCoins(reward)` deposita la recompensa.
+3. Un toast muestra el resultado al instante.
+
+**Distribución de probabilidad:**
+
+| Banda | Probabilidad | Rango |
+|---|---|---|
+| Baja | 70% | `minReward` → 25% de `maxReward` |
+| Media | 20% | 25% → 75% de `maxReward` |
+| Alta | 10% | 75% → `maxReward` |
+
+---
+
+### Mecánica: Misiones Diarias (`daily_missions`)
+
+**Flujo:**
+1. `app.js` inicia un `setInterval` de 1 segundo en `DOMContentLoaded` que llama a `GameCenter.incrementMissionStat('playtime', 1)` solo cuando `document.visibilityState === 'visible'`.
+2. `completeLevel()` llama a `GameCenter.incrementMissionStat('games_played', 1)` tras cada pago.
+3. Ambas estadísticas se guardan en `store.missions` con reinicio automático cuando la fecha cambia respecto a `store.missions.date`.
+4. La UI renderiza una barra de progreso por misión con un botón "Reclamar" que aparece al completarse.
+5. `GameCenter.claimMissionReward(missionId, reward)` es idempotente: registra el ID en `store.missions.claimed` para evitar doble reclamación.
+
+**Persistencia:** `store.missions` forma parte del store principal de `app.js` y se incluye en los exports/imports de `sync-worker.js`. El playtime se guarda en `localStorage` cada 60 segundos (no en cada tick) para evitar saturación de escrituras.
+
+---
+
+### Nuevos métodos en `window.GameCenter` (v11.0)
+
+| Método | Firma | Descripción |
+|---|---|---|
+| `addCoins` | `(amount, motivo?) → { success, coins }` | Deposita monedas directamente. Solo acepta valores positivos. |
+| `spendCoins` | `(amount, motivo?) → { success, coins }` | Deduce monedas. Devuelve `{ success: false, reason: 'insufficient' }` si el saldo es menor. |
+| `activateBonusMultiplier` | `(multiplier, durationMs, motivo?) → { success, expiresAt }` | Activa un multiplicador con expiración de timestamp. |
+| `getBonusMultiplierStatus` | `() → { active, multiplier, remainingMs }` | Estado del multiplicador activo. |
+| `incrementMissionStat` | `(stat, delta)` | Incrementa `playtime` o `games_played` del día. Auto-reinicia si el día cambió. |
+| `getMissionStats` | `() → { date, playtime, games_played, claimed[] }` | Estadísticas del día actual. |
+| `claimMissionReward` | `(missionId, reward) → { success, coins }` | Idempotente: marca la misión como reclamada y otorga la recompensa. |
+| `_getTodayString` | `() → 'YYYY-MM-DD'` | Fecha local en formato ISO parcial. Interno pero expuesto para testabilidad. |
+
+---
+
+### Nuevos campos en `store` (v11.0)
+
+| Campo | Tipo | Valor por defecto | Descripción |
+|---|---|---|---|
+| `bonus_multiplier` | `number` | `1` | Factor de multiplicación activo (1 = sin efecto). |
+| `bonus_multiplier_expires` | `number` | `0` | Timestamp ms de expiración. 0 = inactivo. |
+| `missions.date` | `string` | `''` | Fecha `YYYY-MM-DD` del último reinicio de misiones. |
+| `missions.playtime` | `number` | `0` | Segundos de juego activo en el día actual. |
+| `missions.games_played` | `number` | `0` | Partidas completadas en el día actual. |
+| `missions.claimed` | `string[]` | `[]` | IDs de misiones reclamadas hoy. |
+
+Todos los campos son retrocompatibles: `migrateState()` los inicializa con valores seguros en partidas antiguas.
+
+---
+
+### Claves de `localStorage` nuevas (v11.0)
+
+| Clave | Escritura | Descripción |
+|---|---|---|
+| `la_hunt_progress_ids` | `event-logic.js` | Array de IDs de objetos recogidos en la cacería activa. |
+| `la_hunt_progress_count` | `event-logic.js` | Conteo numérico de objetos recogidos (para render rápido). |
+| `la_milestone_progress_{eventId}` | `event-logic.js` | Progreso del hito: `{ count, date }`. Se reinicia al cambiar el día. |
+
+---
+
+### Nuevos estilos en `styles.css` (v11.0)
+
+| Selector / Clave | Descripción |
+|---|---|
+| `.lte-progress-bar` / `.lte-progress-bar__fill` | Barra de progreso GPU-animated con variable `--progress` y `--bar-color`. Usada por cacería, hitos y misiones. |
+| `.treasure-item` | Objeto flotante de cacería: animaciones `@keyframes treasureFloat` y `treasurePulse`. |
+| `.treasure-item--collected` | Estado de recogida: scale(0) + rotate(180deg) + opacity:0. |
+| `.lte-gacha-btn` / `.lte-gacha-btn--disabled` | Botón de giro del Gachapón Relámpago con estados activo/desactivado. |
+| `.lte-gacha-range` | Leyenda de rango de premios. |
+| `.lte-mission-item` / `.lte-mission-item--claimed` | Fila de misión con progreso y botón de reclamación. |
+| `.lte-claim-btn` | Botón "Reclamar" de misión completada. |
+| `.la-event-toast` / `.la-event-toast--visible` | Toast de notificación flotante sobre la bottom-nav. Entrada/salida con `opacity` + `translate`. |
+| `.lte-card--interactive` | Tarjetas de eventos interactivos con hover glow y lift. |
+| `@media prefers-reduced-motion` | Deshabilita animaciones de cacería y toasts. |
+
+---
+
+### CustomEvent del sistema (v11.0)
+
+```javascript
+// Despachado por app.js::completeLevel() tras cada pago exitoso.
+// Escuchado por event-logic.js para hitos y misiones.
+document.dispatchEvent(new CustomEvent('la:levelcomplete', {
+    detail: { gameId, levelId, reward: finalAmount }
+}));
+```
+
+Cualquier módulo de la plataforma puede escuchar `'la:levelcomplete'` sin modificar el núcleo. El prefijo `la:` garantiza que no colisione con eventos nativos del DOM.
+
+---
+
+### Resumen de cambios por archivo (v11.0)
+
+| Archivo | Cambio |
+|---|---|
+| `data/events.json` | Esquema v11.0: fechas sin sufijo de zona horaria, tipos `interactive_hunt`, `personal_milestone`, `gacha_flash`, `daily_missions`. Estructura `config` y `ui` separadas por evento. |
+| `js/event-logic.js` | **Reescritura completa v11.0.** Motor de tiempos Naive Local Time, `_isEventLive()`, renderers por tipo de evento, `_initHunt()`, `_initMilestoneListener()`, `_spinGacha()`, `_renderDailyMissionsCard()`, `_bindViewListeners()`, `_showToast()`. |
+| `js/app.js` | v11.0: `spendCoins()`, `addCoins()`, `activateBonusMultiplier()`, `getBonusMultiplierStatus()`, `incrementMissionStat()`, `getMissionStats()`, `claimMissionReward()`, `_getTodayString()`. `completeLevel()` aplica bonus_multiplier y despacha `'la:levelcomplete'`. Tracker de playtime activo en `DOMContentLoaded`. Campos `bonus_multiplier`, `bonus_multiplier_expires`, `missions` en `migrateState()`. |
+| `styles.css` | v11.0: ~120 líneas de estilos nuevos: barras de progreso, objetos flotantes de cacería, botón gacha, misiones, toast de eventos, tarjetas interactivas, reduced-motion. |
+| `DOCUMENTACION.md` | Sección §2x añadida; ToC y header actualizados a v11.0. |
+
+---
+
+*Love Arcade · Documentación técnica v11.0 Meta-Gameplay & Event Engine*
 *Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*

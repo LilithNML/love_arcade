@@ -1,5 +1,5 @@
 # 🎯 Sistema de Eventos LTE — Love Arcade
-### Documentación técnica · v10.3
+### Documentación técnica · v11.1
 
 ---
 
@@ -10,136 +10,64 @@
 3. [Ciclo de vida y carga de datos](#3-ciclo-de-vida-y-carga-de-datos)
 4. [isEventActive() — API global](#4-iseventactive--api-global)
 5. [Tipos de evento soportados](#5-tipos-de-evento-soportados)
-   - [coin_multiplier](#51-coin_multiplier)
-   - [streak_boost](#52-streak_boost)
 6. [Panel de control — events.json](#6-panel-de-control--eventsjson)
-   - [Zona horaria en endDate (CRÍTICO)](#zona-horaria-en-enddate--crítico)
 7. [Integración con app.js](#7-integración-con-appjs)
-   - [completeLevel() — multiplicador de monedas](#71-completelevel--multiplicador-de-monedas)
-   - [claimDaily() — boost de racha](#72-claimdaily--boost-de-racha)
-   - [getStreakInfo() — previsualización en UI](#73-getstreakinfo--previsualización-en-ui)
 8. [Sincronización y race condition](#8-sincronización-y-race-condition)
 9. [Ciclo de vida de la vista](#9-ciclo-de-vida-de-la-vista)
 10. [Añadir un nuevo tipo de evento](#10-añadir-un-nuevo-tipo-de-evento)
 11. [Referencia de campos — events.json](#11-referencia-de-campos--eventsjson)
-12. [Historial de cambios](#12-historial-de-cambios)
+12. [Balance y economía de eventos](#12-balance-y-economía-de-eventos)
+13. [Historial de cambios](#13-historial-de-cambios)
 
 ---
 
 ## 1. Visión general
 
-El **Sistema de Eventos por Tiempo Limitado (LTE)** permite activar bonificaciones globales en Love Arcade editando únicamente el archivo `data/events.json`, sin tocar ningún archivo JavaScript.
-
-Cada evento define:
-- Su **tipo** (multiplicador de monedas, boost de racha…).
-- Su **fecha de expiración** (con offset de zona horaria explícito).
-- Sus **metadatos visuales** (icono, color de acento).
-
-La lógica de negocio en `app.js` consulta el sistema de forma síncrona a través de `isEventActive(id)` para aplicar los efectos en el momento exacto en que ocurren (completar un nivel, reclamar el bono diario).
+El **Sistema de Eventos por Tiempo Limitado (LTE)** permite activar bonificaciones globales en Love Arcade editando únicamente `data/events.json`, sin tocar ningún archivo JavaScript. Cada evento define su tipo, fechas de inicio/fin en hora LOCAL del dispositivo, metadatos visuales y configuración de mecánica.
 
 ---
 
 ## 2. Arquitectura del sistema
 
 ```
-data/events.json          ← Panel de control (sin tocar JS)
-        │
-        │ fetch (inmediato al cargar el módulo)
+data/events.json
+        │ fetch inmediato al parsear el módulo
         ▼
-event-logic.js            ← Módulo LTE
-  ├── _loadEvents()       ← Carga, cacheo en memoria Y escritura en localStorage
-  ├── isEventActive(id)   ← API síncrona (usa caché de memoria)
-  ├── _formatTimeLeft()   ← Formato h + min exacto (v10.3)
-  ├── _renderEventsView() ← UI de la vista #view-events
-  ├── setInterval 60 s    ← Countdown en vivo (v10.3)
-  └── window.EventView    ← Ciclo de vida SPA
-        │
-        │  ① window.isEventActive (global — implementación real)
-        │  ② localStorage['love_arcade_events_v1'] (caché para juegos externos)
-        ▼
+event-logic.js
+  ├── _loadEvents()         Carga, cacheo memoria + localStorage
+  ├── isEventActive(id)     API síncrona sobre caché en memoria
+  ├── _initHunt()           Inyecta objetos de cacería en el DOM
+  ├── _spinGacha()          Giro con límite diario y balance corregido
+  ├── _showGachaRoulette()  Modal slot machine (overlay fijo)
+  ├── _renderEventsView()   UI de #view-events
+  ├── setInterval 60 s      Countdown en vivo
+  └── window.EventView      Ciclo de vida SPA
+
 app.js — GameCenter
-  ├── isEventActive stub  ← Lee localStorage cuando event-logic.js no está
-  ├── completeLevel()     ← Lee coin_invasion_v1
-  └── claimDaily()        ← Lee streak_boost_v1
-
-games/*.html              ← Juegos externos (sin event-logic.js)
-  └── app.js stub         ← Lee el caché de localStorage ✅ (fix v10.2)
+  ├── isEventActive stub    Lee localStorage si event-logic.js no está
+  ├── completeLevel()       Aplica coin_invasion_v1
+  ├── claimDaily()          Aplica streak_boost_v1
+  ├── spendCoins()          Cobro del costo del Gachapón
+  └── addCoins()            Entrega de recompensas (Cacería, Gachapón)
 ```
-
-**Principio de separación:** `app.js` nunca lee `events.json` directamente. Solo llama a `isEventActive(id)` — ya sea la implementación real (hub) o el stub con caché (juegos externos).
 
 ---
 
 ## 3. Ciclo de vida y carga de datos
 
-### Inicio inmediato (fix race condition — v10.1)
-
-`event-logic.js` invoca `_loadEvents()` en el momento en que el módulo se **parsea**, no dentro de `DOMContentLoaded`. Esto maximiza el tiempo disponible para que el fetch resuelva antes de que el usuario complete su primera partida.
-
-```
-Script parseado
-      │
-      ├─ fetch('data/events.json') — INMEDIATO
-      │         │
-      │         └── Resuelve → _eventsCache = data
-      │                        localStorage['love_arcade_events_v1'] = { data, ts }
-      │                        window.isEventActive = implementación real
-      │
-DOMContentLoaded
-      │
-      └── Usuario juega → completeLevel() → isEventActive('coin_invasion_v1')
-                                                    │
-                                                    └── Usa _eventsCache ✅
-```
-
-### Caché en localStorage para juegos externos (v10.2)
-
-Los juegos externos (`games/*.html`) cargan `app.js` pero no `event-logic.js`. Antes de v10.2, el stub de `isEventActive` en `app.js` siempre devolvía `false`, impidiendo que el multiplicador de monedas se aplicara en esos contextos.
-
-A partir de v10.2, `event-logic.js` persiste los datos cargados en `localStorage['love_arcade_events_v1']` con un timestamp. El stub de `app.js` lee este caché si está disponible y no ha expirado (TTL: 24 horas):
-
-```
-Hub (index.html)                    Juego externo (games/word-hunt.html)
-─────────────────                   ─────────────────────────────────────
-event-logic.js carga                app.js carga
-  → fetch('data/events.json')         → isEventActive stub definido
-  → _eventsCache = data               → stub lee localStorage ✅
-  → localStorage.setItem(…)           → multiplicador aplicado ✅
-  → isEventActive = impl. real
-```
-
-El usuario debe haber visitado el hub **al menos una vez** antes de jugar para que el caché exista. En la primera visita al juego externo sin caché, el stub devuelve `false` de forma conservadora (sin multiplicador).
-
-### Caché en memoria
-
-`_eventsCache` es un objeto en memoria dentro de `event-logic.js`. Una vez cargado, `isEventActive()` es completamente síncrona y sin coste de red ni I/O.
-
-### Stub de seguridad
-
-`app.js` define el stub antes de que `event-logic.js` cargue. Garantiza que nunca se lanzará un `ReferenceError` aunque los módulos carguen en orden inesperado.
+`_loadEvents()` se invoca **al parsear el módulo** (no en DOMContentLoaded) para maximizar el tiempo disponible antes de la primera partida. Escribe el resultado en `localStorage['love_arcade_events_v1']` para que los juegos externos (`games/*.html`) también puedan leer el estado de los eventos.
 
 ---
 
 ## 4. isEventActive() — API global
 
 ```js
-/**
- * @param {string} eventId  ID del evento a comprobar.
- * @returns {boolean}       true si el evento existe, no ha expirado y el caché está listo.
- */
-window.isEventActive(eventId)
+window.isEventActive(eventId) // → boolean
 ```
 
-**Reglas (implementación real — event-logic.js, contexto hub):**
-- Devuelve `false` si el caché en memoria aún no ha cargado (modo conservador).
-- Devuelve `false` si `endDate` ya pasó, aunque el evento exista en el JSON.
-- Es síncrona — no devuelve una Promise.
-- Disponible globalmente para cualquier minijuego integrado.
-
-**Reglas (stub con caché — app.js, contexto juego externo):**
-- Lee `localStorage['love_arcade_events_v1']` si existe y tiene menos de 24 horas.
-- Misma lógica de expiración por `endDate`.
-- Devuelve `false` si el caché no existe, está expirado o está malformado.
+- Síncrona, sin Promise.
+- `false` si el caché aún no cargó o el evento no está en `[startDate, endDate]`.
+- Las fechas sin sufijo de zona horaria se interpretan como **hora LOCAL del dispositivo**.
 
 ---
 
@@ -147,343 +75,225 @@ window.isEventActive(eventId)
 
 ### 5.1 `coin_multiplier`
 
-Multiplica las monedas otorgadas por **todos** los minijuegos durante la vigencia del evento.
-
-| Campo         | Descripción                                | Ejemplo     |
-|---------------|--------------------------------------------|-------------|
-| `type`        | Identificador del tipo                     | `"coin_multiplier"` |
-| `multiplier`  | Factor de multiplicación (float)           | `1.5`       |
-| `id`          | Debe ser `"coin_invasion_v1"` para activar | —           |
-
-**Efecto en código:**
-```js
-// app.js — completeLevel()
-if (window.isEventActive('coin_invasion_v1')) {
-    finalAmount = Math.floor(rewardAmount * 1.5);
-}
-```
-
-El multiplicador exacto se toma del campo `multiplier` del evento en `events.json`. Si se desea un factor diferente (ej: ×2), cambiar el `multiplier` en el JSON **y** actualizar el valor hardcodeado en `completeLevel()` en `app.js`.
-
-> **Nota técnica:** actualmente el factor `1.5` está hardcodeado en `app.js`. Una mejora futura sería leer `_eventsCache` directamente desde `completeLevel()` para tomar el multiplier dinámicamente.
-
----
+Multiplica las monedas de todos los minijuegos. Requiere `id: "coin_invasion_v1"` para activarse en `completeLevel()`.
 
 ### 5.2 `streak_boost`
 
-Incrementa en +2 (en lugar de +1) el contador de racha por cada reclamo del bono diario exitoso.
+Incrementa en +2 el contador de racha del bono diario. Requiere `id: "streak_boost_v1"`.
 
-| Campo  | Descripción                                | Ejemplo     |
-|--------|--------------------------------------------|-------------|
-| `type` | Identificador del tipo                     | `"streak_boost"` |
-| `id`   | Debe ser `"streak_boost_v1"` para activar  | —           |
+### 5.3 `interactive_hunt` — Cacería de Tesoros
 
-**Efecto en código:**
-```js
-// app.js — claimDaily()
-const streakBoost = window.isEventActive('streak_boost_v1') ? 2 : 1;
-const newStreak   = diffDays === 1 ? streak + streakBoost : 1;
-```
+Inyecta objetos flotantes (`.treasure-item`) en elementos del DOM. El jugador hace clic para recolectarlos y al completar todos recibe la recompensa.
 
-**Regla de reinicio:** si el usuario falta un día, la racha se reinicia a 1 **independientemente** de si el boost está activo o no. El boost solo afecta al incremento por día consecutivo, no al reinicio.
+**Campos de `config`:**
 
-**Previsualización en UI:** `getStreakInfo()` también consulta `isEventActive('streak_boost_v1')` para que el HUD muestre el `nextReward` correcto cuando el boost está activo.
+| Campo       | Tipo     | Descripción                                     | Default |
+|-------------|----------|-------------------------------------------------|---------|
+| `itemEmoji` | string   | Emoji del objeto                                | `"⭐"`  |
+| `anchors`   | string[] | Selectores CSS de los contenedores de inyección | `[]`    |
+| `total`     | number   | Número de objetos a encontrar                   | `5`     |
+| `reward`    | number   | Monedas al completar                            | `500`   |
+
+**[v11.1] Corrección de inyección:**
+
+En versiones anteriores, los selectores ausentes en el DOM contabilizaban como items inyectados, resultando en menos items visibles que los configurados. En v11.1:
+
+- Los selectores ausentes se **omiten sin penalización**.
+- Se usa `HUNT_FALLBACK_ANCHORS` (lista de selectores estáticos garantizados) para completar siempre el número `total` de items.
+- Items posicionados en **cuadrantes alternos** dentro de cada contenedor.
+- Algunos items se inyectan en la **vista de Tienda** (requiere navegar para encontrarlos).
+
+Orden de inyección:
+1. Selectores en `config.anchors` de `events.json`
+2. Fallbacks: `.game-card:nth-child(3/6/9)`, `#faq details:nth-child(2/5)`, `#view-shop .promo-toggle-wrap`, `#view-shop .shop-tabs`, `.player-hud .hud-streak`
+
+### 5.4 `gacha_flash` — Gachapón Relámpago
+
+Tirada de azar: el jugador gasta monedas y gana una recompensa aleatoria.
+
+**Campos de `config`:**
+
+| Campo       | Tipo   | Descripción                    | Default |
+|-------------|--------|--------------------------------|---------|
+| `cost`      | number | Costo por tirada               | `50`    |
+| `minReward` | number | Recompensa mínima              | `10`    |
+| `maxReward` | number | Recompensa máxima (jackpot)    | `1000`  |
+
+**[v11.1] Novedades:**
+
+- **Límite diario de 5 tiradas** por evento. Clave: `localStorage['la_gacha_daily_{eventId}']` con `{date, spins}`. Se resetea automáticamente al cambiar de día.
+- **Anti-spam:** flag `_gachaAnimating` desactiva el botón durante la animación del modal.
+- **Modal de ruleta tipo slot machine:** overlay fijo con números animados que aterrizan en el resultado. Cierre por botón / clic en fondo / tecla Escape.
+- **Balance corregido:** VE ≈ 64 monedas/tirada (antes ≈ 278). Net +14/tirada vs costo 50. Ver §12.
+
+### 5.5 `personal_milestone` — Hito Personal
+
+Activa un multiplicador temporal al completar N partidas en un día.
+
+**Campos de `config`:**
+
+| Campo                  | Tipo   | Descripción                        | Default       |
+|------------------------|--------|------------------------------------|---------------|
+| `target`               | number | Partidas necesarias                | `5`           |
+| `multiplier`           | number | Factor del multiplicador           | `2`           |
+| `multiplierDurationMs` | number | Duración del multiplicador (ms)    | `3_600_000`   |
+
+### 5.6 `daily_missions` — Misiones del Día
+
+Panel de misiones con barra de progreso y botón de reclamación. Se reinicia a medianoche.
+
+**Campos de `config.missions[]`:**
+
+| Campo    | Tipo   | Descripción                                        |
+|----------|--------|----------------------------------------------------|
+| `id`     | string | ID único para idempotencia                         |
+| `type`   | string | `"playtime"` (segundos) o `"games_played"` (count) |
+| `label`  | string | Texto visible al jugador                           |
+| `target` | number | Objetivo (segundos o partidas)                     |
+| `reward` | number | Monedas al reclamar                                |
 
 ---
 
 ## 6. Panel de control — events.json
 
-Ubicación: `data/events.json`
+### Zona horaria en endDate (CRÍTICO)
 
-Este archivo es el **único punto de control** para activar, desactivar o modificar eventos. No requiere tocar ningún archivo JavaScript.
-
-### Estructura base
+Las fechas **NO deben incluir sufijo de zona horaria**. Sin sufijo, `new Date(dateStr)` interpreta la fecha como **hora LOCAL del dispositivo**.
 
 ```json
-{
-  "activeEvents": [
-    {
-      "id":          "coin_invasion_v1",
-      "type":        "coin_multiplier",
-      "multiplier":  1.5,
-      "title":       "Invasión de Monedas",
-      "subtitle":    "×1.5 en todos los juegos",
-      "description": "Descripción corta (no se muestra en la UI actual).",
-      "endDate":     "2026-06-30T23:59:59-06:00",
-      "icon":        "zap",
-      "accentColor": "#00d4ff"
-    }
-  ]
-}
+// ✅ CORRECTO — hora local del jugador
+"startDate": "2026-03-24T00:00:00",
+"endDate":   "2026-03-31T23:59:59"
+
+// ❌ INCORRECTO — UTC fijo o con offset explícito
+"endDate": "2026-03-31T23:59:59Z"
+"endDate": "2026-03-31T23:59:59-06:00"
 ```
-
----
-
-### Zona horaria en `endDate` — CRÍTICO
-
-> ⚠️ **Este es el punto de error más común al configurar eventos.**
-
-El campo `endDate` debe incluir siempre el **offset de zona horaria explícito** correspondiente a la hora local de referencia del evento.
-
-#### ¿Por qué importa?
-
-`Date.parse()` en JavaScript interpreta cadenas ISO 8601 terminadas en `Z` como UTC. Si el evento debe terminar a las 23:59 hora de México (UTC-6) pero `endDate` está definido como `"2026-03-23T23:59:59Z"`, el sistema lo cerrará a las **17:59 hora local** — 6 horas antes de lo esperado. El countdown también mostrará menos tiempo del real por la misma razón.
-
-#### Regla de oro
-
-```
-❌  "2026-03-23T23:59:59Z"         → Expira a las 17:59 en México (UTC-6)
-✅  "2026-03-23T23:59:59-06:00"    → Expira a las 23:59 en México (UTC-6)
-```
-
-#### Offsets de referencia
-
-| Zona horaria                              | Offset   |
-|-------------------------------------------|----------|
-| México (CDMX, Guadalajara, Monterrey)     | `-06:00` |
-| España (Península)                        | `+01:00` |
-| UTC / GMT                                 | `+00:00` |
-| EST — Nueva York                          | `-05:00` |
-| PST — Los Ángeles                         | `-08:00` |
-
-> **Nota:** México abolió el horario de verano en 2023 para la mayor parte del territorio. La zona horaria central (CDMX) es UTC-6 de forma permanente durante todo el año.
-
-#### ¿Qué ocurre internamente?
-
-La comparación en `isEventActive()` y `_formatTimeLeft()` opera sobre timestamps UTC puros (`getTime()`). El resultado es exacto siempre que `endDate` lleve offset explícito:
-
-```js
-// isEventActive — event-logic.js
-return Date.now() < new Date(ev.endDate).getTime();
-
-// Con "2026-03-23T23:59:59-06:00":
-//   Date.now()                        → ms UTC actuales
-//   new Date("…-06:00").getTime()     → ms UTC de las 23:59 en UTC-6
-//   Resultado: expira exactamente a las 23:59 hora de México ✅
-```
-
----
-
-### Activar un evento
-
-Agregar el objeto al array `activeEvents` con una `endDate` futura con offset explícito.
-
-### Desactivar un evento
-
-Dos opciones equivalentes:
-1. **Eliminar** el objeto del array.
-2. **Cambiar `endDate`** a una fecha pasada (ej: `"2020-01-01T00:00:00-06:00"`).
-
-### Cambiar la duración
-
-Modificar el campo `endDate` con el nuevo timestamp en formato ISO 8601 con offset explícito.
 
 ---
 
 ## 7. Integración con app.js
 
-### 7.1 `completeLevel()` — multiplicador de monedas
-
 ```js
-GameCenter.completeLevel(gameId, levelId, rewardAmount)
+// completeLevel() — multiplicador de monedas
+if (window.isEventActive('coin_invasion_v1')) {
+    finalAmount = Math.floor(rewardAmount * 1.5);
+}
+
+// claimDaily() — boost de racha
+const streakBoost = window.isEventActive('streak_boost_v1') ? 2 : 1;
+
+// Gachapón usa la API pública de GameCenter
+window.GameCenter.spendCoins(cost, `Gachapón: ${eventId}`);
+window.GameCenter.addCoins(reward, `Gachapón Relámpago: ${eventId}`);
 ```
-
-Flujo interno cuando `coin_invasion_v1` está activo:
-
-```
-rewardAmount (del juego)
-        │
-        ▼
-isEventActive('coin_invasion_v1') === true
-        │
-        ▼
-finalAmount = Math.floor(rewardAmount × 1.5)
-        │
-        ▼
-store.coins += finalAmount
-logTransaction('ingreso', finalAmount, '... [×1.5 Invasión de Monedas]')
-```
-
-El resultado de `completeLevel()` incluye `{ multiplied: boolean }` para que el juego pueda mostrar feedback visual si lo desea.
-
-### 7.2 `claimDaily()` — boost de racha
-
-```js
-GameCenter.claimDaily()  // → { success, reward, streak, streakBoosted?, ... }
-```
-
-Flujo con `streak_boost_v1` activo:
-
-```
-Usuario reclama bono diario
-        │
-        ▼
-diffDays === 1 (día consecutivo)
-        │
-        ▼
-streakBoost = isEventActive('streak_boost_v1') ? 2 : 1
-newStreak   = streak + streakBoost    // ej: 3 + 2 = 5
-        │
-        ▼
-baseReward = min(dailyReward + (newStreak−1) × dailyStreakStep, dailyStreakCap)
-           = min(20 + 4×5, 60) = min(40, 60) = 40 monedas
-```
-
-### 7.3 `getStreakInfo()` — previsualización en UI
-
-```js
-const info = GameCenter.getStreakInfo();
-// {
-//   streak:        number,   — racha actual
-//   nextReward:    number,   — monedas que dará el próximo reclamo
-//   canClaim:      boolean,  — si hoy se puede reclamar
-//   streakBoosted: boolean   — si el boost está activo (v10.1)
-// }
-```
-
-El campo `streakBoosted` permite a la UI mostrar un indicador visual cuando el boost está activo, sin necesidad de llamar a `isEventActive()` directamente desde el HTML.
 
 ---
 
 ## 8. Sincronización y race condition
 
-### El problema original (pre-v10.1)
+El fetch se lanza al parsear el módulo. Si el usuario completa una partida antes de que el fetch resuelva, `isEventActive()` devuelve `false` conservadoramente (un JSON pequeño resuelve en milisegundos en la práctica).
 
-En v10.0, `_loadEvents()` se lanzaba dentro de `DOMContentLoaded`. Si un usuario completaba un nivel antes de que el fetch resolviera, `isEventActive()` devolvería `false` (stub) y el multiplicador no se aplicaría.
-
-### Solución de race condition (v10.1)
-
-`_loadEvents()` se invoca **inmediatamente al parsear el módulo**. El fetch se lanza en paralelo mientras el navegador termina de analizar el HTML.
-
-### Problema en juegos externos (pre-v10.2)
-
-Los juegos en `games/*.html` cargan `app.js` en su propio contexto de página pero no cargan `event-logic.js`. El stub de `isEventActive` en `app.js` devolvía siempre `false`, por lo que `completeLevel()` nunca aplicaba el multiplicador en esos contextos.
-
-### Solución para juegos externos (v10.2)
-
-`event-logic.js` escribe los datos de eventos en `localStorage` tras cada carga exitosa. El stub de `app.js` lee ese caché:
-
-```
-isEventActive stub (app.js — juego externo)
-        │
-        ├── localStorage['love_arcade_events_v1'] existe y < 24h?
-        │         │ sí
-        │         └── data.activeEvents.find(e.id === eventId)
-        │                     │
-        │                     └── Date.now() < new Date(e.endDate) → boolean
-        │
-        └── no → false (conservador)
-```
-
-### Caso sin conexión / primera visita
-
-Si el fetch falla, `_eventsCache = { activeEvents: [] }` y el caché de localStorage no se actualiza. `isEventActive()` devuelve `false` para todos los eventos. El juego funciona con normalidad, sin multiplicadores.
+Para juegos externos, el stub de `app.js` lee el caché de `localStorage`. El usuario debe haber visitado el hub al menos una vez para que el caché exista (TTL: 24 h).
 
 ---
 
 ## 9. Ciclo de vida de la vista
 
-`event-logic.js` expone `window.EventView` para integrarse con el SPA router:
-
 ```js
-window.EventView = {
-    onEnter(),  // Llamado por spa-router.js al navegar a #view-events
-    onLeave()   // Llamado al salir de la vista — cancela el countdown en vivo
-}
+window.EventView = { onEnter(), onLeave() }
 ```
 
-### `onEnter()`
-
-1. Si es la primera visita, muestra un skeleton de carga.
-2. Llama a `_loadEvents()` (que devuelve el caché si ya está disponible).
-3. Llama a `_renderEventsView()` con los datos.
-4. **[v10.3]** Inicia un `setInterval` de 60 segundos que re-renderiza la vista automáticamente para mantener el countdown exacto sin recargar la página.
-
-Las visitas subsiguientes **no** muestran skeleton porque `_rendered = true`; la vista se re-renderiza directamente con el caché disponible.
-
-### `onLeave()`
-
-**[v10.3]** Cancela el `setInterval` del countdown via `clearInterval()`. Esto evita que se acumulen timers activos mientras la vista no es visible y que el DOM se actualice en segundo plano innecesariamente.
+`onEnter()` — skeleton en primera visita, carga datos, renderiza, inicia setInterval (60 s).  
+`onLeave()` — cancela el setInterval con `clearInterval()`.
 
 ---
 
 ## 10. Añadir un nuevo tipo de evento
 
-### Paso 1 — Definir en `events.json`
+**Paso 1** — Añadir en `events.json` con campos `id`, `type`, `startDate`, `endDate`, `config`, `ui`.
 
-```json
-{
-  "id":          "mi_evento_v1",
-  "type":        "mi_tipo",
-  "title":       "Nombre del evento",
-  "subtitle":    "Descripción corta",
-  "endDate":     "2026-09-01T23:59:59-06:00",
-  "icon":        "sparkles",
-  "accentColor": "#a855f7"
+**Paso 2** — Registrar en `EVENT_META` dentro de `event-logic.js`:
+
+```js
+mi_tipo: {
+    color: '#a855f7', colorDim: 'rgba(168,85,247,0.14)',
+    colorBorder: 'rgba(168,85,247,0.38)', colorGlow: 'rgba(168,85,247,0.18)',
+    gradientBg: 'linear-gradient(150deg,#0c0014 0%,#160a28 60%,...)',
+    artEmojis: ['✨','🌟','💫','✨'],
+    getHeroValue: ev => 'Valor destacado',
+    getShortDesc:  ev => ev.ui?.description || 'Descripción.'
 }
 ```
 
-> Recuerda incluir el offset de zona horaria en `endDate`. Ver §6 — Zona horaria en endDate.
+**Paso 3** — Añadir `case 'mi_tipo': return _renderMiTipoCard(event, meta);` en `_renderEventCard()`.
 
-### Paso 2 — Registrar metadatos visuales en `event-logic.js`
-
-```js
-// EVENT_META en event-logic.js
-const EVENT_META = {
-    // ...existentes...
-    mi_tipo: {
-        icon:        'sparkles',
-        color:       '#a855f7',
-        colorSoft:   'rgba(168, 85, 247, 0.12)',
-        colorBorder: 'rgba(168, 85, 247, 0.28)',
-        gradStart:   '#a855f7',
-        getEffect:   (ev) => 'Descripción del efecto'
-    }
-};
-```
-
-### Paso 3 — Implementar el efecto en `app.js`
-
-```js
-// Ejemplo: si el tipo aplica un descuento en la tienda
-if (window.isEventActive('mi_evento_v1')) {
-    // aplicar lógica aquí
-}
-```
-
-### Paso 4 — Usar un ID descriptivo y versionado
-
-Convención: `{slug_tipo}_{variante}_v{N}`. Ejemplos: `coin_invasion_v2`, `flash_sale_v1`.
+**Paso 4** — Implementar `_renderMiTipoCard()` y, si aplica, el efecto en `app.js`.
 
 ---
 
 ## 11. Referencia de campos — events.json
 
-| Campo         | Tipo     | Requerido | Descripción |
-|---------------|----------|-----------|-------------|
-| `id`          | string   | ✅        | Identificador único del evento. El código en `app.js` compara contra este valor. |
-| `type`        | string   | ✅        | Tipo de evento: `coin_multiplier`, `streak_boost` (o custom). |
-| `title`       | string   | ✅        | Nombre visible en la tarjeta de evento. |
-| `subtitle`    | string   | —         | Texto secundario (no visible en la UI actual; reservado). |
-| `description` | string   | —         | Descripción larga (no visible en la UI actual). |
-| `endDate`     | ISO 8601 | ✅        | Fecha y hora de expiración **con offset de zona horaria explícito**. Ejemplo: `"2026-12-31T23:59:59-06:00"`. ⚠️ No usar `Z` si la hora de referencia es local. Ver §6. |
-| `icon`        | string   | —         | Nombre del icono del sprite SVG (sin prefijo `icon-`). Default: `sparkles`. |
-| `accentColor` | string   | —         | Color CSS del acento visual (hex, rgb, etc.). |
-| `multiplier`  | number   | ⚠️        | Solo para `coin_multiplier`. Factor de multiplicación. Default implícito: `1.5`. |
-
-> ⚠️ El campo `multiplier` es leído por la UI para mostrar el efecto, pero el valor aplicado en `app.js` actualmente está hardcodeado a `1.5`. Ver nota en §5.1.
+| Campo           | Tipo     | Req. | Descripción |
+|-----------------|----------|------|-------------|
+| `id`            | string   | ✅   | Identificador único del evento. |
+| `type`          | string   | ✅   | Tipo de evento (ver §5). |
+| `startDate`     | ISO 8601 | ✅   | Sin sufijo de zona horaria. Hora LOCAL. |
+| `endDate`       | ISO 8601 | ✅   | Sin sufijo de zona horaria. Hora LOCAL. |
+| `config`        | object   | ⚠️   | Parámetros de mecánica. Estructura según `type`. |
+| `ui.title`      | string   | —    | Nombre visible en la tarjeta. |
+| `ui.subtitle`   | string   | —    | Texto secundario. |
+| `ui.description`| string   | —    | Descripción larga en la tarjeta. |
+| `ui.accentColor`| string   | —    | Color CSS del acento. |
+| `ui.icon`       | string   | —    | Nombre del icono SVG (sin prefijo `icon-`). |
 
 ---
 
-## 12. Historial de cambios
+## 12. Balance y economía de eventos
+
+### Gachapón Relámpago (config por defecto: cost 50, min 10, max 1000)
+
+| Tier | Rango      | Prob.  | VE parcial |
+|------|------------|--------|------------|
+| 1    | [10, ~35]  | 55 %   | ~12 🪙     |
+| 2    | [~35, ~90] | 30 %   | ~19 🪙     |
+| 3    | [~90, ~250]| 12 %   | ~20 🪙     |
+| 4    | [~250, ~500]| 2.5 % | ~9 🪙      |
+| 5    | [~500, 1000]| 0.5 % | ~4 🪙      |
+| **Total** |       |        | **~64 🪙** |
+
+- Costo: 50 🪙 → **ganancia neta esperada ≈ +14 🪙/tirada**
+- Límite 5 tiradas/día → **ganancia neta máxima esperada ≈ 70 🪙/día**
+- Jackpot (≥ 500 🪙): **0.5 % de probabilidad**
+
+Para ajustar el balance sin tocar el código, modificar `minReward` y `maxReward` en `events.json` — los tiers se recalculan proporcialmente. Para ajustes finos de probabilidad, editar `_rollGachaReward()` en `event-logic.js`.
+
+### Cacería de Tesoros
+
+- Recompensa típica: **500 🪙** al completar los 5 items.
+- Una sola vez por período de evento.
+
+### Hito Personal
+
+- Buff ×2 durante 1 hora al completar 5 partidas en un día.
+
+### Misiones del Día
+
+- Recompensas típicas: 100–150 🪙 por misión. Recurrencia: diaria.
+
+---
+
+## 13. Historial de cambios
 
 | Versión | Cambio |
 |---------|--------|
-| **v10.3** | [FIX CRÍTICO] Eventos que expiraban antes de tiempo: la causa raíz era el uso del sufijo `Z` (UTC) en `endDate` sin offset de zona horaria. Para un servidor en UTC-6, esto provocaba que los eventos cerraran 6 horas antes de lo esperado y que el countdown mostrara menos tiempo del real. Corrección aplicada en `events.json` (offset `-06:00` explícito). Documentación de la convención de zona horaria añadida en §6. [FIX] `_formatTimeLeft()` reescrita: ahora muestra horas y minutos combinados cuando quedan menos de 24 h (p.ej. "5 h 42 min" en lugar de solo "5 h"), eliminando la ambigüedad visual de tiempo restante. Eliminado el caso "Mañana" que ocultaba la cantidad exacta de horas. [MEJORA] Countdown en vivo: `onEnter()` inicia un `setInterval` de 60 s que re-renderiza la vista de eventos. `onLeave()` lo cancela con `clearInterval()` para no acumular timers en navegación entre vistas. |
-| **v10.2** | [FIX] Multiplicador de monedas en juegos externos: `event-logic.js` persiste los eventos en `localStorage['love_arcade_events_v1']` tras cada carga exitosa. El stub de `app.js` ahora lee ese caché en lugar de devolver siempre `false`. Los juegos en `games/*.html` aplican correctamente el multiplicador ×1.5 y el boost de racha. TTL del caché: 24 horas. Rediseño completo de la vista de eventos: tarjetas tipo "banner de evento" con fondo degradado por tipo, elementos decorativos flotantes, valor del efecto en tipografía gigante (×1.5 / +2), badge EN VIVO animado, descripción del efecto. Rejilla de 2 columnas en tablet (≥ 640px). Texto completo en español; "Hot Streak Weekend" renombrado a "Fin de Semana de Racha". |
-| **v10.1** | Eliminación completa del Gachapón. Carga de `events.json` movida al parse del módulo (fix race condition). `getStreakInfo()` actualizado para reflejar el boost de racha. Nueva UI de tarjetas LTE. |
-| **v10.0** | Lanzamiento del sistema LTE. Integración de `coin_invasion_v1` en `completeLevel()` y `streak_boost_v1` en `claimDaily()`. |
+| **v11.1** | [FIX CRÍTICO] Cacería: selectores ausentes ya no penalizan el contador de inyecciones. Se añade `HUNT_FALLBACK_ANCHORS` para garantizar siempre `total` items. [FIX] Cacería: posicionamiento por cuadrantes alternos, items en vista de Tienda. [FIX CRÍTICO] Gachapón: límite de 5 tiradas diarias con persistencia en `localStorage`. [FIX] Gachapón: `_gachaAnimating` previene spam durante la animación. [MEJORA] Gachapón: modal de ruleta tipo slot machine (overlay fijo, no interfiere con el layout de eventos). [BALANCE] Gachapón: probabilidades reequilibradas, VE ≈ 64 vs costo 50 (anterior VE ≈ 278). |
+| **v11.0** | Motor completo: interactive_hunt, personal_milestone, gacha_flash, daily_missions. Countdown en vivo 60 s. Ciclo de vida SPA. |
+| **v10.3** | Fechas naive local time (sin sufijo de zona horaria). `_formatTimeLeft()` muestra horas + minutos. |
+| **v10.2** | Caché en localStorage para juegos externos. Rediseño visual de tarjetas LTE. |
+| **v10.1** | Carga de events.json al parsear el módulo (fix race condition). |
+| **v10.0** | Lanzamiento del sistema LTE. `coin_invasion_v1`, `streak_boost_v1`. |
 
 ---
 
-*Documentación mantenida por el equipo de Love Arcade · v10.3*
+*Documentación mantenida por el equipo de Love Arcade · v11.1*

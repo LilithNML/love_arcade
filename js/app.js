@@ -1,6 +1,28 @@
 /**
- * Game Center Core v10.2 — External Game Event Fix
+ * Game Center Core v11.0 — Meta-Gameplay & Event Engine
  * Compatible con gamecenter_v6_promos — migración silenciosa incluida.
+ *
+ * NOVEDADES v11.0 (Meta-Gameplay & Event Engine):
+ *  - addCoins(amount): nuevo método público de GameCenter que permite a
+ *    event-logic.js depositar monedas sin pasar por completeLevel().
+ *    Usado por la Cacería de Tesoros y el Gachapón Relámpago.
+ *  - Multiplicador de bonificación con expiración: store.bonus_multiplier y
+ *    store.bonus_multiplier_expires. completeLevel() aplica el multiplicador
+ *    si Date.now() < bonus_multiplier_expires antes de sumar al saldo.
+ *  - Evento personalizado 'la:levelcomplete': completeLevel() despacha este
+ *    CustomEvent en document tras cada pago exitoso. event-logic.js lo escucha
+ *    para actualizar el progreso de Hitos Personales y Misiones del Día sin
+ *    acoplamiento directo entre módulos.
+ *  - Contador de sesiones de juego: incrementMissionStat(stat, delta) expuesto
+ *    en GameCenter. Actualiza store.missions con estadísticas diarias (juegos
+ *    jugados, tiempo activo en segundos). Se reinicia automáticamente si la
+ *    fecha cambia respecto a missions.date.
+ *  - Tracker de tiempo activo: setInterval de 1 s en DOMContentLoaded que suma
+ *    al contador de playtime solo cuando document.visibilityState === 'visible'.
+ *  - getMissionStats(): devuelve las estadísticas del día actual del store.
+ *  - getBonusMultiplierStatus(): devuelve el estado del multiplicador activo.
+ *  - migrateState(): incorpora los campos bonus_multiplier, bonus_multiplier_expires
+ *    y missions con valores seguros por defecto.
  *
  * NOVEDADES v10.2 (External Game Event Fix):
  *  - isEventActive(): el stub seguro ya no devuelve siempre false. Ahora lee
@@ -410,7 +432,17 @@ function migrateState(loadedStore) {
         buffs:          { moonBlessingExpiry: 0 },
         // v9.4 — Identity
         nickname:       '',    // Máx. 15 chars. Vacío = primer acceso → flujo de bienvenida.
-        gender:         '@'    // 'o' | 'a' | '@' — controla el sufijo del saludo.
+        gender:         '@',   // 'o' | 'a' | '@' — controla el sufijo del saludo.
+        // v11.0 — Multiplicador de bonificación con expiración (Hitos Personales)
+        bonus_multiplier:         1,   // Factor activo (ej: 2 = ×2). Base = 1 (sin efecto).
+        bonus_multiplier_expires: 0,   // Timestamp ms. 0 = sin multiplicador activo.
+        // v11.0 — Estadísticas diarias para Misiones del Día
+        missions: {
+            date:         '',  // Fecha YYYY-MM-DD del último reinicio.
+            playtime:     0,   // Segundos de juego activo en el día actual.
+            games_played: 0,   // Partidas completadas en el día actual.
+            claimed:      []   // IDs de misiones reclamadas hoy.
+        }
     };
 
     const merged = { ...defaults, ...loadedStore };
@@ -434,6 +466,23 @@ function migrateState(loadedStore) {
     // v9.4 — Validación de identidad (migración silenciosa)
     if (typeof merged.nickname !== 'string')           merged.nickname = '';
     if (!['o', 'a', '@'].includes(merged.gender))      merged.gender   = '@';
+
+    // v11.0 — Multiplicador de bonificación
+    if (typeof merged.bonus_multiplier !== 'number' || merged.bonus_multiplier < 1) {
+        merged.bonus_multiplier = 1;
+    }
+    if (typeof merged.bonus_multiplier_expires !== 'number') {
+        merged.bonus_multiplier_expires = 0;
+    }
+
+    // v11.0 — Misiones diarias
+    if (!merged.missions || typeof merged.missions !== 'object') {
+        merged.missions = { date: '', playtime: 0, games_played: 0, claimed: [] };
+    }
+    if (typeof merged.missions.date         !== 'string') merged.missions.date         = '';
+    if (typeof merged.missions.playtime     !== 'number') merged.missions.playtime     = 0;
+    if (typeof merged.missions.games_played !== 'number') merged.missions.games_played = 0;
+    if (!Array.isArray(merged.missions.claimed))          merged.missions.claimed      = [];
 
     return merged;
 }
@@ -526,19 +575,38 @@ window.GameCenter = {
 
         // [v10.0] Invasión de Monedas: si el evento coin_invasion_v1 está activo,
         // el reward se multiplica ×1.5 antes de sumarse al saldo.
-        // isEventActive() es un stub seguro; event-logic.js lo sobreescribe con
-        // la implementación real al cargar.
         let finalAmount = rewardAmount;
         if (window.isEventActive('coin_invasion_v1')) {
             finalAmount = Math.floor(rewardAmount * 1.5);
         }
 
+        // [v11.0] Multiplicador de bonificación con expiración (Hitos Personales).
+        // Si el timestamp de expiración es posterior a ahora, aplicar el factor.
+        const now = Date.now();
+        if (store.bonus_multiplier > 1 && now < store.bonus_multiplier_expires) {
+            finalAmount = Math.floor(finalAmount * store.bonus_multiplier);
+        } else if (store.bonus_multiplier_expires > 0 && now >= store.bonus_multiplier_expires) {
+            // Limpiar multiplicador expirado para no dejarlo en el store indefinidamente.
+            store.bonus_multiplier         = 1;
+            store.bonus_multiplier_expires = 0;
+        }
+
         store.coins += finalAmount;
         logTransaction('ingreso', finalAmount,
             `Nivel ${levelId} completado · ${gameId}` +
-            (finalAmount !== rewardAmount ? ' [×1.5 Invasión de Monedas]' : '')
+            (finalAmount !== rewardAmount ? ' [multiplicador activo]' : '')
         );
         saveState();
+
+        // [v11.0] Incrementar estadísticas diarias de misiones.
+        window.GameCenter.incrementMissionStat('games_played', 1);
+
+        // [v11.0] Despachar evento personalizado para que event-logic.js pueda
+        // actualizar el progreso de Hitos Personales sin acoplamiento directo.
+        document.dispatchEvent(new CustomEvent('la:levelcomplete', {
+            detail: { gameId, levelId, reward: finalAmount }
+        }));
+
         return { paid: true, coins: store.coins, multiplied: finalAmount !== rewardAmount };
     },
 
@@ -578,9 +646,157 @@ window.GameCenter = {
         return { success: true, finalPrice, cashback };
     },
 
+    /**
+     * Deduce monedas del saldo directamente.
+     * Usado por el Gachapón Relámpago (event-logic.js) para cobrar el costo
+     * de giro sin pasar por buyItem(), que requiere un catálogo de ítem.
+     * No registra en store.progress ni invalida idempotencia de completeLevel().
+     * @param {number} amount  Cantidad entera positiva a deducir.
+     * @param {string} [motivo]  Descripción para el historial.
+     * @returns {{ success: boolean, coins: number }}
+     */
+    spendCoins: (amount, motivo = 'Gasto directo') => {
+        const n = Math.floor(amount);
+        if (!Number.isFinite(n) || n <= 0) return { success: false, coins: store.coins };
+        if (store.coins < n) return { success: false, reason: 'insufficient', coins: store.coins };
+        store.coins -= n;
+        logTransaction('gasto', n, motivo);
+        saveState();
+        return { success: true, coins: store.coins };
+    },
+
     getBoughtCount: (id) => store.inventory[id] || 0,
     getBalance:     ()   => store.coins,
     getInventory:   ()   => ({ ...store.inventory }),
+
+    // ── v11.0 — ECONOMÍA DIRECTA ──────────────────────────────────────────────
+
+    /**
+     * Deposita monedas directamente en el saldo sin pasar por completeLevel().
+     * Usado por la Cacería de Tesoros y el Gachapón Relámpago (event-logic.js).
+     * No despacha 'la:levelcomplete' ni incrementa estadísticas de misiones.
+     * @param {number} amount  Cantidad entera positiva de monedas a añadir.
+     * @param {string} [motivo] Descripción para el historial de transacciones.
+     * @returns {{ success: boolean, coins: number }}
+     */
+    addCoins: (amount, motivo = 'Depósito directo') => {
+        const n = Math.floor(amount);
+        if (!Number.isFinite(n) || n <= 0) return { success: false, coins: store.coins };
+        store.coins += n;
+        logTransaction('ingreso', n, motivo);
+        saveState();
+        return { success: true, coins: store.coins };
+    },
+
+    // ── v11.0 — MISIONES DIARIAS ──────────────────────────────────────────────
+
+    /**
+     * Obtiene la fecha local del día en formato YYYY-MM-DD.
+     * Usado para verificar si las misiones deben reiniciarse.
+     * @returns {string}
+     */
+    _getTodayString: () => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    },
+
+    /**
+     * Incrementa una estadística diaria de misiones.
+     * Reinicia automáticamente el objeto missions si la fecha cambió (nuevo día).
+     * @param {'playtime'|'games_played'} stat  Estadística a incrementar.
+     * @param {number} delta  Cantidad a sumar (positiva).
+     */
+    incrementMissionStat: (stat, delta) => {
+        const today = window.GameCenter._getTodayString();
+        // Reinicio automático a medianoche local
+        if (store.missions.date !== today) {
+            store.missions = { date: today, playtime: 0, games_played: 0, claimed: [] };
+        }
+        if (stat === 'playtime') {
+            store.missions.playtime = (store.missions.playtime || 0) + delta;
+        } else if (stat === 'games_played') {
+            store.missions.games_played = (store.missions.games_played || 0) + delta;
+        }
+        // No llamar a saveState() aquí para playtime (se llama cada segundo).
+        // El guardado se delega a saveState() al final del ciclo de 60 s, o en
+        // cualquier otra escritura del store (compra, daily, etc.).
+        // Para games_played sí guardamos inmediatamente.
+        if (stat === 'games_played') saveState();
+    },
+
+    /**
+     * Devuelve las estadísticas de misiones del día actual.
+     * Si la fecha cambió, reinicia antes de devolver.
+     * @returns {{ date: string, playtime: number, games_played: number, claimed: string[] }}
+     */
+    getMissionStats: () => {
+        const today = window.GameCenter._getTodayString();
+        if (store.missions.date !== today) {
+            store.missions = { date: today, playtime: 0, games_played: 0, claimed: [] };
+        }
+        return { ...store.missions };
+    },
+
+    /**
+     * Marca una misión como reclamada y deposita su recompensa.
+     * Idempotente: ignorado si la misión ya fue reclamada hoy.
+     * @param {string} missionId  ID de la misión.
+     * @param {number} reward     Monedas a otorgar.
+     * @returns {{ success: boolean, coins: number }}
+     */
+    claimMissionReward: (missionId, reward) => {
+        const today = window.GameCenter._getTodayString();
+        if (store.missions.date !== today) {
+            store.missions = { date: today, playtime: 0, games_played: 0, claimed: [] };
+        }
+        if (store.missions.claimed.includes(missionId)) {
+            return { success: false, reason: 'already_claimed', coins: store.coins };
+        }
+        store.missions.claimed.push(missionId);
+        store.coins += reward;
+        logTransaction('ingreso', reward, `Misión completada: ${missionId}`);
+        saveState();
+        return { success: true, coins: store.coins };
+    },
+
+    // ── v11.0 — MULTIPLICADOR DE BONIFICACIÓN ─────────────────────────────────
+
+    /**
+     * Activa el multiplicador de bonificación con un timestamp de expiración.
+     * Si ya hay uno activo, lo sobreescribe si el nuevo factor es mayor.
+     * @param {number} multiplier        Factor multiplicador (ej: 2 = ×2).
+     * @param {number} durationMs        Duración en ms.
+     * @param {string} [motivo]          Descripción del origen del multiplicador.
+     * @returns {{ success: boolean, expiresAt: number }}
+     */
+    activateBonusMultiplier: (multiplier, durationMs, motivo = 'Hito de evento') => {
+        if (!Number.isFinite(multiplier) || multiplier <= 1) {
+            return { success: false };
+        }
+        const expiresAt = Date.now() + durationMs;
+        store.bonus_multiplier         = multiplier;
+        store.bonus_multiplier_expires = expiresAt;
+        logTransaction('ingreso', 0, `Multiplicador ×${multiplier} activado · ${motivo}`);
+        saveState();
+        return { success: true, expiresAt };
+    },
+
+    /**
+     * Devuelve el estado del multiplicador de bonificación activo.
+     * @returns {{ active: boolean, multiplier: number, remainingMs: number }}
+     */
+    getBonusMultiplierStatus: () => {
+        const now    = Date.now();
+        const active = store.bonus_multiplier > 1 && store.bonus_multiplier_expires > now;
+        return {
+            active,
+            multiplier:  active ? store.bonus_multiplier : 1,
+            remainingMs: active ? store.bonus_multiplier_expires - now : 0
+        };
+    },
 
     /**
      * Devuelve el número de códigos promocionales ya canjeados.
@@ -1444,6 +1660,20 @@ document.addEventListener('DOMContentLoaded', () => {
             || 'desconocido';
         window.GhostAnalytics?.track('open_game', { juego: gameId });
     }, { passive: true });
+
+    // ── v11.0 — Tracker de tiempo activo (Misiones del Día) ──────────────────
+    // Cada segundo que la pestaña esté visible se suma 1 al contador de playtime.
+    // El guardado en localStorage se realiza cada 60 s para no saturar el disco.
+    let _missionSaveTimer = 0;
+    setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+        window.GameCenter.incrementMissionStat('playtime', 1);
+        _missionSaveTimer++;
+        if (_missionSaveTimer >= 60) {
+            _missionSaveTimer = 0;
+            saveState(); // Persistir playtime acumulado cada minuto
+        }
+    }, 1_000);
 
     // ── Background time sync (v9.6) ───────────────────────────────────────
     // Se lanza 800 ms después del DOMContentLoaded para no competir con el
