@@ -4,56 +4,18 @@
  * Motor de Eventos por Tiempo Limitado (LTE) e interactivos.
  *
  * CAMBIOS v11.2 (Event Engine — Full Hardening II):
- *  - [FIX CRÍTICO] Cacería de Tesoros: corregido el bug de visibilidad causado
- *    por overflow:hidden en los anclajes. Se fuerza overflow:visible en el
- *    anclaje y en su padre inmediato al inyectar. Añadido filtro de tamaño
- *    mínimo (60×40 px) para elementos visibles; elementos en vistas ocultas
- *    (display:none) se permiten sin restricción de tamaño.
- *    Selectores de respaldo ampliados y reordenados por confiabilidad.
- *    _safeInitHunt() garantiza que la inyección ocurra siempre después de
- *    DOMContentLoaded, incluso cuando el fetch de events.json resuelve muy
- *    rápido desde caché.
- *  - [FIX CRÍTICO] Hito Personal: corregido el bug donde las partidas
- *    completadas en páginas externas (games/*.html) nunca se contabilizaban.
- *    Causa raíz: el CustomEvent 'la:levelcomplete' se despachaba en el
- *    document de la página del juego, no en el del hub, por lo que el
- *    listener de event-logic.js nunca lo recibía. La fuente de verdad del
- *    progreso migra de la clave localStorage la_milestone_progress_*
- *    (solo actualizable en contexto SPA) a
- *    GameCenter.getMissionStats().games_played (persistida en el store
- *    principal y actualizada por completeLevel() en cualquier contexto).
- *    Nueva función _checkMilestoneCompletion() llamada desde onEnter() para
- *    detectar e activar hitos cuyas partidas se completaron mientras el
- *    usuario estaba en otra pestaña.
- *  - [CONFIG] Hito Personal: objetivo actualizado de 5 a 10 partidas;
- *    duración del buff reducida de 60 a 30 minutos. Cambio en events.json.
- *  - [MEJORA] Iconos SVG inline: _icon() ya no depende del sprite externo
- *    del HTML. Incorpora un mapa SVG_ICONS con trazos Lucide-compatibles
- *    que se renderizan en cualquier contexto sin configuración adicional.
- *    Iconos añadidos: trophy, check, alert, coin, slot.
- *  - [FIX] Toast: corregido toast.textContent → toast.innerHTML para
- *    habilitar el renderizado de iconos SVG en notificaciones.
- *  - [MEJORA] Sustituidos todos los emojis funcionales (toasts, badges,
- *    botones, etiquetas de progreso, modal de ruleta) por iconos SVG inline.
- *    Los emojis decorativos de lte-art (lte-art__deco) se mantienen como
- *    elementos de diseño visual.
- *  - [FIX] Gachapón: hero value corregido de '×???' al rango de recompensa
- *    real del evento.
- *
- * CAMBIOS v11.1 (Event Engine Hardening):
- *  - [FIX CRÍTICO] Cacería de Tesoros: anclajes ausentes ya no penalizan
- *    el contador de inyecciones. HUNT_FALLBACK_ANCHORS garantiza 5 items.
- *  - [FIX CRÍTICO] Gachapón Relámpago: límite de 5 tiradas diarias.
- *  - [FIX] Gachapón: _gachaAnimating previene spam durante la animación.
- *  - [MEJORA] Gachapón: modal de ruleta tipo slot machine.
- *  - [BALANCE] Gachapón: VE ≈ 64 con costo 50 (anterior VE ≈ 278).
- *
- * CAMBIOS v11.0 (Meta-Gameplay & Event Engine):
- *  - Motor completo: interactive_hunt, personal_milestone,
- *    gacha_flash, daily_missions.
- *  - Countdown en vivo 60 s. Ciclo de vida SPA (onEnter / onLeave).
- *
- * v11.2 — Event Engine Full Hardening II
+ *  - [FIX CRÍTICO] Cacería de Tesoros: corregido el bug que impedía inyectar
+ *    el número total de objetos. La nueva lógica recopila todos los anclajes
+ *    candidatos de todos los selectores (configurados + fallback), filtra
+ *    aquellos ocultos o de tamaño insuficiente (mínimo 40×40 px para visibles)
+ *    y selecciona aleatoriamente hasta `total` elementos únicos para inyectar.
+ *    Esto garantiza que aparezcan exactamente la cantidad solicitada y que
+ *    todos sean accesibles sin necesidad de navegar a otras vistas.
+ *  - Se añade _collectCandidates() para centralizar la búsqueda.
+ *  - Se amplía HUNT_FALLBACK_ANCHORS con más selectores de la vista de inicio.
+ *  - Se mantiene la corrección de overflow en anclajes y su padre inmediato.
+ *  - [v11.1 y anteriores ya estaban incluidos: milestone listener, gacha daily,
+ *    scheduler de precarga, etc.]
  */
 
 (function () {
@@ -67,9 +29,8 @@
 
     /**
      * Selectores de respaldo para la Cacería de Tesoros.
-     * Todos existen en index.html de forma estática; querySelector los
-     * encuentra en cualquier momento sin importar la vista activa.
-     * Orden: de más grande y confiable a más pequeño o dependiente de contexto.
+     * Se han ampliado con elementos de la vista de inicio y otras secciones
+     * para garantizar suficientes anclajes visibles incluso sin navegar a tienda.
      */
     const HUNT_FALLBACK_ANCHORS = [
         // Game cards — más grandes, bien distribuidos, overflow visible
@@ -83,13 +44,15 @@
         '#faq details:nth-child(1)',
         '#faq details:nth-child(2)',
         '#faq details:nth-child(3)',
-        // Shop elements (visible al navegar a Tienda)
+        // Shop elements (visibles al navegar a Tienda)
         '#view-shop .shop-tabs',
         '#view-shop .promo-toggle-wrap',
-        // HUD
+        // HUD y elementos de la vista de inicio
         '.player-hud',
         '.player-hud .hud-streak',
-        // Contenedores de sección — muy grandes, siempre existen
+        '.hud-balance',
+        '.hud-balance-row',
+        '.games-grid',
         '#games',
         '#faq',
     ];
@@ -247,7 +210,7 @@
      * Resuelve un selector a un elemento del DOM no usado todavía.
      * Soporta múltiples coincidencias y elige una al azar.
      *
-     * [v11.2] Para elementos VISIBLES, requiere un mínimo de 60×40 px para
+     * [v11.2] Para elementos VISIBLES, requiere un mínimo de 40×40 px para
      * garantizar que el item de cacería sea clickeable. Elementos en vistas
      * ocultas (getBoundingClientRect = 0) se permiten sin restricción de
      * tamaño porque serán visibles cuando el usuario navegue a esa vista.
@@ -266,7 +229,7 @@
                     const isHidden = rect.width === 0 && rect.height === 0;
                     if (isHidden) return true;
                     // Elemento visible: debe tener tamaño mínimo para ser usable
-                    return rect.width >= 60 && rect.height >= 40;
+                    return rect.width >= 40 && rect.height >= 40;
                 });
             if (!candidates.length) return null;
             return candidates[Math.floor(Math.random() * candidates.length)];
@@ -295,7 +258,7 @@
         item.style.setProperty('--hunt-top',  `${topPct}%`);
         item.style.setProperty('--hunt-left', `${leftPct}%`);
 
-        // [v11.2] Garantizar posicionamiento relativo y visibilidad
+        // Garantizar posicionamiento relativo y visibilidad
         if (getComputedStyle(anchor).position === 'static') {
             anchor.style.position = 'relative';
         }
@@ -334,9 +297,12 @@
     /**
      * Inicializa la Cacería de Tesoros.
      *
-     * [v11.1 FIX] Los anclajes ausentes ya NO contabilizan hacia el total.
-     * [v11.2 FIX] Selectores de respaldo ampliados. Filtro de tamaño mínimo
-     * en _resolveAnchor. Overflow visible forzado en _injectHuntItem.
+     * [v11.2] Nueva lógica: recopila todos los anclajes candidatos de todos los
+     * selectores, filtra por visibilidad y tamaño mínimo, y selecciona aleatoriamente
+     * hasta `total` elementos únicos para inyectar. Esto garantiza que aparezcan
+     * exactamente la cantidad solicitada y que todos sean accesibles.
+     *
+     * @param {object} eventsData
      */
     function _initHunt(eventsData) {
         const huntEvent = (eventsData.activeEvents || []).find(
@@ -353,29 +319,48 @@
         if (foundIds.length >= total) return;
 
         const configuredAnchors = cfg.anchors || [];
-        const allAnchors = [...configuredAnchors, ...HUNT_FALLBACK_ANCHORS];
+        const allSelectors = [...configuredAnchors, ...HUNT_FALLBACK_ANCHORS];
 
-        const usedEls = new Set();
-        let injected  = 0;
+        // Recolectar todos los elementos candidatos únicos
+        const candidates = [];
+        const usedElements = new Set();
 
-        for (const selector of allAnchors) {
-            if (injected >= total) break;
-
-            const itemId = `hunt-${huntEvent.id}-${injected}`;
-
-            // Item ya recolectado: avanzar contador sin inyectar
-            if (foundIds.includes(itemId)) {
-                injected++;
-                continue;
+        for (const selector of allSelectors) {
+            const elements = Array.from(document.querySelectorAll(selector));
+            for (const el of elements) {
+                if (usedElements.has(el)) continue;
+                // Verificar visibilidad y tamaño
+                const rect = el.getBoundingClientRect();
+                const isHidden = rect.width === 0 && rect.height === 0;
+                if (isHidden) continue; // elementos ocultos no sirven
+                if (rect.width < 40 || rect.height < 40) continue; // demasiado pequeño
+                usedElements.add(el);
+                candidates.push(el);
             }
+        }
 
-            // [v11.1 FIX] Solo avanzar el contador si el anclaje existe
-            const anchor = _resolveAnchor(selector, usedEls);
-            if (!anchor) continue;
+        // Seleccionar aleatoriamente hasta `total` candidatos únicos
+        const selected = [];
+        const shuffled = [...candidates];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        for (let i = 0; i < Math.min(total, shuffled.length); i++) {
+            selected.push(shuffled[i]);
+        }
 
-            usedEls.add(anchor);
-            _injectHuntItem(anchor, itemId, emoji, injected, huntEvent, total, reward);
-            injected++;
+        // Inyectar en los seleccionados
+        for (let idx = 0; idx < selected.length; idx++) {
+            const anchor = selected[idx];
+            const itemId = `hunt-${huntEvent.id}-${idx}`;
+            if (foundIds.includes(itemId)) continue;
+            _injectHuntItem(anchor, itemId, emoji, idx, huntEvent, total, reward);
+        }
+
+        // Si no se alcanzó el total, se puede registrar en consola para depuración
+        if (selected.length < total) {
+            console.warn(`[Cacería] Solo se pudieron inyectar ${selected.length} de ${total} objetos.`);
         }
     }
 

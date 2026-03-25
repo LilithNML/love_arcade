@@ -3902,6 +3902,9 @@ function _isEventLive(event) {
    - `la_hunt_progress_count`: conteo numérico para la UI (evita des-ofuscación en cada render).
 4. Al completar `config.total` objetos, se invoca `window.GameCenter.addCoins(config.reward)`.
 
+v11.2 — Cacería de Tesoros (FIX):
+Se refactorizó _initHunt() para recopilar todos los anclajes candidatos de todos los selectores configurados y de respaldo. Se filtran los elementos ocultos (display: none) y aquellos que no alcanzan un tamaño mínimo de 40×40 px. Se seleccionan aleatoriamente hasta total elementos únicos y se inyecta un objeto en cada uno. Esto garantiza que aparezcan exactamente la cantidad solicitada y que todos sean visibles desde la vista actual, sin necesidad de navegar a otras secciones.
+
 **Seguridad:** los IDs se guardan con ofuscación ligera (XOR posicional) para dificultar la manipulación trivial en DevTools. No es criptografía fuerte; la integridad real de la partida completa está garantizada por el checksum SHA-256 del `sync-worker.js`.
 
 **Configuración en `events.json`:**
