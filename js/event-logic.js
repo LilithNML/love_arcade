@@ -1,39 +1,59 @@
 /**
- * event-logic.js — Love Arcade v11.1
+ * event-logic.js — Love Arcade v11.2
  * ─────────────────────────────────────────────────────────────────────────────
  * Motor de Eventos por Tiempo Limitado (LTE) e interactivos.
  *
+ * CAMBIOS v11.2 (Event Engine — Full Hardening II):
+ *  - [FIX CRÍTICO] Cacería de Tesoros: corregido el bug de visibilidad causado
+ *    por overflow:hidden en los anclajes. Se fuerza overflow:visible en el
+ *    anclaje y en su padre inmediato al inyectar. Añadido filtro de tamaño
+ *    mínimo (60×40 px) para elementos visibles; elementos en vistas ocultas
+ *    (display:none) se permiten sin restricción de tamaño.
+ *    Selectores de respaldo ampliados y reordenados por confiabilidad.
+ *    _safeInitHunt() garantiza que la inyección ocurra siempre después de
+ *    DOMContentLoaded, incluso cuando el fetch de events.json resuelve muy
+ *    rápido desde caché.
+ *  - [FIX CRÍTICO] Hito Personal: corregido el bug donde las partidas
+ *    completadas en páginas externas (games/*.html) nunca se contabilizaban.
+ *    Causa raíz: el CustomEvent 'la:levelcomplete' se despachaba en el
+ *    document de la página del juego, no en el del hub, por lo que el
+ *    listener de event-logic.js nunca lo recibía. La fuente de verdad del
+ *    progreso migra de la clave localStorage la_milestone_progress_*
+ *    (solo actualizable en contexto SPA) a
+ *    GameCenter.getMissionStats().games_played (persistida en el store
+ *    principal y actualizada por completeLevel() en cualquier contexto).
+ *    Nueva función _checkMilestoneCompletion() llamada desde onEnter() para
+ *    detectar e activar hitos cuyas partidas se completaron mientras el
+ *    usuario estaba en otra pestaña.
+ *  - [CONFIG] Hito Personal: objetivo actualizado de 5 a 10 partidas;
+ *    duración del buff reducida de 60 a 30 minutos. Cambio en events.json.
+ *  - [MEJORA] Iconos SVG inline: _icon() ya no depende del sprite externo
+ *    del HTML. Incorpora un mapa SVG_ICONS con trazos Lucide-compatibles
+ *    que se renderizan en cualquier contexto sin configuración adicional.
+ *    Iconos añadidos: trophy, check, alert, coin, slot.
+ *  - [FIX] Toast: corregido toast.textContent → toast.innerHTML para
+ *    habilitar el renderizado de iconos SVG en notificaciones.
+ *  - [MEJORA] Sustituidos todos los emojis funcionales (toasts, badges,
+ *    botones, etiquetas de progreso, modal de ruleta) por iconos SVG inline.
+ *    Los emojis decorativos de lte-art (lte-art__deco) se mantienen como
+ *    elementos de diseño visual.
+ *  - [FIX] Gachapón: hero value corregido de '×???' al rango de recompensa
+ *    real del evento.
+ *
  * CAMBIOS v11.1 (Event Engine Hardening):
- *  - [FIX CRÍTICO] Cacería de Tesoros: corregido el bug donde los anclajes
- *    ausentes contabilizaban hacia el total de objetos inyectados, resultando
- *    en solo 2 de 5 items visibles. Ahora los anclajes faltantes se omiten
- *    sin penalización en el contador. Se añade una capa de selectores de
- *    respaldo (HUNT_FALLBACK_ANCHORS) para garantizar siempre 5 inyecciones.
- *  - [FIX] Cacería de Tesoros: los objetos se distribuyen en secciones
- *    variadas de la plataforma (vista de Tienda incluida, que el usuario
- *    debe visitar para encontrarlos) usando posicionamiento por cuadrantes
- *    alternos, evitando agrupaciones predecibles.
- *  - [FIX CRÍTICO] Gachapón Relámpago: añadido límite de 5 tiradas diarias
- *    por evento (clave localStorage la_gacha_daily_{eventId}). El botón se
- *    bloquea cuando se alcanza el límite y la tarjeta indica cuántas tiradas
- *    quedan disponibles en el día.
- *  - [FIX] Gachapón Relámpago: eliminado el farmeo por spam de botón. El
- *    botón se desactiva durante la animación de ruleta y solo se reactiva
- *    al cerrar el modal.
- *  - [MEJORA] Gachapón Relámpago: nuevo modal de ruleta tipo tragamonedas.
- *    Al girar se abre un overlay con números animados que aterrizan en el
- *    resultado real. No interfiere con el layout de la sección de eventos.
- *  - [BALANCE] Gachapón Relámpago: probabilidades reequilibradas.
- *    Anterior: VE ≈ 278 monedas con costo 50 (farmeo masivo).
- *    Nueva:    VE ≈ 65 monedas con costo 50 (net +15/tirada, razonable).
- *    Con límite 5 tiradas/día: ganancia neta esperada máxima ≈ 75 /día.
+ *  - [FIX CRÍTICO] Cacería de Tesoros: anclajes ausentes ya no penalizan
+ *    el contador de inyecciones. HUNT_FALLBACK_ANCHORS garantiza 5 items.
+ *  - [FIX CRÍTICO] Gachapón Relámpago: límite de 5 tiradas diarias.
+ *  - [FIX] Gachapón: _gachaAnimating previene spam durante la animación.
+ *  - [MEJORA] Gachapón: modal de ruleta tipo slot machine.
+ *  - [BALANCE] Gachapón: VE ≈ 64 con costo 50 (anterior VE ≈ 278).
  *
  * CAMBIOS v11.0 (Meta-Gameplay & Event Engine):
  *  - Motor completo: interactive_hunt, personal_milestone,
  *    gacha_flash, daily_missions.
  *  - Countdown en vivo 60 s. Ciclo de vida SPA (onEnter / onLeave).
  *
- * v11.1 — Event Engine Hardening
+ * v11.2 — Event Engine Full Hardening II
  */
 
 (function () {
@@ -41,7 +61,7 @@
 
     const EVENTS_CACHE_KEY  = 'love_arcade_events_v1';
     const HUNT_PROGRESS_KEY = 'la_hunt_progress';
-    const MILESTONE_KEY     = 'la_milestone_progress';
+    const MILESTONE_KEY     = 'la_milestone';
     const GACHA_DAILY_KEY   = 'la_gacha_daily';
     const GACHA_DAILY_MAX   = 5;
 
@@ -49,30 +69,41 @@
      * Selectores de respaldo para la Cacería de Tesoros.
      * Todos existen en index.html de forma estática; querySelector los
      * encuentra en cualquier momento sin importar la vista activa.
-     * Orden: de más accesible a más escondido/sorpresivo.
+     * Orden: de más grande y confiable a más pequeño o dependiente de contexto.
      */
     const HUNT_FALLBACK_ANCHORS = [
+        // Game cards — más grandes, bien distribuidos, overflow visible
+        '#games .game-card:nth-child(1)',
+        '#games .game-card:nth-child(2)',
         '#games .game-card:nth-child(3)',
+        '#games .game-card:nth-child(4)',
+        '#games .game-card:nth-child(5)',
         '#games .game-card:nth-child(6)',
-        '#games .game-card:nth-child(9)',
+        // FAQ sections
+        '#faq details:nth-child(1)',
         '#faq details:nth-child(2)',
-        '#faq details:nth-child(5)',
-        '#view-shop .promo-toggle-wrap',
+        '#faq details:nth-child(3)',
+        // Shop elements (visible al navegar a Tienda)
         '#view-shop .shop-tabs',
+        '#view-shop .promo-toggle-wrap',
+        // HUD
+        '.player-hud',
         '.player-hud .hud-streak',
+        // Contenedores de sección — muy grandes, siempre existen
+        '#games',
+        '#faq',
     ];
 
     /**
      * Cuadrantes de posicionamiento para items de cacería.
-     * Cada item usa un cuadrante distinto dentro del contenedor para
-     * evitar que aparezcan siempre en la misma zona relativa.
+     * Rangos más conservadores (15–75%) para no salirse de elementos pequeños.
      */
     const HUNT_QUADRANTS = [
-        { top: [8,  26], left: [65, 88] },
-        { top: [68, 86], left: [6,  28] },
-        { top: [6,  22], left: [6,  28] },
-        { top: [66, 85], left: [65, 88] },
-        { top: [38, 56], left: [72, 90] },
+        { top: [12, 30], left: [60, 78] },
+        { top: [62, 78], left: [12, 30] },
+        { top: [12, 30], left: [12, 30] },
+        { top: [62, 78], left: [60, 78] },
+        { top: [38, 55], left: [38, 62] },
     ];
 
     let _eventsCache = null;
@@ -82,6 +113,40 @@
 
     /** Bloquea el botón del gacha mientras el modal de ruleta está abierto. */
     let _gachaAnimating = false;
+
+    // ════════════════════════════════════════════════════════════════════════════
+    // ICONOS SVG INLINE — independientes del sprite externo
+    // ════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Trazos SVG (Lucide-compatibles, stroke, 24×24 viewBox).
+     * No requieren sprite ni definiciones externas en el HTML.
+     */
+    const SVG_ICONS = {
+        clock:   '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+        info:    '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+        zap:     '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+        star:    '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+        calendar:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+        trophy:  '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
+        check:   '<polyline points="20 6 9 17 4 12"/>',
+        alert:   '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+        coin:    '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5C9.5 8.12 10.62 7 12 7s2.5 1.12 2.5 2.5S13.38 12 12 12s-2.5 1.12-2.5 2.5S10.62 17 12 17s2.5-1.12 2.5-2.5"/>',
+        slot:    '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 7h2v6H7zM11 7h2v6h-2zM15 7h2v6h-2z"/>',
+    };
+
+    /**
+     * Genera un elemento SVG inline a partir del mapa SVG_ICONS.
+     * No depende de ningún sprite externo definido en el HTML.
+     *
+     * @param {string} name  Clave del icono en SVG_ICONS (ej: 'clock', 'star').
+     * @param {number} [size=18]  Tamaño en píxeles del lado del icono.
+     * @returns {string} Markup HTML del icono SVG.
+     */
+    function _icon(name, size = 18) {
+        const paths = SVG_ICONS[name] || SVG_ICONS.star;
+        return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+    }
 
     // ════════════════════════════════════════════════════════════════════════════
     // UTILIDADES DE TIEMPO
@@ -108,10 +173,6 @@
         return mins > 0 ? `${mins} min` : 'Menos de 1 min';
     }
 
-    function _icon(name, size = 18) {
-        return `<svg class="icon" width="${size}" height="${size}" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
-    }
-
     // ════════════════════════════════════════════════════════════════════════════
     // CARGA DE DATOS
     // ════════════════════════════════════════════════════════════════════════════
@@ -128,7 +189,7 @@
                     localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
                 } catch (_) {}
                 window.isEventActive = isEventActive;
-                _initHunt(data);
+                _safeInitHunt(data);
                 _initMilestoneListener(data);
                 return data;
             })
@@ -185,12 +246,28 @@
     /**
      * Resuelve un selector a un elemento del DOM no usado todavía.
      * Soporta múltiples coincidencias y elige una al azar.
+     *
+     * [v11.2] Para elementos VISIBLES, requiere un mínimo de 60×40 px para
+     * garantizar que el item de cacería sea clickeable. Elementos en vistas
+     * ocultas (getBoundingClientRect = 0) se permiten sin restricción de
+     * tamaño porque serán visibles cuando el usuario navegue a esa vista.
+     *
+     * @param {string}   selector  Selector CSS a evaluar.
+     * @param {Set}      usedEls   Elementos ya utilizados en esta inyección.
      * @returns {Element|null}
      */
     function _resolveAnchor(selector, usedEls) {
         try {
             const candidates = Array.from(document.querySelectorAll(selector))
-                .filter(el => !usedEls.has(el));
+                .filter(el => {
+                    if (usedEls.has(el)) return false;
+                    const rect = el.getBoundingClientRect();
+                    // Elemento en vista oculta (display:none en la SPA): OK
+                    const isHidden = rect.width === 0 && rect.height === 0;
+                    if (isHidden) return true;
+                    // Elemento visible: debe tener tamaño mínimo para ser usable
+                    return rect.width >= 60 && rect.height >= 40;
+                });
             if (!candidates.length) return null;
             return candidates[Math.floor(Math.random() * candidates.length)];
         } catch (_) { return null; }
@@ -198,6 +275,10 @@
 
     /**
      * Inyecta físicamente un objeto de cacería en el DOM.
+     *
+     * [v11.2 FIX] Se fuerza overflow:visible en el anclaje y en su padre
+     * inmediato para garantizar que el item sea visible aunque el contenedor
+     * tenga overflow:hidden (comportamiento frecuente en .game-card, etc.).
      */
     function _injectHuntItem(anchor, itemId, emoji, quadIdx, huntEvent, total, reward) {
         const q      = HUNT_QUADRANTS[quadIdx % HUNT_QUADRANTS.length];
@@ -214,8 +295,19 @@
         item.style.setProperty('--hunt-top',  `${topPct}%`);
         item.style.setProperty('--hunt-left', `${leftPct}%`);
 
+        // [v11.2] Garantizar posicionamiento relativo y visibilidad
         if (getComputedStyle(anchor).position === 'static') {
             anchor.style.position = 'relative';
+        }
+        anchor.style.overflow = 'visible';
+
+        // Propagar overflow:visible al padre inmediato si lo oculta
+        const parent = anchor.parentElement;
+        if (parent) {
+            const parentOverflow = getComputedStyle(parent).overflow;
+            if (parentOverflow === 'hidden' || parentOverflow === 'clip') {
+                parent.style.overflow = 'visible';
+            }
         }
 
         item.addEventListener('click', () =>
@@ -225,11 +317,26 @@
     }
 
     /**
+     * Wrapper seguro para _initHunt: garantiza ejecución tras DOMContentLoaded.
+     *
+     * [v11.2] El fetch puede resolver desde caché antes de que el DOM esté listo
+     * en primera visita. Esta función detecta el estado del documento y difiere
+     * la inyección si es necesario.
+     */
+    function _safeInitHunt(eventsData) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => _initHunt(eventsData), { once: true });
+        } else {
+            _initHunt(eventsData);
+        }
+    }
+
+    /**
      * Inicializa la Cacería de Tesoros.
      *
      * [v11.1 FIX] Los anclajes ausentes ya NO contabilizan hacia el total.
-     * El loop continúa hasta inyectar exactamente `total` items, usando
-     * primero los selectores del JSON y luego HUNT_FALLBACK_ANCHORS.
+     * [v11.2 FIX] Selectores de respaldo ampliados. Filtro de tamaño mínimo
+     * en _resolveAnchor. Overflow visible forzado en _injectHuntItem.
      */
     function _initHunt(eventsData) {
         const huntEvent = (eventsData.activeEvents || []).find(
@@ -240,7 +347,7 @@
         const cfg    = huntEvent.config || {};
         const total  = cfg.total    || 5;
         const emoji  = cfg.itemEmoji || '⭐';
-        const reward = cfg.reward  || 500;
+        const reward = cfg.reward   || 500;
 
         const foundIds = _readHuntIds();
         if (foundIds.length >= total) return;
@@ -256,12 +363,13 @@
 
             const itemId = `hunt-${huntEvent.id}-${injected}`;
 
+            // Item ya recolectado: avanzar contador sin inyectar
             if (foundIds.includes(itemId)) {
                 injected++;
                 continue;
             }
 
-            // [v11.1 FIX] Solo avanzar el contador si el anclaje existe.
+            // [v11.1 FIX] Solo avanzar el contador si el anclaje existe
             const anchor = _resolveAnchor(selector, usedEls);
             if (!anchor) continue;
 
@@ -285,9 +393,15 @@
 
         const remaining = total - foundIds.length;
         if (remaining > 0) {
-            _showToast(`⭐ +1 estrella · Faltan ${remaining}`, '#7c3aed');
+            _showToast(
+                `${_icon('star', 15)}&thinsp;+1 estrella &middot; Faltan ${remaining}`,
+                '#7c3aed'
+            );
         } else {
-            _showToast(`🎉 ¡Cacería completa! +${reward} monedas`, '#7c3aed');
+            _showToast(
+                `${_icon('trophy', 15)}&thinsp;¡Cacería completa! +${reward} monedas`,
+                '#7c3aed'
+            );
             if (window.GameCenter) {
                 window.GameCenter.addCoins(reward, `Cacería completada: ${huntEvent.id}`);
             }
@@ -299,23 +413,98 @@
     // MECÁNICA: HITOS PERSONALES (personal_milestone)
     // ════════════════════════════════════════════════════════════════════════════
 
-    function _readMilestoneProgress(eventId) {
-        try {
-            const raw = localStorage.getItem(`${MILESTONE_KEY}_${eventId}`);
-            if (!raw) return 0;
-            const { count, date } = JSON.parse(raw);
-            const today = new Date().toISOString().slice(0, 10);
-            return date === today ? (count || 0) : 0;
-        } catch (_) { return 0; }
+    /**
+     * Lee el progreso del hito leyendo directamente desde GameCenter.getMissionStats().
+     *
+     * [v11.2 FIX] Migrado desde la clave localStorage la_milestone_progress_*,
+     * que solo se actualizaba cuando la:levelcomplete disparaba en el contexto
+     * del hub. Los juegos externos (games/*.html) despachan ese evento en su
+     * propio document, por lo que el hub nunca lo recibía.
+     * GameCenter.getMissionStats().games_played se actualiza en cualquier
+     * contexto porque completeLevel() persiste en localStorage directamente.
+     */
+    function _readMilestoneProgress() {
+        if (window.GameCenter?.getMissionStats) {
+            return window.GameCenter.getMissionStats().games_played;
+        }
+        return 0;
     }
 
-    function _writeMilestoneProgress(eventId, count) {
+    /**
+     * Comprueba si el multiplicador del hito ya fue activado hoy.
+     * Evita re-activaciones en cada llamada a onEnter().
+     */
+    function _isMilestoneActivatedToday(eventId) {
+        try {
+            const raw = localStorage.getItem(`${MILESTONE_KEY}_activated_${eventId}`);
+            if (!raw) return false;
+            const { date } = JSON.parse(raw);
+            return date === new Date().toISOString().slice(0, 10);
+        } catch (_) { return false; }
+    }
+
+    function _setMilestoneActivatedToday(eventId) {
         try {
             const today = new Date().toISOString().slice(0, 10);
-            localStorage.setItem(`${MILESTONE_KEY}_${eventId}`, JSON.stringify({ count, date: today }));
+            localStorage.setItem(
+                `${MILESTONE_KEY}_activated_${eventId}`,
+                JSON.stringify({ date: today })
+            );
         } catch (_) {}
     }
 
+    /**
+     * Evalúa si algún hito personal debe activar su multiplicador.
+     * Se llama desde onEnter() (para detectar partidas jugadas fuera del hub)
+     * y desde el listener de la:levelcomplete (para activación en sesión).
+     *
+     * [v11.2] Esta función es la única fuente de activación del multiplicador.
+     * _initMilestoneListener solo registra el listener de evento; la lógica
+     * de activación reside aquí para evitar duplicación.
+     *
+     * @param {Object[]} milestoneEvents  Eventos de tipo personal_milestone activos.
+     */
+    function _checkMilestoneCompletion(milestoneEvents) {
+        if (!milestoneEvents || !milestoneEvents.length) return;
+        milestoneEvents.forEach(ev => {
+            if (!_isEventLive(ev)) return;
+
+            const cfg      = ev.config || {};
+            const target   = cfg.target || 10;
+            const progress = _readMilestoneProgress();
+
+            if (progress < target) return;
+            if (_isMilestoneActivatedToday(ev.id)) return;
+
+            _setMilestoneActivatedToday(ev.id);
+
+            const mult     = cfg.multiplier          || 2;
+            const duration = cfg.multiplierDurationMs || 1_800_000;
+
+            if (window.GameCenter) {
+                window.GameCenter.activateBonusMultiplier(
+                    mult, duration,
+                    `Hito: ${ev.ui?.title || ev.id}`
+                );
+            }
+
+            _showToast(
+                `${_icon('trophy', 15)}&thinsp;¡Hito completado! ×${mult} por ${Math.round(duration / 60_000)} min`,
+                '#f59e0b'
+            );
+
+            if (_eventsCache) _renderEventsView(_eventsCache);
+        });
+    }
+
+    /**
+     * Registra el listener de la:levelcomplete para actualizaciones en sesión.
+     *
+     * [v11.2] El listener ya no lleva lógica de contador propia; delega a
+     * _checkMilestoneCompletion() que usa GameCenter.getMissionStats() como
+     * fuente de verdad. Así, partidas completadas fuera del hub (games/*.html)
+     * también se contabilizan cuando el usuario vuelve a la vista de eventos.
+     */
     function _initMilestoneListener(eventsData) {
         const milestoneEvents = (eventsData.activeEvents || []).filter(
             e => e.type === 'personal_milestone' && _isEventLive(e)
@@ -323,26 +512,10 @@
         if (!milestoneEvents.length) return;
 
         document.addEventListener('la:levelcomplete', () => {
-            milestoneEvents.forEach(ev => {
-                if (!_isEventLive(ev)) return;
-                const cfg    = ev.config || {};
-                const target = cfg.target || 5;
-                let progress = _readMilestoneProgress(ev.id);
-                if (progress >= target) return;
-
-                progress++;
-                _writeMilestoneProgress(ev.id, progress);
-
-                if (progress >= target) {
-                    const mult     = cfg.multiplier          || 2;
-                    const duration = cfg.multiplierDurationMs || 3_600_000;
-                    if (window.GameCenter) {
-                        window.GameCenter.activateBonusMultiplier(mult, duration, `Hito: ${ev.ui?.title || ev.id}`);
-                    }
-                    _showToast(`🏆 ¡Hito completado! ×${mult} por ${Math.round(duration / 60000)} min`, '#f59e0b');
-                }
-                if (_eventsCache) _renderEventsView(_eventsCache);
-            });
+            // Re-evaluación inmediata para activación en sesión
+            _checkMilestoneCompletion(milestoneEvents);
+            // Re-renderizar tarjeta con progreso actualizado
+            if (_eventsCache) _renderEventsView(_eventsCache);
         });
     }
 
@@ -387,7 +560,6 @@
         crypto.getRandomValues(buf);
         const rand = buf[0] / 0xFFFFFFFF;
 
-        // Anclas de tier expresadas como porcentaje del max
         const t1 = Math.max(min + 1, Math.min(35,  max * 0.035));
         const t2 = Math.max(t1  + 1, Math.min(90,  max * 0.09));
         const t3 = Math.max(t2  + 1, Math.min(250, max * 0.25));
@@ -458,6 +630,8 @@
      * Números falsos se deslizan y aterrizan en el resultado real.
      * El modal es un overlay fijo; no modifica el layout de la vista de eventos.
      *
+     * [v11.2] Emojis reemplazados por iconos SVG inline.
+     *
      * @param {number}   reward       Monedas ganadas.
      * @param {string}   accentColor  Color de acento del evento.
      * @param {Function} onClose      Callback al cerrar (re-renderiza la vista).
@@ -473,11 +647,19 @@
         );
         const allNums  = [...fakeNums, reward];
 
-        let rewardLabel = '🎰 Resultado';
+        // [v11.2] Labels con iconos SVG en lugar de emojis
+        let rewardLabel = `${_icon('slot', 16)}&thinsp;Resultado`;
         let rewardClass = 'gacha-result--normal';
-        if (reward >= 500)      { rewardLabel = '🎉 ¡JACKPOT!';   rewardClass = 'gacha-result--jackpot'; }
-        else if (reward >= 200) { rewardLabel = '✨ ¡Excelente!'; rewardClass = 'gacha-result--great'; }
-        else if (reward >= 80)  { rewardLabel = '⭐ ¡Bien!';      rewardClass = 'gacha-result--good'; }
+        if (reward >= 500)      {
+            rewardLabel = `${_icon('trophy', 16)}&thinsp;¡JACKPOT!`;
+            rewardClass = 'gacha-result--jackpot';
+        } else if (reward >= 200) {
+            rewardLabel = `${_icon('zap', 16)}&thinsp;¡Excelente!`;
+            rewardClass = 'gacha-result--great';
+        } else if (reward >= 80) {
+            rewardLabel = `${_icon('star', 16)}&thinsp;¡Bien!`;
+            rewardClass = 'gacha-result--good';
+        }
 
         const overlay = document.createElement('div');
         overlay.id        = 'la-gacha-overlay';
@@ -489,7 +671,7 @@
         overlay.innerHTML = `
         <div class="gacha-roulette-modal" style="--gacha-color:${accentColor};">
             <div class="gacha-roulette-header">
-                <span class="gacha-roulette-icon" aria-hidden="true">🎰</span>
+                <span class="gacha-roulette-icon" aria-hidden="true">${_icon('slot', 28)}</span>
                 <h3 class="gacha-roulette-title">Portal Estelar</h3>
             </div>
 
@@ -505,11 +687,11 @@
             </div>
 
             <div class="gacha-roulette-result ${rewardClass}" id="la-gacha-result" aria-live="polite">
-                <span class="gacha-result-coins">+${reward} 🪙</span>
+                <span class="gacha-result-coins">${_icon('coin', 18)}&thinsp;+${reward}</span>
                 <span class="gacha-result-label">${rewardLabel}</span>
             </div>
 
-            <button class="gacha-roulette-close hidden" id="la-gacha-close">¡Genial! ✨</button>
+            <button class="gacha-roulette-close hidden" id="la-gacha-close">¡Genial!</button>
         </div>`;
 
         document.body.appendChild(overlay);
@@ -518,7 +700,6 @@
         const strip   = document.getElementById('la-slot-strip');
         const targetY = (allNums.length - 1) * ITEM_H;
 
-        // Doble rAF garantiza que el browser calculó el tamaño antes de animar
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 strip.style.transition = `transform 2.4s cubic-bezier(0.22, 0.68, 0, 1.05)`;
@@ -530,7 +711,6 @@
         const closeBtn = document.getElementById('la-gacha-close');
 
         strip.addEventListener('transitionend', () => {
-            // Micro-rebote en el último número
             strip.style.transition = 'transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)';
             strip.style.transform  = `translateY(-${targetY - 6}px)`;
             setTimeout(() => {
@@ -570,13 +750,21 @@
     // TOAST — Notificaciones flotantes ligeras
     // ════════════════════════════════════════════════════════════════════════════
 
+    /**
+     * Muestra una notificación flotante breve.
+     *
+     * [v11.2 FIX] Usa innerHTML en lugar de textContent para permitir que
+     * los iconos SVG inline (_icon()) se rendericen correctamente.
+     * El contenido siempre viene de strings literales del código (no de
+     * input de usuario), por lo que el uso de innerHTML es seguro.
+     */
     function _showToast(message, color = 'var(--accent)') {
         const toast = document.createElement('div');
         toast.className = 'la-event-toast';
         toast.style.setProperty('--toast-color', color);
-        toast.textContent = message;
+        toast.innerHTML = message;   // [v11.2] innerHTML para SVG icons
         document.body.appendChild(toast);
-        toast.getBoundingClientRect();
+        toast.getBoundingClientRect(); // forzar reflow para la animación CSS
         toast.classList.add('la-event-toast--visible');
         setTimeout(() => {
             toast.classList.remove('la-event-toast--visible');
@@ -626,7 +814,7 @@
             colorGlow: 'rgba(236,72,153,0.18)',
             gradientBg: 'linear-gradient(150deg,#140009 0%,#200010 60%,rgba(236,72,153,0.06) 100%)',
             artEmojis: ['🎰','✨','💎','🎰'],
-            getHeroValue: ev => `${ev.config?.cost || 50}🪙`,
+            getHeroValue: ev => `${ev.config?.cost || 50} m.`,
             getShortDesc:  ev => ev.ui?.description || 'Gachapón de tiempo limitado. ¡Gana hasta 1000 monedas!'
         },
         daily_missions: {
@@ -665,7 +853,9 @@
             <div class="lte-card__accent-bar" style="background:linear-gradient(90deg,${color} 0%,transparent 100%);"></div>
             <div class="lte-card__head">
                 ${isComplete
-                    ? `<span class="lte-status-badge" style="background:rgba(16,185,129,0.2);color:#10b981;border-color:rgba(16,185,129,0.4);">COMPLETADA ✓</span>`
+                    ? `<span class="lte-status-badge" style="background:rgba(16,185,129,0.2);color:#10b981;border-color:rgba(16,185,129,0.4);">
+                           ${_icon('check', 11)}&thinsp;COMPLETADA
+                       </span>`
                     : `<span class="lte-status-badge lte-status-badge--live">
                            <span class="lte-live-dot" style="--dot-color:${color};"></span>EN VIVO
                        </span>`}
@@ -687,7 +877,7 @@
                     <div class="lte-progress-bar__fill"></div>
                 </div>
                 <span class="lte-progress-label" style="color:${color};">
-                    ${foundCount}/${total} estrellas • Premio: ${cfg.reward || 500} monedas
+                    ${foundCount}/${total} estrellas &middot; Premio: ${cfg.reward || 500} monedas
                 </span>
             </div>
         </article>`;
@@ -695,17 +885,18 @@
 
     function _renderMilestoneCard(event, meta) {
         const cfg      = event.config || {};
-        const target   = cfg.target  || 5;
+        const target   = cfg.target  || 10;
         const mult     = cfg.multiplier || 2;
-        const durMin   = Math.round((cfg.multiplierDurationMs || 3_600_000) / 60_000);
-        const progress = _readMilestoneProgress(event.id);
+        const durMin   = Math.round((cfg.multiplierDurationMs || 1_800_000) / 60_000);
+        // [v11.2] Progreso leído desde GameCenter.getMissionStats().games_played
+        const progress = _readMilestoneProgress();
         const isDone   = progress >= target;
         const timeLeft = _formatTimeLeft(event.endDate);
         const color    = meta.color;
 
         const bonusStatus = window.GameCenter?.getBonusMultiplierStatus?.() || { active: false };
         const bonusLabel  = bonusStatus.active && bonusStatus.multiplier === mult
-            ? `✓ ×${mult} ACTIVO · ${Math.ceil(bonusStatus.remainingMs / 60_000)} min restantes`
+            ? `${_icon('check', 11)}&thinsp;×${mult} ACTIVO &middot; ${Math.ceil(bonusStatus.remainingMs / 60_000)} min restantes`
             : null;
 
         return `
@@ -719,7 +910,9 @@
             <div class="lte-card__head">
                 ${isDone
                     ? `<span class="lte-status-badge" style="background:rgba(16,185,129,0.2);color:#10b981;border-color:rgba(16,185,129,0.4);">
-                           ${bonusLabel ? `×${mult} ACTIVO ⚡` : 'COMPLETADO ✓'}
+                           ${bonusLabel
+                               ? `${_icon('zap', 11)}&thinsp;×${mult} ACTIVO`
+                               : `${_icon('check', 11)}&thinsp;COMPLETADO`}
                        </span>`
                     : `<span class="lte-status-badge lte-status-badge--live">
                            <span class="lte-live-dot" style="--dot-color:${color};"></span>EN VIVO
@@ -746,7 +939,7 @@
                     <div class="lte-progress-bar__fill"></div>
                 </div>
                 <span class="lte-progress-label" style="color:${color};">
-                    ${progress}/${target} partidas · buff de ${durMin} min al completar
+                    ${progress}/${target} partidas &middot; buff de ${durMin} min al completar
                 </span>
             </div>
         </article>`;
@@ -755,11 +948,13 @@
     /**
      * Renderiza la tarjeta del Gachapón Relámpago.
      * [v11.1] Muestra tiradas restantes del día y bloquea al agotar el límite.
+     * [v11.2] Emojis reemplazados por iconos SVG. Hero value corregido.
      */
     function _renderGachaCard(event, meta) {
         const cfg      = event.config || {};
         const cost     = cfg.cost      || 50;
         const maxRew   = cfg.maxReward || 1000;
+        const minRew   = cfg.minReward || 10;
         const timeLeft = _formatTimeLeft(event.endDate);
         const color    = meta.color;
         const balance  = window.GameCenter?.getBalance?.() || 0;
@@ -770,15 +965,15 @@
         const canSpin        = !dailyExhausted && balance >= cost;
 
         const btnLabel = dailyExhausted
-            ? `⏳ Límite diario (${GACHA_DAILY_MAX}/${GACHA_DAILY_MAX})`
+            ? `${_icon('clock', 14)}&thinsp;Límite diario (${GACHA_DAILY_MAX}/${GACHA_DAILY_MAX})`
             : balance < cost
                 ? `Necesitas ${cost} monedas`
-                : `${_icon('star', 14)}&thinsp;Girar · ${cost} monedas`;
+                : `${_icon('star', 14)}&thinsp;Girar &middot; ${cost} monedas`;
 
         const spinsHint = dailyExhausted
             ? `<span class="lte-gacha-spins lte-gacha-spins--empty">Vuelve mañana para más tiradas</span>`
             : `<span class="lte-gacha-spins" style="color:${meta.colorBorder};">
-                   🎰 ${spinsLeft} de ${GACHA_DAILY_MAX} tiradas disponibles hoy
+                   ${_icon('slot', 13)}&thinsp;${spinsLeft} de ${GACHA_DAILY_MAX} tiradas disponibles hoy
                </span>`;
 
         return `
@@ -798,7 +993,7 @@
                 </span>
             </div>
             <div class="lte-card__hero-wrap">
-                <span class="lte-hero-value" style="color:${color};">×???</span>
+                <span class="lte-hero-value" style="color:${color};">${minRew}–${maxRew}</span>
             </div>
             <div class="lte-card__info">
                 <h3 class="lte-card__name">${event.ui?.title || 'Gachapón Relámpago'}</h3>
@@ -812,7 +1007,7 @@
                 </button>
                 ${spinsHint}
                 <span class="lte-gacha-range" style="color:${meta.colorBorder};">
-                    Gana de ${cfg.minReward || 10} a ${maxRew} monedas
+                    Gana de ${minRew} a ${maxRew} monedas
                 </span>
             </div>
         </article>`;
@@ -847,7 +1042,9 @@
             <div class="lte-mission-item${isClaimed ? ' lte-mission-item--claimed' : ''}">
                 <div class="lte-mission-header">
                     <span class="lte-mission-label">${m.label}</span>
-                    <span class="lte-mission-reward" style="color:${color};">+${m.reward} 🪙</span>
+                    <span class="lte-mission-reward" style="color:${color};">
+                        ${_icon('coin', 13)}&thinsp;+${m.reward}
+                    </span>
                 </div>
                 <div class="lte-progress-bar lte-progress-bar--sm" role="progressbar"
                      aria-valuenow="${current}" aria-valuemax="${m.target}"
@@ -856,7 +1053,9 @@
                 </div>
                 <div class="lte-mission-footer">
                     <span class="lte-progress-label" style="color:${color};">
-                        ${isClaimed ? '✓ Reclamada' : `${currentLabel} / ${targetLabel}`}
+                        ${isClaimed
+                            ? `${_icon('check', 11)}&thinsp;Reclamada`
+                            : `${currentLabel} / ${targetLabel}`}
                     </span>
                     ${isDone && !isClaimed
                         ? `<button class="lte-claim-btn" style="--claim-color:${color};"
@@ -1011,6 +1210,7 @@
      *
      * [v11.1] El flag _gachaAnimating previene spam de tiradas durante la
      * animación. El botón se re-habilita solo al cerrar el modal de ruleta.
+     * [v11.2] Toasts con iconos SVG inline.
      */
     function _bindViewListeners(container, eventsData) {
         container.querySelectorAll('.lte-gacha-btn:not([disabled])').forEach(btn => {
@@ -1024,7 +1224,10 @@
                 const result = _spinGacha(gachaEv);
 
                 if (!result.success) {
-                    _showToast(`⚠️ ${result.message}`, '#94a3b8');
+                    _showToast(
+                        `${_icon('alert', 15)}&thinsp;${result.message}`,
+                        '#94a3b8'
+                    );
                     setTimeout(() => _renderEventsView(_eventsCache), 100);
                     return;
                 }
@@ -1050,7 +1253,10 @@
 
                 const result = window.GameCenter.claimMissionReward(missionId, reward);
                 if (result.success) {
-                    _showToast(`✅ +${reward} monedas reclamadas`, '#10b981');
+                    _showToast(
+                        `${_icon('check', 15)}&thinsp;+${reward} monedas reclamadas`,
+                        '#10b981'
+                    );
                     setTimeout(() => _renderEventsView(_eventsCache), 100);
                 }
             });
@@ -1063,6 +1269,14 @@
 
     let _rendered = false;
 
+    /**
+     * Llamado por spa-router.js al entrar a la vista de eventos.
+     *
+     * [v11.2] Tras cargar y renderizar, evalúa si algún hito personal alcanzó
+     * su objetivo mientras el usuario jugaba en páginas externas (games/*.html).
+     * Esto garantiza que el multiplicador se active aunque el evento
+     * la:levelcomplete nunca llegó al documento del hub.
+     */
     async function onEnter() {
         const container = document.getElementById('view-events');
 
@@ -1079,6 +1293,13 @@
             const eventsData = await _loadEvents();
             _renderEventsView(eventsData);
             _rendered = true;
+
+            // [v11.2] Verificar hitos completados fuera del hub (games/*.html)
+            const milestoneEvents = (eventsData.activeEvents || []).filter(
+                e => e.type === 'personal_milestone' && _isEventLive(e)
+            );
+            _checkMilestoneCompletion(milestoneEvents);
+
         } catch (err) {
             console.warn('[EventLogic] Error al cargar eventos:', err);
         }

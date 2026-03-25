@@ -25,14 +25,14 @@
       "startDate": "2026-03-24T00:00:00",
       "endDate": "2026-03-27T23:59:59",
       "config": {
-        "target": 5,
+        "target": 10,
         "multiplier": 2,
-        "multiplierDurationMs": 3600000
+        "multiplierDurationMs": 1800000
       },
       "ui": {
         "title": "Hito Veloz",
-        "subtitle": "¡5 PARTIDAS!",
-        "description": "Completa 5 partidas para activar ×2 de monedas durante 1 hora.",
+        "subtitle": "¡10 PARTIDAS!",
+        "description": "Completa 10 partidas para activar ×2 de monedas durante 30 minutos.",
         "accentColor": "#f59e0b",
         "icon": "zap"
       }

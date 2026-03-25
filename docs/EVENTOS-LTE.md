@@ -1,5 +1,5 @@
-# 🎯 Sistema de Eventos LTE — Love Arcade
-### Documentación técnica · v11.1
+# Sistema de Eventos LTE — Love Arcade
+### Documentación técnica · v11.2
 
 ---
 
@@ -34,21 +34,24 @@ data/events.json
         │ fetch inmediato al parsear el módulo
         ▼
 event-logic.js
-  ├── _loadEvents()         Carga, cacheo memoria + localStorage
-  ├── isEventActive(id)     API síncrona sobre caché en memoria
-  ├── _initHunt()           Inyecta objetos de cacería en el DOM
-  ├── _spinGacha()          Giro con límite diario y balance corregido
-  ├── _showGachaRoulette()  Modal slot machine (overlay fijo)
-  ├── _renderEventsView()   UI de #view-events
-  ├── setInterval 60 s      Countdown en vivo
-  └── window.EventView      Ciclo de vida SPA
+  ├── _loadEvents()              Carga, cacheo memoria + localStorage
+  ├── isEventActive(id)          API síncrona sobre caché en memoria
+  ├── _safeInitHunt()            Wrapper DOMContentLoaded-safe para _initHunt
+  ├── _initHunt()                Inyecta objetos de cacería en el DOM
+  ├── _checkMilestoneCompletion()  Evalúa y activa hitos — fuente de verdad
+  ├── _initMilestoneListener()   Registra listener la:levelcomplete
+  ├── _spinGacha()               Giro con límite diario y balance corregido
+  ├── _showGachaRoulette()       Modal slot machine (overlay fijo)
+  ├── _renderEventsView()        UI de #view-events
+  ├── setInterval 60 s           Countdown en vivo
+  └── window.EventView           Ciclo de vida SPA
 
 app.js — GameCenter
-  ├── isEventActive stub    Lee localStorage si event-logic.js no está
-  ├── completeLevel()       Aplica coin_invasion_v1
-  ├── claimDaily()          Aplica streak_boost_v1
-  ├── spendCoins()          Cobro del costo del Gachapón
-  └── addCoins()            Entrega de recompensas (Cacería, Gachapón)
+  ├── isEventActive stub         Lee localStorage si event-logic.js no está
+  ├── completeLevel()            Aplica coin_invasion_v1; incrementa games_played
+  ├── claimDaily()               Aplica streak_boost_v1
+  ├── spendCoins()               Cobro del costo del Gachapón
+  └── addCoins()                 Entrega de recompensas (Cacería, Gachapón)
 ```
 
 ---
@@ -56,6 +59,8 @@ app.js — GameCenter
 ## 3. Ciclo de vida y carga de datos
 
 `_loadEvents()` se invoca **al parsear el módulo** (no en DOMContentLoaded) para maximizar el tiempo disponible antes de la primera partida. Escribe el resultado en `localStorage['love_arcade_events_v1']` para que los juegos externos (`games/*.html`) también puedan leer el estado de los eventos.
+
+La inyección de items de cacería se realiza a través de `_safeInitHunt()`, que detecta si el DOM ya está listo y difiere la ejecución a `DOMContentLoaded` si es necesario. Esto evita que un fetch muy rápido desde caché intente inyectar antes de que existan los elementos objetivo.
 
 ---
 
@@ -94,18 +99,22 @@ Inyecta objetos flotantes (`.treasure-item`) en elementos del DOM. El jugador ha
 | `total`     | number   | Número de objetos a encontrar                   | `5`     |
 | `reward`    | number   | Monedas al completar                            | `500`   |
 
-**[v11.1] Corrección de inyección:**
+**[v11.2] Correcciones de visibilidad e inyección:**
 
-En versiones anteriores, los selectores ausentes en el DOM contabilizaban como items inyectados, resultando en menos items visibles que los configurados. En v11.1:
+- `_resolveAnchor()` filtra elementos visibles con dimensiones menores a 60×40 px para garantizar que el item sea clickeable. Elementos en vistas ocultas (display:none, common en SPA) se permiten sin restricción de tamaño.
+- `_injectHuntItem()` fuerza `overflow: visible` en el anclaje y en su padre inmediato. Esto corrige el comportamiento de `.game-card` y otros contenedores que tienen `overflow: hidden` por defecto.
+- `_safeInitHunt()` garantiza que la inyección ocurre siempre post-DOMContentLoaded, incluso cuando el fetch resuelve muy rápido desde caché.
+- `HUNT_FALLBACK_ANCHORS` ampliado a 15 selectores (antes 8), reordenados de más grande y confiable a más específico.
 
-- Los selectores ausentes se **omiten sin penalización**.
-- Se usa `HUNT_FALLBACK_ANCHORS` (lista de selectores estáticos garantizados) para completar siempre el número `total` de items.
+**[v11.1] Correcciones previas:**
+
+- Los selectores ausentes se **omiten sin penalización** en el contador de inyecciones.
 - Items posicionados en **cuadrantes alternos** dentro de cada contenedor.
 - Algunos items se inyectan en la **vista de Tienda** (requiere navegar para encontrarlos).
 
 Orden de inyección:
 1. Selectores en `config.anchors` de `events.json`
-2. Fallbacks: `.game-card:nth-child(3/6/9)`, `#faq details:nth-child(2/5)`, `#view-shop .promo-toggle-wrap`, `#view-shop .shop-tabs`, `.player-hud .hud-streak`
+2. Fallbacks: `#games .game-card:nth-child(1..6)`, `#faq details:nth-child(1..3)`, `#view-shop .shop-tabs`, `#view-shop .promo-toggle-wrap`, `.player-hud`, `.player-hud .hud-streak`, `#games`, `#faq`
 
 ### 5.4 `gacha_flash` — Gachapón Relámpago
 
@@ -134,9 +143,23 @@ Activa un multiplicador temporal al completar N partidas en un día.
 
 | Campo                  | Tipo   | Descripción                        | Default       |
 |------------------------|--------|------------------------------------|---------------|
-| `target`               | number | Partidas necesarias                | `5`           |
+| `target`               | number | Partidas necesarias                | `10`          |
 | `multiplier`           | number | Factor del multiplicador           | `2`           |
-| `multiplierDurationMs` | number | Duración del multiplicador (ms)    | `3_600_000`   |
+| `multiplierDurationMs` | number | Duración del multiplicador (ms)    | `1_800_000`   |
+
+> **[v11.2 FIX CRÍTICO]** El progreso del hito ahora se lee desde
+> `GameCenter.getMissionStats().games_played`. Antes se usaba una clave
+> localStorage separada (`la_milestone_progress_*`) que **solo se actualizaba
+> cuando el CustomEvent `la:levelcomplete` disparaba en el contexto del hub**.
+> Los juegos externos (`games/*.html`) despachan ese evento en su propio
+> `document`, por lo que el hub nunca lo recibía y el progreso nunca avanzaba.
+> Ahora `completeLevel()` actualiza `store.missions.games_played` directamente
+> en el store principal (localStorage), que es accesible desde cualquier
+> contexto. `onEnter()` evalúa el estado al navegar a la vista de eventos,
+> activando el multiplicador aunque las partidas se completaron fuera del hub.
+
+> **[v11.2 CONFIG]** Valores actualizados: `target` de 5 → **10** partidas;
+> `multiplierDurationMs` de 3 600 000 → **1 800 000** ms (30 minutos).
 
 ### 5.6 `daily_missions` — Misiones del Día
 
@@ -175,10 +198,13 @@ Las fechas **NO deben incluir sufijo de zona horaria**. Sin sufijo, `new Date(da
 ## 7. Integración con app.js
 
 ```js
-// completeLevel() — multiplicador de monedas
+// completeLevel() — multiplicador de monedas + progreso de misiones
 if (window.isEventActive('coin_invasion_v1')) {
     finalAmount = Math.floor(rewardAmount * 1.5);
 }
+// incrementa store.missions.games_played (persiste en localStorage)
+window.GameCenter.incrementMissionStat('games_played', 1);
+document.dispatchEvent(new CustomEvent('la:levelcomplete', { ... }));
 
 // claimDaily() — boost de racha
 const streakBoost = window.isEventActive('streak_boost_v1') ? 2 : 1;
@@ -196,6 +222,8 @@ El fetch se lanza al parsear el módulo. Si el usuario completa una partida ante
 
 Para juegos externos, el stub de `app.js` lee el caché de `localStorage`. El usuario debe haber visitado el hub al menos una vez para que el caché exista (TTL: 24 h).
 
+**Hito Personal**: La activación del multiplicador se evalúa tanto cuando `la:levelcomplete` dispara en el documento del hub (partida en SPA), como cuando el usuario navega a la vista de eventos (partidas jugadas en páginas externas). No es necesaria ninguna acción adicional por parte del jugador: el multiplicador se activa automáticamente al entrar a la sección de Eventos si ya se alcanzó el objetivo.
+
 ---
 
 ## 9. Ciclo de vida de la vista
@@ -204,7 +232,7 @@ Para juegos externos, el stub de `app.js` lee el caché de `localStorage`. El us
 window.EventView = { onEnter(), onLeave() }
 ```
 
-`onEnter()` — skeleton en primera visita, carga datos, renderiza, inicia setInterval (60 s).  
+`onEnter()` — skeleton en primera visita, carga datos, renderiza, inicia setInterval (60 s). Evalúa hitos completados fuera del hub.
 `onLeave()` — cancela el setInterval con `clearInterval()`.
 
 ---
@@ -230,6 +258,8 @@ mi_tipo: {
 
 **Paso 4** — Implementar `_renderMiTipoCard()` y, si aplica, el efecto en `app.js`.
 
+**Paso 5** — Si el nuevo tipo requiere iconos adicionales, añadirlos al mapa `SVG_ICONS` en `event-logic.js` (no requiere modificar `index.html`).
+
 ---
 
 ## 11. Referencia de campos — events.json
@@ -245,7 +275,7 @@ mi_tipo: {
 | `ui.subtitle`   | string   | —    | Texto secundario. |
 | `ui.description`| string   | —    | Descripción larga en la tarjeta. |
 | `ui.accentColor`| string   | —    | Color CSS del acento. |
-| `ui.icon`       | string   | —    | Nombre del icono SVG (sin prefijo `icon-`). |
+| `ui.icon`       | string   | —    | Nombre del icono (referencia a SVG_ICONS en event-logic.js). |
 
 ---
 
@@ -273,9 +303,10 @@ Para ajustar el balance sin tocar el código, modificar `minReward` y `maxReward
 - Recompensa típica: **500 🪙** al completar los 5 items.
 - Una sola vez por período de evento.
 
-### Hito Personal
+### Hito Personal (valores actualizados v11.2)
 
-- Buff ×2 durante 1 hora al completar 5 partidas en un día.
+- Buff ×2 durante **30 minutos** al completar **10 partidas** en un día.
+- El multiplicador se activa automáticamente al cumplir el objetivo, ya sea durante la sesión o al visitar la sección de Eventos después de jugar.
 
 ### Misiones del Día
 
@@ -287,7 +318,8 @@ Para ajustar el balance sin tocar el código, modificar `minReward` y `maxReward
 
 | Versión | Cambio |
 |---------|--------|
-| **v11.1** | [FIX CRÍTICO] Cacería: selectores ausentes ya no penalizan el contador de inyecciones. Se añade `HUNT_FALLBACK_ANCHORS` para garantizar siempre `total` items. [FIX] Cacería: posicionamiento por cuadrantes alternos, items en vista de Tienda. [FIX CRÍTICO] Gachapón: límite de 5 tiradas diarias con persistencia en `localStorage`. [FIX] Gachapón: `_gachaAnimating` previene spam durante la animación. [MEJORA] Gachapón: modal de ruleta tipo slot machine (overlay fijo, no interfiere con el layout de eventos). [BALANCE] Gachapón: probabilidades reequilibradas, VE ≈ 64 vs costo 50 (anterior VE ≈ 278). |
+| **v11.2** | [FIX CRÍTICO] Cacería: fuerza overflow:visible en anclaje y padre inmediato; filtro de tamaño mínimo (60×40 px) para elementos visibles; _safeInitHunt() garantiza ejecución post-DOMContentLoaded; HUNT_FALLBACK_ANCHORS ampliado a 15 selectores. [FIX CRÍTICO] Hito Personal: fuente de verdad migrada a GameCenter.getMissionStats().games_played; eliminado contador la_milestone_progress_* que nunca se actualizaba con juegos externos (games/*.html); nueva función _checkMilestoneCompletion() evaluada en onEnter() para detectar partidas completadas fuera del hub. [CONFIG] Hito Personal: target 5 → 10 partidas; multiplierDurationMs 3 600 000 → 1 800 000 ms (30 min). [MEJORA] _icon() migrado a SVG inline con mapa SVG_ICONS (clock, info, zap, star, calendar, trophy, check, alert, coin, slot); no depende del sprite externo de index.html. [FIX] _showToast: textContent → innerHTML para renderizar iconos SVG. [MEJORA] Todos los emojis funcionales en toasts, badges, botones y etiquetas de progreso reemplazados por iconos SVG inline. [FIX] Gachapón: hero value corregido de '×???' al rango minReward–maxReward real del evento. |
+| **v11.1** | [FIX CRÍTICO] Cacería: selectores ausentes ya no penalizan el contador de inyecciones. Se añade HUNT_FALLBACK_ANCHORS para garantizar siempre `total` items. [FIX] Cacería: posicionamiento por cuadrantes alternos, items en vista de Tienda. [FIX CRÍTICO] Gachapón: límite de 5 tiradas diarias con persistencia en `localStorage`. [FIX] Gachapón: `_gachaAnimating` previene spam durante la animación. [MEJORA] Gachapón: modal de ruleta tipo slot machine (overlay fijo, no interfiere con el layout de eventos). [BALANCE] Gachapón: probabilidades reequilibradas, VE ≈ 64 vs costo 50 (anterior VE ≈ 278). |
 | **v11.0** | Motor completo: interactive_hunt, personal_milestone, gacha_flash, daily_missions. Countdown en vivo 60 s. Ciclo de vida SPA. |
 | **v10.3** | Fechas naive local time (sin sufijo de zona horaria). `_formatTimeLeft()` muestra horas + minutos. |
 | **v10.2** | Caché en localStorage para juegos externos. Rediseño visual de tarjetas LTE. |
@@ -296,4 +328,4 @@ Para ajustar el balance sin tocar el código, modificar `minReward` y `maxReward
 
 ---
 
-*Documentación mantenida por el equipo de Love Arcade · v11.1*
+*Documentación mantenida por el equipo de Love Arcade · v11.2*
