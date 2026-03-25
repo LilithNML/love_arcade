@@ -3,7 +3,15 @@
  * Punto de entrada principal del juego.
  * Orquesta la lógica entre el Motor (PuzzleEngine), UI, Almacenamiento y Economía.
  *
- * Actualizado v5.0 — Tactical Soul:
+ * Actualizado v6.0 — Cloudinary & Dev Tools:
+ * - LevelManager ya no hace fetch de levels.json; la carga es síncrona en memoria.
+ * - timeLimit: 0 activa el modo sin límite de tiempo (HUD muestra "∞").
+ * - window.dev expone herramientas de depuración desde la consola del navegador.
+ *   · dev.unlockAll()   — desbloquea todos los niveles en localStorage.
+ *   · dev.addCoins(n)   — suma n monedas al balance (requiere GameCenter activo).
+ *   · dev.skipLevel()   — marca el nivel activo como completado con 3 estrellas.
+ *
+ * Sin cambios en v6.0:
  * - GameState centraliza isPaused / timeLeft / timerId.
  * - img.decode() garantiza que la GPU termine de decodificar antes de inicializar
  *   PuzzleEngine — fix definitivo para el "glitch blanco" en assets > 9 MP.
@@ -43,7 +51,7 @@ const GameState = {
    INIT
    ========================================================================= */
 async function init() {
-    console.log('[Main] Iniciando Rompecabezas Arcade...');
+    console.log('[Main] Iniciando Rompecabezas Arcade v6.0...');
 
     await levelManager.loadLevels();
     Storage.validateUnlockedLevels(levelManager.levels);
@@ -56,7 +64,74 @@ async function init() {
     setupNavigation();
     setupSettings();
 
+    // ── Herramientas de depuración (sólo expuestas en window; no afectan prod) ──
+    setupDevTools();
+
     UI.showScreen('menu');
+}
+
+/* =========================================================================
+   DEV TOOLS — window.dev
+   Disponibles desde la consola del navegador durante desarrollo y QA.
+   No modificar flujos de juego; llamar siempre a las funciones públicas.
+   ========================================================================= */
+
+/**
+ * Registra el objeto global `window.dev` con utilidades de depuración.
+ * Llamada una sola vez al final de init().
+ */
+function setupDevTools() {
+    window.dev = {
+        /**
+         * Desbloquea todos los niveles en localStorage.
+         * Útil para navegar directamente a cualquier nivel sin jugar los anteriores.
+         * @example dev.unlockAll()
+         */
+        unlockAll() {
+            levelManager.levels.forEach(l => Storage.unlockLevel(l.id));
+            console.log(`[Dev] ✅ ${levelManager.levels.length} niveles desbloqueados.`);
+        },
+
+        /**
+         * Suma n monedas al balance del jugador via GameCenter.
+         * En modo standalone (sin GameCenter) imprime un aviso.
+         * @param {number} n - Cantidad de monedas a añadir (entero positivo)
+         * @example dev.addCoins(500)
+         */
+        addCoins(n) {
+            if (!Number.isInteger(n) || n <= 0) {
+                console.warn('[Dev] addCoins() requiere un entero positivo.');
+                return;
+            }
+            if (window.GameCenter && typeof window.GameCenter.addCoins === 'function') {
+                window.GameCenter.addCoins(n);
+                console.log(`[Dev] ✅ +${n} monedas añadidas via GameCenter.`);
+            } else {
+                console.warn(`[Dev] GameCenter no disponible. Simulación: +${n} monedas (sin efecto real).`);
+            }
+        },
+
+        /**
+         * Fuerza la victoria del nivel activo con calificación de 3 estrellas.
+         * Si no hay nivel activo emite un aviso.
+         * @example dev.skipLevel()
+         */
+        skipLevel() {
+            if (!currentLevelId || !activeGame) {
+                console.warn('[Dev] No hay ningún nivel activo. Inicia una partida primero.');
+                return;
+            }
+            const levelConfig = levelManager.getLevelById(currentLevelId);
+            if (!levelConfig) {
+                console.warn(`[Dev] Nivel "${currentLevelId}" no encontrado.`);
+                return;
+            }
+            console.log(`[Dev] ✅ Saltando nivel ${currentLevelId} con 3 estrellas.`);
+            handleVictory(levelConfig);
+        }
+    };
+
+    console.log('[Dev] Herramientas disponibles: dev.unlockAll() · dev.addCoins(n) · dev.skipLevel()');
 }
 
 /* =========================================================================
@@ -173,6 +248,8 @@ function initTwinkleDots() {
 /**
  * Starts a level. Uses await img.decode() so the GPU has fully decoded the
  * image before PuzzleEngine is created, eliminating the white-flash glitch.
+ *
+ * Las imágenes se sirven desde Cloudinary (crossOrigin: 'Anonymous' requerido).
  */
 async function startGame(levelId, loadSaved = false) {
     const levelConfig = levelManager.getLevelById(levelId);
@@ -203,7 +280,7 @@ async function startGame(levelId, loadSaved = false) {
     if (loader) loader.classList.remove('hidden');
 
     const img = new Image();
-    img.crossOrigin = 'Anonymous';
+    img.crossOrigin = 'Anonymous';   // Requerido para Cloudinary + canvas
     img.src = levelConfig.image;
 
     try {
@@ -244,6 +321,7 @@ async function startGame(levelId, loadSaved = false) {
     if (levelConfig.timeLimit && levelConfig.timeLimit > 0) {
         startTimer(levelConfig);
     } else {
+        // timeLimit: 0 — modo sin límite de tiempo
         const timerDisplay = document.getElementById('hud-timer');
         if (timerDisplay) {
             timerDisplay.textContent = '∞';

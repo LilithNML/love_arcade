@@ -1,7 +1,7 @@
 # Documentación Técnica — Rompecabezas Arcade
 **Proyecto:** Rompecabezas Arcade (Neural Puzzle)  
 **Plataforma:** Love Arcade  
-**Versión del motor:** `PuzzleEngine v15.0` · `main.js v4.0` · `UIController v3.0`  
+**Versión del motor:** `PuzzleEngine v15.0` · `main.js v6.0` · `UIController v4.0` · `LevelManager v2.2`  
 **Última revisión:** Marzo 2026
 
 ---
@@ -19,31 +19,36 @@
    - 4.5 [Storage.js — Almacenamiento](#45-storagejs--almacenamiento)
    - 4.6 [Economy.js — Sistema de Economía](#46-economyjs--sistema-de-economía)
    - 4.7 [AudioSynth.js — Síntesis de Audio](#47-audiosynthjs--síntesis-de-audio)
-5. [Datos de Configuración — levels.json](#5-datos-de-configuración--levelsjson)
+5. [Arquitectura de Activos — Cloudinary](#5-arquitectura-de-activos--cloudinary)
 6. [Pantallas y Navegación](#6-pantallas-y-navegación)
 7. [Sistema de Progresión del Jugador](#7-sistema-de-progresión-del-jugador)
 8. [Motor Visual — PuzzleEngine en Detalle](#8-motor-visual--puzzleengine-en-detalle)
 9. [Sistema Háptico](#9-sistema-háptico)
 10. [Sistema de Audio Procedural](#10-sistema-de-audio-procedural)
 11. [Características PWA](#11-características-pwa)
-12. [Guía de Mantenimiento y Expansión](#12-guía-de-mantenimiento-y-expansión)
+12. [Herramientas de Desarrollo (Dev Tools)](#12-herramientas-de-desarrollo-dev-tools)
+13. [Accesibilidad (WCAG 2.2)](#13-accesibilidad-wcag-22)
+14. [Guía de Mantenimiento y Expansión](#14-guía-de-mantenimiento-y-expansión)
 
 ---
 
 ## 1. Visión General
 
-**Rompecabezas Arcade** es un juego de puzzles de arrastrar y soltar, construido con JavaScript vanilla y Canvas API, diseñado para correr como Progressive Web App (PWA) dentro del ecosistema **Love Arcade**. El jugador arrastra piezas de una imagen fragmentada hasta reconstruirla dentro de un tablero, compitiendo contra un temporizador para obtener la máxima calificación en estrellas.
+**Rompecabezas Arcade** es un juego de puzzles de arrastrar y soltar, construido con JavaScript vanilla y Canvas API, diseñado para correr como Progressive Web App (PWA) dentro del ecosistema **Love Arcade**. El jugador arrastra piezas de una imagen fragmentada hasta reconstruirla dentro de un tablero.
 
 ### Características principales
 
-- **35 niveles** organizados en tres tramos de dificultad (Básico, Intermedio, Experto).
+- **64 niveles** generados algorítmicamente desde una constante única (`TOTAL_LEVELS`). No se requiere editar JSON para agregar niveles.
+- Activos visuales servidos desde **Cloudinary** con optimización automática de formato (WebP/AVIF).
+- Carga de thumbnails con **IntersectionObserver** real: solo se descargan las imágenes visibles en pantalla, eliminando el retraso de ~3 segundos al entrar a la pantalla de niveles.
 - Motor de renderizado en canvas con soporte para mouse y pantalla táctil.
-- Sistema de recompensas en monedas integrado con el núcleo de **Love Arcade** via `window.GameCenter`.
+- Sistema de recompensas en monedas integrado con **Love Arcade** via `window.GameCenter`.
 - Efectos visuales avanzados: rejilla reactiva con parallax, pulsos radiales, destellos de encaje y partículas.
 - Retroalimentación háptica por vibración (`navigator.vibrate`) para pickup, snap y victoria.
-- Audio procedural sintetizado con la Web Audio API (sin archivos de sonido externos).
+- Audio procedural sintetizado con la Web Audio API.
 - Persistencia de progreso en `localStorage` con sistema de versionado de esquema.
-- Soporte offline via Service Worker.
+- Accesibilidad WCAG 2.2: roles ARIA, navegación por teclado, etiquetas descriptivas.
+- Objeto global `window.dev` con utilidades de depuración accesibles desde la consola del navegador.
 
 ---
 
@@ -51,27 +56,19 @@
 
 ```
 /
-├── index.html                  # Shell HTML de la aplicación
+├── index.html                  # Shell HTML — preconnect Cloudinary, ARIA completo
 ├── manifest.json               # Manifiesto PWA
-├── service-worker.js           # Service Worker para soporte offline
-├── assets/
-│   ├── Nivel1.webp … Nivel35.webp      # Imágenes de nivel
-│   ├── thumbnails/
-│   │   └── Nivel1_thumb.webp … Nivel35_thumb.webp
-│   └── icons/
-│       └── icon-192.png        # Ícono PWA
-├── public/
-│   └── levels.json             # Configuración de todos los niveles
+├── service-worker.js           # Service Worker (modo purge activo)
 └── src/
-    ├── main.js                 # Punto de entrada y orquestador
-    ├── style.css               # Estilos globales (Tactical HUD palette)
+    ├── main.js                 # Punto de entrada y orquestador (v6.0)
+    ├── style.css               # Estilos globales — incluye .sr-only y contain optimizations
     ├── core/
-    │   ├── PuzzleEngine.js     # Motor de renderizado y lógica de piezas
-    │   └── LevelManager.js     # Carga y estado de niveles
+    │   ├── PuzzleEngine.js     # Motor de renderizado y lógica de piezas (v15.0)
+    │   └── LevelManager.js     # Generación algorítmica de niveles (v2.2)
     ├── ui/
-    │   └── UIController.js     # Gestión de pantallas y DOM
+    │   └── UIController.js     # Gestión de pantallas y DOM (v4.0)
     └── systems/
-        ├── Storage.js          # Persistencia en localStorage
+        ├── Storage.js          # Persistencia en localStorage (v2.0)
         ├── Economy.js          # Integración con GameCenter (monedas)
         └── AudioSynth.js       # Síntesis de efectos de sonido
 ```
@@ -80,14 +77,10 @@
 
 ## 3. Arquitectura y Flujo de la Aplicación
 
-El juego sigue un patrón de **orquestador centralizado**: `main.js` importa e instancia todos los módulos y los conecta mediante callbacks, sin que los módulos se conozcan entre sí directamente.
-
-### Diagrama de dependencias
-
 ```
 main.js
- ├── LevelManager   → [lee] levels.json
- ├── UI             → [manipula] DOM / pantallas
+ ├── LevelManager   → [genera en memoria] 64 objetos de nivel + URLs Cloudinary
+ ├── UI             → [manipula] DOM / pantallas / IntersectionObserver
  ├── Storage        → [lee/escribe] localStorage
  ├── PuzzleEngine   → [renderiza] <canvas>
  │     └── callbacks: onSound, onWin, onSnap, onStateChange
@@ -100,37 +93,13 @@ main.js
 ```
 DOMContentLoaded
   └─ init()
-       ├─ LevelManager.loadLevels()         // fetch ./public/levels.json
+       ├─ LevelManager.loadLevels()         // genera 64 niveles en memoria (síncrono)
        ├─ Storage.validateUnlockedLevels()  // repara desbloqueados huérfanos
        ├─ UI.initGlobalInteractions()       // botones: release bounce
        ├─ setupNavigation()                 // bind de todos los botones de nav
        ├─ setupSettings()                   // ajustes de sonido y reset
+       ├─ setupDevTools()                   // registra window.dev
        └─ UI.showScreen('menu')             // muestra pantalla inicial
-```
-
-### Secuencia de un nivel completo
-
-```
-Jugador presiona tarjeta de nivel
-  └─ startGame(levelId)
-       ├─ levelManager.getLevelById()
-       ├─ UI.showScreen('game')
-       ├─ new Image() → img.onload
-       │    ├─ new PuzzleEngine(canvas, config, callbacks)
-       │    ├─ startTimer(levelConfig)
-       │    └─ setupGameControls()
-       │
-       ├─ [Juego activo — player arrastra piezas]
-       │    ├─ PuzzleEngine.onSnap  → AudioSynth.play('snap') + navigator.vibrate([30,20,10])
-       │    └─ PuzzleEngine.onStateChange → Storage.set(`save_${id}`, state)
-       │
-       └─ PuzzleEngine.onWin → handleVictory(levelConfig)
-            ├─ calcular estrellas (pieces × 5 / × 10)
-            ├─ Storage.saveStars()
-            ├─ Storage.unlockLevel(nextId)
-            ├─ Economy.payout(levelId, rewardCoins)
-            ├─ navigator.vibrate([100,50,80,50,200])
-            └─ UI.showVictoryModal()
 ```
 
 ---
@@ -139,221 +108,122 @@ Jugador presiona tarjeta de nivel
 
 ### 4.1 `main.js` — Orquestador
 
-**Ruta:** `src/main.js`  
-**Versión:** v4.0 — Tactical HUD & Precision Geometry
+**Ruta:** `src/main.js` | **Versión:** v6.0
 
-Es el único módulo con acceso global al estado de la sesión de juego. Declara y gestiona las siguientes variables de estado:
+Variables de estado globales:
 
-| Variable        | Tipo              | Descripción                                      |
-|-----------------|-------------------|--------------------------------------------------|
-| `levelManager`  | `LevelManager`    | Instancia global del gestor de niveles           |
-| `activeGame`    | `PuzzleEngine`    | Instancia activa del motor (null si no hay juego)|
-| `gameTimer`     | `number`          | ID del intervalo del temporizador                |
-| `currentLevelId`| `string`          | ID del nivel en juego (ej: `"lvl_5"`)           |
-| `startTime`     | `number`          | Timestamp `Date.now()` al arrancar el nivel      |
+| Variable        | Tipo           | Descripción                                       |
+|-----------------|----------------|---------------------------------------------------|
+| `levelManager`  | `LevelManager` | Instancia global del gestor de niveles            |
+| `activeGame`    | `PuzzleEngine` | Instancia activa del motor (null si no hay juego) |
+| `currentLevelId`| `string`       | ID del nivel en juego (ej: `"lvl_5"`)            |
+| `startTime`     | `number`       | Timestamp `Date.now()` al arrancar el nivel       |
+| `GameState`     | `object`       | Estado centralizado: `isPaused`, `isInGame`, `timeLeft`, `timerId` |
 
-#### Funciones principales
+**`startGame(levelId, loadSaved)`** — Carga imagen desde Cloudinary con `crossOrigin: 'Anonymous'`, espera `img.decode()`, instancia `PuzzleEngine`. Si `timeLimit === 0`, muestra `"∞"` en lugar de iniciar el contador.
 
-**`init()`** — Arranque asíncrono de la app. Llamada en `DOMContentLoaded`.
+**`handleVictory(levelConfig)`** — Calcula estrellas, guarda progreso, desbloquea siguiente nivel, llama a `Economy.payout()`.
 
-**`startGame(levelId, loadSaved)`** — Inicia o restaura un nivel. Carga la imagen, instancia `PuzzleEngine` y arranca el temporizador. Si `loadSaved` es `true`, importa el estado guardado desde `Storage`.
-
-**`handleVictory(levelConfig)`** — Ejecutada por el callback `onWin` de `PuzzleEngine` (con 1500ms de retardo para que se vean las animaciones de victoria). Calcula estrellas, guarda progreso, desbloquea el siguiente nivel, llama a `Economy.payout()` y muestra el modal de victoria.
-
-**`startTimer(levelConfig)`** — Inicia el contador regresivo desde `levelConfig.timeLimit`. Cada segundo actualiza el display del HUD y aplica el color correspondiente al tramo de tiempo (oro/plata/bronce). Al llegar a cero destruye el motor y muestra el modal de Game Over. Aplica la clase `low-time` cuando quedan ≤ 10 segundos.
-
-**`setupGameControls()`** — Registra los botones de control en la pantalla de juego:
-- **Vista Previa** (`btn-preview`): muestra la imagen completa semitransparente mientras se mantiene pulsado.
-- **Imán** (`btn-magnet`): coloca automáticamente una pieza aleatoria en su posición correcta. Costo: 10 monedas (deducidas via `window.GameCenter.buyItem`). En modo standalone (desarrollo), solicita confirmación sin costo.
-
-**`saveProgress(lid)`** — Serializa el estado actual del motor via `activeGame.exportState()` y lo persiste con `Storage.set()`.
+**`setupDevTools()`** — Registra `window.dev`. Ver [Sección 12](#12-herramientas-de-desarrollo-dev-tools).
 
 ---
 
 ### 4.2 `PuzzleEngine.js` — Motor de Juego
 
-**Ruta:** `src/core/PuzzleEngine.js`  
-**Versión:** v15.0 — Tactical HUD & Precision Geometry
+**Ruta:** `src/core/PuzzleEngine.js` | **Versión:** v15.0
 
-Es el módulo más extenso. Gestiona todo lo que ocurre dentro del `<canvas>`: generación de piezas, shuffle, física de arrastre, detección de snap, efectos visuales y el loop de animación.
+Motor canvas con cuatro buffers de dibujo: `canvas` (principal), `staticCanvas` (tablero + piezas encajadas), `sourceCanvas` (imagen escalada), `gridCanvas` (rejilla offscreen).
 
-#### Constructor
+El loop `requestAnimationFrame` se **detiene automáticamente** cuando no hay nada que animar (sin drag, sin partículas, sin efectos activos), reduciendo el consumo de batería en reposo.
 
-```js
-new PuzzleEngine(canvasElement, config, callbacks)
-```
-
-| Parámetro       | Descripción                                                       |
-|-----------------|-------------------------------------------------------------------|
-| `canvasElement` | El elemento `<canvas id="puzzle-canvas">` del DOM                |
-| `config.image`  | Objeto `Image` ya cargado con la imagen del nivel                 |
-| `config.pieces` | Número de piezas (debe ser cuadrado perfecto: 16 o 25)            |
-| `callbacks`     | Objeto con `onSound`, `onWin`, `onSnap`, `onStateChange`          |
-
-#### Buffers de Canvas
-
-El motor usa **cuatro superficies de dibujo** distintas para optimizar rendimiento:
-
-| Buffer          | Propósito                                                         |
-|-----------------|-------------------------------------------------------------------|
-| `canvas`        | Canvas principal visible. Reescrito en cada frame del loop.       |
-| `staticCanvas`  | Capa estática: tablero y piezas encajadas. Solo se actualiza al producirse un snap. |
-| `sourceCanvas`  | Copia escalada de la imagen original a resolución del tablero.    |
-| `gridCanvas`    | Rejilla de fondo (líneas azules, offscreen). Se reconstruye solo en resize. |
-
-#### Loop de animación — sistema de pausa inteligente
-
-El loop usa `requestAnimationFrame` pero se **detiene automáticamente** cuando no hay nada que animar, reduciendo el consumo de batería en dispositivos móviles:
-
-```
-canStop = true si:
-  - no hay drag activo
-  - no hay partículas
-  - no hay snapFlashes
-  - no hay edgePulses
-  - no hay needsStaticUpdate
-  - no hay preview activo
-  - _idleWakeCount ≤ 0
-```
-
-Un `setInterval` de 5 segundos reactiva el loop durante ~70 frames para animar el parpadeo de los micro-puntos de la rejilla.
-
-#### Generación de topología de piezas
-
-El método `generateSharedTopology()` crea la geometría de bordes **una sola vez** al inicializar, asegurando que las piezas encajen entre sí con precisión perfecta:
-
-1. Para cada celda se asigna una dirección de lengüeta (`+1` = hacia afuera, `-1` = entrante) de forma aleatoria.
-2. La dirección del borde compartido entre dos piezas adyacentes es siempre opuesta (si A tiene `+1` en su borde derecho, B tiene `-1` en su borde izquierdo).
-3. Los bordes exteriores del tablero siempre tienen valor `0` (rectos).
-4. Se añade un `jitter` aleatorio a cada borde (±15% del tamaño del tab) para que ninguna pieza sea idéntica.
-
-Las piezas se dibujan usando `Path2D` con curvas `bezierCurveTo`, lo que permite tanto el clipping de la imagen como la detección de colisiones.
-
-#### Detección de snap
-
-Al soltar una pieza, se calcula la distancia euclidiana entre su posición actual y su posición correcta. Si la distancia es menor al 30% del ancho de pieza (`pieceWidth * 0.3`), la pieza se encaja automáticamente. El umbral de detección de toque al levantar es más generoso (`tabSize * 2.0`) para compensar la imprecisión del dedo.
-
-#### Shuffle y zonas de distribución
-
-El método `shufflePieces()` distribuye las piezas sueltas en **tres zonas seguras** que evitan solapar el tablero y los controles del HUD:
-
-- Zona izquierda (entre borde de pantalla y tablero)
-- Zona derecha (entre tablero y borde de pantalla)
-- Zona inferior (debajo del tablero)
-
-Si el espacio disponible es insuficiente (pantallas muy pequeñas), las piezas se distribuyen en toda la pantalla con un mecanismo de collision-avoidance de hasta 50 intentos por pieza.
-
-#### API pública
-
-| Método                  | Descripción                                                        |
-|-------------------------|--------------------------------------------------------------------|
-| `exportState()`         | Retorna array `[{id, cx, cy, locked}]` para persistir en Storage  |
-| `importState(state)`    | Restaura posiciones y estado de bloqueo desde un estado guardado  |
-| `togglePreview(bool)`   | Activa/desactiva la superposición semitransparente de la imagen    |
-| `autoPlacePiece()`      | Encaja aleatoriamente una pieza suelta (power-up Imán)            |
-| `handleResize()`        | Recalcula dimensiones y redistribuye piezas sin perder progreso   |
-| `destroy()`             | Limpia todos los event listeners y detiene el loop                |
+API pública: `exportState()`, `importState(state)`, `togglePreview(bool)`, `autoPlacePiece()`, `handleResize()`, `destroy()`.
 
 ---
 
 ### 4.3 `LevelManager.js` — Gestor de Niveles
 
-**Ruta:** `src/core/LevelManager.js`
+**Ruta:** `src/core/LevelManager.js` | **Versión:** v2.2
 
-Responsable de cargar `levels.json` y combinar la configuración estática de cada nivel con el estado de progreso dinámico del jugador.
+Genera 64 niveles en memoria. Sin fetch de red. `async loadLevels()` es síncrono internamente.
 
-#### Métodos
+#### Constantes
 
-**`loadLevels()`** — Fetch asíncrono de `./public/levels.json`. Agrega el campo `index` numérico a cada nivel para facilitar cálculos de posición relativa.
+| Constante         | Valor                                                | Descripción                              |
+|-------------------|------------------------------------------------------|------------------------------------------|
+| `TOTAL_LEVELS`    | `64`                                                 | Única variable que controla el total     |
+| `CLOUDINARY_BASE` | `https://res.cloudinary.com/dyspgn0sw/image/upload` | URL base del CDN                         |
 
-**`getAllLevelsWithStatus()`** — Combina cada nivel con su estado actual consultando `Storage.isUnlocked()` y `Storage.getStars()`. Retorna objetos con:
+#### Progresión algorítmica
 
-```js
-{
-  ...nivel,            // todos los campos de levels.json
-  status: 'locked' | 'unlocked' | 'completed',
-  stars:  0 | 1 | 2 | 3,
-  thumbnail: string    // fallback a image si thumbnail no existe
-}
-```
+| Campo         | Fórmula                                         | Ejemplo n=1   | Ejemplo n=64  |
+|---------------|-------------------------------------------------|---------------|---------------|
+| `id`          | `"lvl_${n}"`                                    | `"lvl_1"`     | `"lvl_64"`    |
+| `publicId`    | `` `Nivel${String(n).padStart(2,'0')}` ``        | `"Nivel01"`   | `"Nivel64"`   |
+| `pieces`      | `n ≤ 10 ? 16 : 25`                              | `16`          | `25`          |
+| `rewardCoins` | `150 + (n × 2)`                                 | `152`         | `278`         |
+| `timeLimit`   | `0` (constante)                                 | Sin límite ("∞" en HUD)                 |
 
-**`getLevelById(id)`** — Búsqueda directa por ID para cargar la configuración de un nivel.
+#### Cambio v2.2 — Thumbnail w_400 → w_240
 
-**`getNextLevelId(currentId)`** — Retorna el ID del siguiente nivel en el array o `null` si es el último (nivel 35).
+Las tarjetas se muestran a 112px CSS mínimo. Con DPR 2× se necesitan 224px físicos. `w_240` cubre ese requerimiento con 7% de margen y reduce el peso por imagen **~64%** respecto al anterior `w_400`, acelerando la carga inicial de la pantalla de niveles.
 
 ---
 
 ### 4.4 `UIController.js` — Controlador de Interfaz
 
-**Ruta:** `src/ui/UIController.js`  
-**Versión:** v3.0
+**Ruta:** `src/ui/UIController.js` | **Versión:** v4.0
 
-Gestiona exclusivamente el DOM: transiciones entre pantallas, renderizado de la grilla de niveles y modales.
+#### Lazy loading con IntersectionObserver (nuevo en v4.0)
 
-#### `initGlobalInteractions()`
+**Problema resuelto:** En v3.0, `renderLevelsGrid()` asignaba `img.src` inmediatamente para las 64 tarjetas, disparando 64 peticiones HTTP simultáneas. En HTTP/1.1 (el límite es 6 conexiones por dominio), las primeras 6 imágenes bloqueaban el resto, causando un retraso visible de ~3 segundos antes de que las tarjetas aparecieran con contenido.
 
-Registra una delegación de eventos en `document` para aplicar la animación **release bounce** a todos los botones (`.btn`, `.btn-icon`, `.btn-circle`) usando la Web Animations API:
+**Solución implementada:**
 
+```js
+// En lugar de img.src = url (descarga inmediata):
+img.dataset.src = url;   // almacenado, sin descarga
+
+// Solo al entrar al viewport:
+observer.observe(card);  // IntersectionObserver asigna img.src cuando es visible
 ```
-Secuencia de transform: scale3d(0.96) → scale3d(1.02) → scale3d(1.00)
-Duración: 200ms  |  Solo transform (GPU-composited, sin layout thrashing)
+
+El observer usa `rootMargin: '100px 0px'`, lo que inicia la descarga 100px antes de que la tarjeta sea visible, eliminando el efecto pop-in al hacer scroll.
+
+#### DocumentFragment para inserción en lote (nuevo en v4.0)
+
+Las 64 tarjetas se construyen en un `DocumentFragment` (nodo fuera del árbol DOM) y se insertan con un único `container.appendChild(fragment)`. Esto reemplaza los 64 `appendChild` individuales anteriores, que forzaban un reflow del layout por cada tarjeta.
+
+#### Gestión de ciclo de vida del observer
+
+```js
+// Al inicio de renderLevelsGrid():
+if (UI._thumbObserver) {
+    UI._thumbObserver.disconnect();  // evita callbacks fantasma de tarjetas eliminadas
+    UI._thumbObserver = null;
+}
 ```
 
-#### `showScreen(name)`
+#### Accesibilidad (nuevo en v4.0)
 
-Cambia la pantalla activa usando clases CSS (`opacity` + `translate3d`). Fuerza el replay de las animaciones de stagger en los botones de navegación del menú mediante un reflow intencional (`void el.offsetHeight`).
-
-#### `renderLevelsGrid(levels, onLevelSelect)`
-
-Genera dinámicamente las tarjetas de nivel con carga lazy de thumbnails y estados visuales:
-
-| Estado     | Visual en tarjeta                           |
-|------------|---------------------------------------------|
-| `locked`   | Ícono de candado SVG                        |
-| `unlocked` | Número de nivel (código del ID)             |
-| `completed`| Estrellas doradas (★ llenas / ☆ vacías)    |
-
-Cada tarjeta aplica `animationDelay: index × 30ms` para el efecto de entrada escalonado (stagger). Si la thumbnail falla, hace fallback automático a la imagen principal.
-
-#### `showVictoryModal(coins, timeStr, stars, onNext, onMenu)`
-
-Muestra el modal de victoria con las estrellas obtenidas renderizadas dinámicamente. Clona los botones de acción para eliminar listeners huérfanos de partidas anteriores.
+- Tarjetas desbloqueadas: `role="button"`, `tabindex="0"`, `aria-label` descriptivo.
+- Tarjetas bloqueadas: `role="img"`, `aria-disabled="true"`.
+- Navegación por teclado: Enter y Space activan la tarjeta seleccionada.
+- Overlay de estado: `aria-hidden="true"` (la información ya está en `aria-label`).
 
 ---
 
 ### 4.5 `Storage.js` — Almacenamiento
 
-**Ruta:** `src/systems/Storage.js`  
-**Versión:** v2.0 — Secure & Versioned
+**Ruta:** `src/systems/Storage.js` | **Versión:** v2.0
 
-Capa de abstracción sobre `localStorage` con validación de integridad y soporte para migraciones futuras de esquema.
+Capa sobre `localStorage` con versionado de esquema. Prefijo `puz_arcade_`.
 
-#### Mecanismo de versionado
-
-Cada valor se guarda con un envelope de metadata:
-
-```js
-{
-  ver:       1,             // SCHEMA_VERSION
-  timestamp: 1700000000000, // Date.now() al guardar
-  data:      <valor real>
-}
-```
-
-Si al leer un valor su `ver` no coincide con la versión actual, se descarta y se retorna el `defaultValue`. Las claves se prefijan con `puz_arcade_` para no colisionar con otras apps del dominio.
-
-#### Claves utilizadas
-
-| Clave (sin prefijo)  | Tipo     | Contenido                                           |
-|----------------------|----------|-----------------------------------------------------|
-| `progress`           | `object` | `{ "lvl_1": 3, "lvl_2": 2, … }` (estrellas por nivel) |
-| `unlocked`           | `array`  | `["lvl_1", "lvl_2", …]` (IDs desbloqueados)        |
-| `save_{levelId}`     | `array`  | Estado serializado de `PuzzleEngine.exportState()`  |
-| `settings`           | `object` | `{ sound: true/false }`                             |
-
-#### `validateUnlockedLevels(allLevels)`
-
-Función de reparación ejecutada al arrancar. Recorre todos los niveles en orden y, si un nivel tiene estrellas guardadas pero el siguiente no está en la lista de desbloqueados (caso de usuarios que jugaron antes de una actualización del juego), lo desbloquea automáticamente.
+| Clave              | Tipo     | Contenido                                        |
+|--------------------|----------|--------------------------------------------------|
+| `progress`         | `object` | `{ "lvl_1": 3, "lvl_2": 2, … }` (estrellas)   |
+| `unlocked`         | `array`  | `["lvl_1", "lvl_2", …]` (IDs desbloqueados)   |
+| `save_{levelId}`   | `array`  | Estado serializado de `PuzzleEngine.exportState()` |
+| `settings`         | `object` | `{ sound: true/false }`                          |
 
 ---
 
@@ -361,16 +231,7 @@ Función de reparación ejecutada al arrancar. Recorre todos los niveles en orde
 
 **Ruta:** `src/systems/Economy.js`
 
-Implementa el **Contrato de Integración** con el sistema universal de monedas de Love Arcade.
-
-#### `payout(levelId, rewardCoins)`
-
-Flujo de ejecución:
-
-1. **Validación de tipos:** verifica que `rewardCoins` sea entero positivo (`Number.isInteger` + `> 0`) y que `levelId` sea string. Si alguna validación falla, registra un error y aborta sin lanzar excepción.
-2. **Detección de entorno:** comprueba `window.GameCenter` y que el método `completeLevel` exista y sea función.
-3. **Ejecución del contrato:** llama `window.GameCenter.completeLevel(GAME_ID, levelId, rewardCoins)` donde `GAME_ID = 'rompecabezas'`.
-4. **Fallback standalone:** si `window.GameCenter` no existe (entorno de desarrollo), registra un `console.warn` y continúa la partida normalmente. El juego **nunca rompe** por ausencia de `GameCenter`.
+Implementa el contrato con `window.GameCenter.completeLevel('rompecabezas', levelId, rewardCoins)`. Si `GameCenter` no existe, registra un `console.warn` y la partida continúa.
 
 ---
 
@@ -378,151 +239,82 @@ Flujo de ejecución:
 
 **Ruta:** `src/systems/AudioSynth.js`
 
-Genera todos los efectos de sonido del juego de forma procedural mediante la Web Audio API, sin necesidad de archivos de audio externos. Se exporta como singleton: `export const AudioSynth = new AudioSynthesizer()`.
+Grafo: `Osciladores → GainNode (ADSR) → DynamicsCompressor (-24dB, 6:1) → MasterGain (0.7) → destination`.
 
-#### Arquitectura del grafo de audio
-
-```
-Osciladores/Filtros
-        ↓
-  GainNode (envelope ADSR)
-        ↓
-  DynamicsCompressor  (threshold: -24dB, ratio: 6:1)
-        ↓
-  MasterGain (0.7)
-        ↓
-  AudioContext.destination
-```
-
-#### Efectos disponibles
-
-Invocados via `AudioSynth.play(type)`:
-
-| Tipo      | Método        | Descripción técnica                                                     |
-|-----------|---------------|-------------------------------------------------------------------------|
-| `'click'` | `uiClick()`   | Transiente triangle a 1200Hz + cuerpo sine a 500Hz                     |
-| `'snap'`  | `pieceSnap()` | Golpe square a 220Hz con lowpass 1200Hz + click triangle a 900Hz       |
-| `'win'`   | `winChord()`  | Acorde C-E-G (523/659/784Hz) con entrada escalonada + brillo en 1568Hz |
-
-#### Síntesis de tonos — método `tone(params)`
-
-Motor base que crea y conecta automáticamente un oscilador con envelope exponencial:
-
-- **Attack:** rampa exponencial de `0.0001` al volumen objetivo en `attack` segundos.
-- **Release:** rampa exponencial de vuelta a `0.0001` en `decay` segundos.
-- El oscilador se detiene automáticamente `50ms` después del fin del decay.
-- Soporta filtros opcionales `lowpass` y `highpass` insertados entre el oscilador y el gain.
-
-El contexto de audio se reanuda automáticamente (`ctx.resume()`) en el primer evento de interacción del usuario, respetando la política de autoplay del navegador.
+| Tipo      | Descripción                                                    |
+|-----------|----------------------------------------------------------------|
+| `'click'` | Triangle 1200Hz + Sine 500Hz                                  |
+| `'snap'`  | Square 220Hz (lowpass 1200Hz) + Triangle 900Hz                |
+| `'win'`   | Acorde C-E-G (523/659/784Hz) escalonado + brillo 1568Hz       |
 
 ---
 
-## 5. Datos de Configuración — `levels.json`
+## 5. Arquitectura de Activos — Cloudinary
 
-**Ruta:** `public/levels.json`
+### Cloud Name y nomenclatura
 
-Array de 35 objetos de nivel. El primer nivel (`lvl_1`) está desbloqueado por defecto; cada nivel completado desbloquea el siguiente.
+- **Cloud name:** `dyspgn0sw`
+- **Convención de nombres:** `NivelNN` con cero a la izquierda para n < 10 (ej: `Nivel01`, `Nivel09`, `Nivel10`).
 
-### Estructura de objeto
+> **CRÍTICO:** Usar `Nivel1` en lugar de `Nivel01` causará pantalla de carga infinita en los niveles 1–9.
 
-```json
-{
-  "id":          "lvl_N",
-  "image":       "./assets/NivelN.webp",
-  "thumbnail":   "./assets/thumbnails/NivelN_thumb.webp",
-  "pieces":      16,
-  "rewardCoins": 150,
-  "description": "Texto descriptivo",
-  "timeLimit":   350
-}
+### URLs generadas
+
+```
+Base:      https://res.cloudinary.com/dyspgn0sw/image/upload
+
+Imagen:    .../f_auto,q_auto/v1/NivelNN
+Thumbnail: .../c_thumb,w_240,g_center,f_auto,q_auto/v1/NivelNN
 ```
 
-### Distribución de niveles
+| Nivel | publicId   | Thumbnail (actual v2.2)                            |
+|-------|------------|----------------------------------------------------|
+| 1     | `Nivel01`  | `.../c_thumb,w_240,g_center,f_auto,q_auto/v1/Nivel01` |
+| 9     | `Nivel09`  | `.../c_thumb,w_240,g_center,f_auto,q_auto/v1/Nivel09` |
+| 64    | `Nivel64`  | `.../c_thumb,w_240,g_center,f_auto,q_auto/v1/Nivel64` |
 
-| Tramo       | Niveles | Piezas         | Recompensa      | Grid   |
-|-------------|---------|----------------|-----------------|--------|
-| Básico      | 1–10    | 16 (fijas)     | 150 → 180 🪙   | 4 × 4  |
-| Intermedio  | 11–25   | 16 y 25 (alt.) | 181 → 230 🪙   | 4×4 / 5×5 |
-| Experto     | 26–35   | 25 (fijas)     | 231 → 270 🪙   | 5 × 5  |
+### Preconnect (index.html)
 
-> Para la especificación completa de criterios de aceptación de este archivo, consultar el documento **`criterios-aceptacion-levels.md`**.
+```html
+<link rel="preconnect" href="https://res.cloudinary.com" crossorigin>
+<link rel="dns-prefetch" href="https://res.cloudinary.com">
+```
+
+Estas etiquetas establecen la conexión TCP + TLS con Cloudinary durante el parse del HTML, antes de que el JS solicite la primera imagen. En redes móviles esto ahorra 200–400ms del tiempo de carga percibido.
 
 ---
 
 ## 6. Pantallas y Navegación
 
-La aplicación tiene cuatro pantallas gestionadas por `UIController.showScreen()`. Las transiciones son por opacidad + `translate3d(16px → 0)` a 250ms.
+| Pantalla         | ID                 | `aria-label`                |
+|------------------|--------------------|-----------------------------|
+| Menú             | `screen-menu`      | "Menú principal"            |
+| Niveles          | `screen-levels`    | "Selección de misiones"     |
+| Juego            | `screen-game`      | "Partida activa"            |
+| Ajustes          | `screen-settings`  | "Ajustes del juego"         |
 
-### Pantalla: Menú (`screen-menu`)
-
-Pantalla de inicio con el logo de Love Arcade y cuatro acciones: **JUGAR**, **NIVELES**, **AJUSTES** y **SALIR** (que redirige al índice de Love Arcade).
-
-### Pantalla: Niveles (`screen-levels`)
-
-Cuadrícula de tarjetas con carga lazy de thumbnails. Mostrar esta pantalla llama siempre a `refreshLevelsScreen()` para refrescar el estado de progreso. Si el nivel seleccionado tiene una partida guardada, aparece el **modal de Reanudación** ofreciendo continuar o reiniciar.
-
-### Pantalla: Juego (`screen-game`)
-
-Contiene el HUD superior, el `<canvas>` principal y los controles flotantes:
-
-**HUD:**
-
-| Elemento      | ID             | Contenido                                    |
-|---------------|----------------|----------------------------------------------|
-| Número de nivel | `hud-level`  | `LVL N` (posición ordinal en el array)       |
-| Temporizador  | `hud-timer`    | `MM:SS` o `∞` si no hay límite              |
-
-**Colores del temporizador según tramo:**
-
-| Clase CSS       | Condición                                   |
-|-----------------|---------------------------------------------|
-| `timer-gold`    | Tiempo transcurrido ≤ `pieces × 5`s        |
-| `timer-silver`  | Tiempo transcurrido ≤ `pieces × 10`s       |
-| `timer-bronze`  | Resto del tiempo                            |
-| `low-time`      | Tiempo restante ≤ 10 segundos (animación extra) |
-
-**Controles flotantes:**
-
-- 👁 **Vista Previa** — Muestra la imagen objetivo al 28% de opacidad mientras se mantiene pulsado.
-- 🧲 **Imán** — Power-up de pago (10 🪙). Coloca una pieza aleatoria automáticamente.
-
-### Pantalla: Ajustes (`screen-settings`)
-
-- **Sonido FX:** toggle que activa/desactiva `AudioSynth.enabled` y persiste en `Storage`.
-- **Resetear Progreso:** limpia todo el `localStorage` y recarga la app.
+Transiciones: opacidad + `translate3d(16px → 0)` a 250ms.
 
 ### Modales
 
-| ID                 | Título             | Cuándo aparece                              |
-|--------------------|--------------------|---------------------------------------------|
-| `modal-resume`     | PARTIDA GUARDADA   | Al seleccionar nivel con `save_` en Storage |
-| `modal-pause`      | PAUSA              | Al pulsar el botón de pausa del HUD         |
-| `modal-gameover`   | TIEMPO AGOTADO     | Al llegar el temporizador a 0               |
-| `modal-victory`    | ¡MISIÓN CUMPLIDA!  | Al completar el rompecabezas                |
+| ID                 | Título             | `aria-modal` | `aria-labelledby`        |
+|--------------------|--------------------|--------------|--------------------------|
+| `modal-resume`     | PARTIDA GUARDADA   | ✅           | `modal-resume-title`     |
+| `modal-pause`      | PAUSA              | ✅           | `modal-pause-title`      |
+| `modal-gameover`   | TIEMPO AGOTADO     | ✅           | `modal-gameover-title`   |
+| `modal-victory`    | ¡MISIÓN CUMPLIDA!  | ✅           | `modal-victory-title`    |
 
 ---
 
 ## 7. Sistema de Progresión del Jugador
 
-### Desbloqueo de niveles
-
-El nivel `lvl_1` siempre está desbloqueado. Cada vez que se completa un nivel (independientemente de las estrellas), se llama a `Storage.unlockLevel(nextLvlId)`. El progreso se valida al arrancar la app para reparar posibles inconsistencias.
-
 ### Cálculo de estrellas
 
-Calculado en `handleVictory()` usando el tiempo transcurrido (`Date.now() - startTime`):
-
-| Estrellas | Condición                              | Ejemplo (16 piezas) | Ejemplo (25 piezas) |
-|-----------|----------------------------------------|---------------------|---------------------|
-| ⭐⭐⭐     | `duration ≤ pieces × 5s`              | ≤ 80 segundos       | ≤ 125 segundos      |
-| ⭐⭐       | `duration ≤ pieces × 10s`             | ≤ 160 segundos      | ≤ 250 segundos      |
-| ⭐         | Cualquier otro caso (nivel completado) | > 160 segundos      | > 250 segundos      |
-
-Solo se actualiza la puntuación si mejora la anterior (`Storage.saveStars` retorna `true` solo en nuevo récord).
-
-### Guardado automático de partidas
-
-Cada vez que una pieza es movida o encajada, `onStateChange` serializa el estado completo del tablero y lo guarda en `Storage` bajo la clave `save_{levelId}`. Al completar el nivel, esta clave se limpia (`Storage.set('save_{id}', null)`).
+| Estrellas | Condición              | 16 piezas      | 25 piezas       |
+|-----------|------------------------|----------------|-----------------|
+| ⭐⭐⭐     | `duration ≤ pieces×5s` | ≤ 80 segundos  | ≤ 125 segundos  |
+| ⭐⭐       | `duration ≤ pieces×10s`| ≤ 160 segundos | ≤ 250 segundos  |
+| ⭐         | Cualquier otro caso    | > 160 segundos | > 250 segundos  |
 
 ---
 
@@ -530,128 +322,114 @@ Cada vez que una pieza es movida o encajada, `onStateChange` serializa el estado
 
 ### Orden de render por frame
 
-Cada llamada a `render()` dibuja las capas en este orden sobre el canvas principal:
-
-1. **Rejilla de fondo con parallax** — composita el `gridCanvas` offscreen con desplazamiento proporcional a la posición del puntero o la orientación del dispositivo (±5% del tamaño de pantalla).
-2. **Micro-puntos parpadeantes** — puntos de 2×2px en intersecciones de la rejilla con opacidad sinusoidal individual.
-3. **Capa estática** — copia el `staticCanvas` (tablero + piezas encajadas), que no se recalcula salvo al producirse un snap.
-4. **Vista previa** — imagen completa semitransparente (28% de opacidad) si está activa.
-5. **Piezas sueltas no seleccionadas** — renderizadas en su posición actual.
-6. **Ghost de snap** — cuando la pieza arrastrada está a menos del 40% de distancia de su destino, aparece un contorno fantasma en blanco semitransparente.
-7. **Pieza seleccionada** — escalada al 105% con contorno blanco de 2px.
-8. **Partículas** — ripples y confetti animados.
-9. **Snap flashes** — destello perimetral esmeralda en la pieza recién encajada (150ms).
-10. **Edge pulses** — dos anillos concéntricos (esmeralda + azul) expandiéndose desde el snap hasta los bordes de pantalla (700ms, ease-out cuadrático).
-
-### Sistema de parallax
-
-La rejilla de fondo reacciona a dos inputs:
-
-- **`pointermove`** — el vector desde el centro de pantalla hasta el puntero determina el desplazamiento opuesto.
-- **`deviceorientation`** — los ángulos `gamma` (izquierda/derecha) y `beta` (adelante/atrás) del giroscopio se mapean a coordenadas de pantalla.
-
-El desplazamiento se interpola con `lerp` de factor 0.08 por frame, produciendo un movimiento suave sin tirones.
+1. Rejilla offscreen con parallax
+2. Micro-dots parpadeantes
+3. Capa estática (tablero + piezas encajadas)
+4. Vista previa (28% opacidad, si activa)
+5. Piezas sueltas no seleccionadas
+6. Ghost de snap (< 40% distancia al destino)
+7. Pieza seleccionada (105% escala, stroke blanco 2px)
+8. Partículas (ripples y confetti)
+9. Snap flash (esmeralda, 150ms)
+10. Edge pulses (2 anillos concéntricos, 700ms)
 
 ---
 
 ## 9. Sistema Háptico
 
-El motor usa `navigator.vibrate()` con patrones específicos según el evento. El API es tolerante a fallo: si el navegador no soporta vibración, la llamada simplemente no hace nada.
-
-| Evento            | Patrón de vibración   | Sensación             |
-|-------------------|-----------------------|-----------------------|
-| Levantar pieza    | `10`                  | Pulso suave de pickup |
-| Encajar pieza     | `[30, 20, 10]`        | Doble pulso (snap)    |
-| Victoria          | `[100, 50, 80, 50, 200]` | Celebración intensa |
+| Evento         | Patrón                   | Sensación            |
+|----------------|--------------------------|----------------------|
+| Levantar pieza | `10`                     | Pulso suave          |
+| Encajar pieza  | `[30, 20, 10]`           | Doble pulso          |
+| Victoria       | `[100, 50, 80, 50, 200]` | Celebración intensa  |
 
 ---
 
 ## 10. Sistema de Audio Procedural
 
-Todos los sonidos son sintetizados en tiempo real. No hay archivos `.mp3` ni `.ogg`. El grafo de audio incluye compresión dinámica para evitar clipping en dispositivos con altavoces de baja fidelidad.
-
-| Evento            | Sonido                | Notas técnicas                              |
-|-------------------|-----------------------|---------------------------------------------|
-| Tocar pieza       | `click` — 2 osciladores | Transiente triangle + cuerpo sine          |
-| Encajar pieza     | `snap` — 2 osciladores  | Square con lowpass + triangle agudo        |
-| Completar nivel   | `win` — acorde C-E-G  | 4 tonos con entrada escalonada (0.12s cada uno) |
-
-El audio puede desactivarse desde Ajustes. El estado se persiste en `Storage` bajo la clave `settings.sound`.
+Sin archivos de audio externos. Todo sintetizado con Web Audio API. Se reanuda automáticamente en el primer toque (política de autoplay iOS/Android).
 
 ---
 
 ## 11. Características PWA
 
-El juego está configurado como Progressive Web App con soporte para instalación en dispositivos móviles y funcionalidad offline básica.
-
-### Manifiesto (`manifest.json`)
-
-Declarado en `index.html`. Define el nombre de la app, ícono (`icon-192.png`), color de tema (`#05070A`) y modo de visualización standalone.
-
-### Service Worker (`service-worker.js`)
-
-Registrado en `main.js`. El juego precachea los activos necesarios para funcionar offline. Si el registro falla, el juego continúa funcionando en modo conectado sin interrupciones.
-
-### Meta tags para iOS
-
-El `index.html` incluye las meta tags de Apple para comportamiento fullscreen:
-```html
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-```
-
-El viewport está configurado con `user-scalable=no` y `viewport-fit=cover` para ocupar toda la pantalla incluyendo el notch en iPhone.
+- `manifest.json`: nombre, ícono, color de tema `#0f172a`, modo standalone.
+- `service-worker.js`: en modo purge activo. Se auto-instala para desregistrarse y limpiar cualquier caché anterior. Todas las peticiones van directamente a la red.
+- Viewport: `user-scalable=no`, `viewport-fit=cover`.
 
 ---
 
-## 12. Guía de Mantenimiento y Expansión
+## 12. Herramientas de Desarrollo (Dev Tools)
 
-### Agregar un nivel nuevo (lvl_36 en adelante)
+`window.dev` disponible en consola del navegador tras el arranque de la app.
 
-1. Añadir la imagen del nivel: `assets/Nivel36.webp`
-2. Añadir la miniatura: `assets/thumbnails/Nivel36_thumb.webp`
-3. Agregar el objeto al final del array en `public/levels.json`:
+| Comando              | Descripción                                                      |
+|----------------------|------------------------------------------------------------------|
+| `dev.unlockAll()`    | Desbloquea los 64 niveles en localStorage.                       |
+| `dev.addCoins(n)`    | Suma `n` monedas via `GameCenter`. Avisa en modo standalone.     |
+| `dev.skipLevel()`    | Fuerza victoria del nivel activo con 3 estrellas.                |
 
-```json
-{
-  "id": "lvl_36",
-  "image": "./assets/Nivel36.webp",
-  "thumbnail": "./assets/thumbnails/Nivel36_thumb.webp",
-  "pieces": 25,
-  "rewardCoins": 270,
-  "description": "Descripción del nivel",
-  "timeLimit": 350
-}
+```js
+// Ejemplos:
+dev.unlockAll()       // → [Dev] ✅ 64 niveles desbloqueados.
+dev.addCoins(1000)    // → [Dev] ✅ +1000 monedas añadidas via GameCenter.
+dev.skipLevel()       // → [Dev] ✅ Saltando nivel lvl_5 con 3 estrellas.
 ```
 
-4. Verificar que `rewardCoins` no supere 270 y sea entero positivo.
-5. Verificar que el JSON resultante sea válido antes del commit.
+---
 
-### Modificar el cálculo de estrellas
+## 13. Accesibilidad (WCAG 2.2)
 
-El umbral de estrellas está hardcodeado en dos lugares en `main.js`. Ambos deben actualizarse de forma sincronizada:
+### Atributos implementados
 
-- `handleVictory()` — líneas `if (durationSeconds <= pieces * 5)` / `pieces * 10`
-- `startTimer()` — líneas `const threeStarTime = levelConfig.pieces * 5` / `* 10`
+| Elemento                        | Atributo                  | Valor / propósito                                   |
+|---------------------------------|---------------------------|-----------------------------------------------------|
+| Capas decorativas (bg, grid…)   | `aria-hidden="true"`      | Oculta al lector de pantalla                        |
+| Botones de solo-icono           | `aria-label`              | Descripción textual de la acción                    |
+| Tarjetas de nivel desbloqueadas | `role="button"`, `tabindex="0"`, `aria-label` | Navegables por teclado |
+| Tarjetas de nivel bloqueadas    | `role="img"`, `aria-disabled="true"` | Anunciadas como imagen bloqueada       |
+| Modales                         | `role="dialog"`, `aria-modal="true"`, `aria-labelledby` | Anunciados correctamente |
+| HUD coins display               | `aria-live="polite"`      | Anuncia cambio de monedas sin interrumpir           |
+| SVGs decorativos                | `aria-hidden="true"`      | Evita lectura de nombres de elemento SVG            |
+| Texto solo para AT              | `.sr-only`                | Visible a lectores, invisible visualmente           |
 
-### Agregar un nuevo tipo de poder (power-up)
+### Foco visible (WCAG 2.4.11)
 
-1. Añadir el botón en `index.html` dentro de `.game-controls`.
-2. Registrar el handler en `setupGameControls()` en `main.js`.
-3. Implementar la lógica en `PuzzleEngine.js` como método público.
-4. Llamar a `window.GameCenter.buyItem({ id: 'nuevo_item', price: N })` para la transacción.
+Todos los elementos interactivos tienen `:focus-visible` con `outline: 2px solid var(--accent)`.
 
-### Cambiar el rango de recompensas
+### Tamaños táctiles (WCAG 2.5.5)
 
-Si se decide expandir el rango de monedas más allá de 270, es necesario coordinar el cambio con el equipo de **Love Arcade** ya que el tope es un parámetro del contrato de `Economy.js` con el sistema `GameCenter`.
+Todos los botones tienen `min-height: 48px` o `height: 48px`. Las tarjetas de nivel tienen `min-height: 112px`.
+
+---
+
+## 14. Guía de Mantenimiento y Expansión
+
+### Agregar un nivel nuevo (dos pasos)
+
+1. Subir imagen a Cloudinary: nombre `NivelNN` con cero a la izquierda si n < 10 (ej: `Nivel65`).
+2. En `LevelManager.js`: `const TOTAL_LEVELS = 65;`
+
+### Cambiar el tamaño de thumbnail
+
+Modificar `buildThumbnailUrl()` en `LevelManager.js`. Regla: `anchoCSSMinimo × DPRmax × 1.07`.
+
+Con tarjetas de 112px y DPR 2×: `112 × 2 × 1.07 ≈ 240px`. El valor actual `w_240` es el mínimo recomendado.
+
+### Reactivar el límite de tiempo
+
+```js
+// LevelManager.js, dentro de loadLevels():
+timeLimit: 350   // segundos; 0 = sin límite
+```
 
 ### Diagnóstico de errores comunes
 
-| Síntoma                                    | Causa probable                             | Solución                                          |
-|--------------------------------------------|--------------------------------------------|----------------------------------------------------|
-| El nivel no carga (pantalla de carga infinita) | Ruta de imagen inválida en `levels.json` | Verificar que el archivo `.webp` existe en `assets/` |
-| Las piezas no generan cuadrícula correcta  | `pieces` no tiene raíz cuadrada perfecta   | Usar 16 o 25                                       |
-| No se depositan monedas al completar       | `rewardCoins` no es entero positivo        | Revisar el valor en `levels.json`; el error aparece en consola |
-| Un nivel desbloqueado no aparece disponible | Inconsistencia en `localStorage`          | `Storage.validateUnlockedLevels()` se ejecuta al arrancar; se puede forzar recargando la app |
-| Error crítico al cargar `levels.json`      | El Service Worker tiene una versión cacheada desactualizada | Incrementar la versión del SW o limpiar caché del navegador |
-| El audio no suena en iOS                   | Política de autoplay del navegador         | El `AudioContext` se reanuda en el primer toque; normal en iOS |
+| Síntoma                                      | Causa probable                               | Solución                                             |
+|----------------------------------------------|----------------------------------------------|------------------------------------------------------|
+| Imagen de nivel no carga (pantalla infinita) | `publicId` incorrecto o asset no en Cloudinary | Verificar `Nivel${NN}` en cloud `dyspgn0sw`         |
+| Error CORS en canvas                         | Falta `crossOrigin = 'Anonymous'`            | Ya corregido en `startGame()`; no revertir           |
+| Thumbnails no aparecen (pantalla de niveles) | Observer desconectado o `data-src` no asignado | Verificar que `renderLevelsGrid` se llama correctamente |
+| Tarjeta no responde al teclado              | `tabindex` o `role` faltante                  | Verificar UIController v4.0 o superior              |
+| `dev.skipLevel()` no hace nada               | No hay nivel activo                          | Iniciar una partida antes de llamar al comando       |
+| El audio no suena en iOS                     | Política de autoplay                         | Normal; el AudioContext se reanuda en el primer toque |
