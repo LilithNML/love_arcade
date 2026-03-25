@@ -37,7 +37,6 @@ html {
 }
 
 body {
-    /* Tactical radial gradient base — replaces flat solid color */
     background: radial-gradient(circle at center, #111A30 0%, #05070A 100%);
     color: var(--text-main);
     font-family: 'Rubik', sans-serif;
@@ -53,8 +52,6 @@ body {
 /* =========================================
    3. BACKGROUND STACK
    ========================================= */
-
-/* Level image tint — behind everything */
 .dynamic-bg {
     position: fixed;
     inset: 0;
@@ -66,14 +63,12 @@ body {
 }
 
 /* ─── Living Grid Layer ──────────────────
-   Sits between dynamic-bg and scanlines.
    Parallax transform driven by JS (mouse / DeviceOrientation).
-   Extends 10% beyond viewport on each edge so shifted edges
-   are never visible during parallax movement.
+   Sobredimensionado 10% en cada lado para ocultar el sangrado de bordes
+   durante el desplazamiento parallax.
    ──────────────────────────────────────── */
 .grid-layer {
     position: fixed;
-    /* Oversize by 10% on each side to hide parallax edge bleed */
     top: -10%;
     left: -10%;
     width: 120%;
@@ -81,25 +76,12 @@ body {
     z-index: -2;
     pointer-events: none;
     will-change: transform;
-
-    /* Grid lines: 1px lines every 40px on both axes */
     background-image:
-        repeating-linear-gradient(
-            0deg,
-            transparent,
-            transparent 39px,
-            rgba(59, 130, 246, 0.07) 40px
-        ),
-        repeating-linear-gradient(
-            90deg,
-            transparent,
-            transparent 39px,
-            rgba(59, 130, 246, 0.07) 40px
-        );
+        repeating-linear-gradient(0deg,   transparent, transparent 39px, rgba(59,130,246,0.07) 40px),
+        repeating-linear-gradient(90deg,  transparent, transparent 39px, rgba(59,130,246,0.07) 40px);
     background-size: 40px 40px;
 }
 
-/* Twinkle canvas fills the grid-layer exactly */
 .twinkle-canvas {
     position: absolute;
     inset: 0;
@@ -108,7 +90,6 @@ body {
     pointer-events: none;
 }
 
-/* Scanlines — topmost atmosphere layer */
 .scanlines {
     position: fixed;
     inset: 0;
@@ -169,16 +150,13 @@ body {
     font-family: 'Rajdhani', sans-serif;
 }
 
-/* Coin display wrapper — stacks micro-label above counter */
 .coins-wrapper {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
 }
 
-.coins-micro {
-    margin-bottom: 1px;
-}
+.coins-micro { margin-bottom: 1px; }
 
 .icon {
     width: 20px; height: 20px;
@@ -211,7 +189,7 @@ body {
 }
 
 /* =========================================
-   6. MICRO-LABELS — 7-8px tactical data prefixes
+   6. MICRO-LABELS
    ========================================= */
 .micro-label {
     font-family: 'Rajdhani', sans-serif;
@@ -227,10 +205,6 @@ body {
     display: block;
 }
 
-/* ─── Canvas corner micro-data labels ──────────
-   Cosmetic telemetry readouts overlaid on
-   the game canvas — POS_X/POS_Y + resolution.
-   ──────────────────────────────────────────── */
 .canvas-corner-data {
     position: absolute;
     font-family: 'Rajdhani', sans-serif;
@@ -245,17 +219,8 @@ body {
     z-index: 25;
     line-height: 1;
 }
-
-.canvas-corner-data.top-left {
-    top: 8px;
-    left: 10px;
-}
-
-.canvas-corner-data.bottom-right {
-    bottom: 8px;
-    right: 10px;
-    text-align: right;
-}
+.canvas-corner-data.top-left    { top: 8px; left: 10px; }
+.canvas-corner-data.bottom-right { bottom: 8px; right: 10px; text-align: right; }
 
 /* =========================================
    7. SCREEN: MENU
@@ -278,18 +243,14 @@ body {
 }
 .menu-content::before {
     content: ''; position: absolute;
-    top: -1px; left: -1px;
-    width: 20px; height: 20px;
-    border-top: 2px solid var(--accent);
-    border-left: 2px solid var(--accent);
+    top: -1px; left: -1px; width: 20px; height: 20px;
+    border-top: 2px solid var(--accent); border-left: 2px solid var(--accent);
     pointer-events: none;
 }
 .menu-content::after {
     content: ''; position: absolute;
-    bottom: -1px; right: -1px;
-    width: 20px; height: 20px;
-    border-bottom: 2px solid var(--accent);
-    border-right: 2px solid var(--accent);
+    bottom: -1px; right: -1px; width: 20px; height: 20px;
+    border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent);
     pointer-events: none;
 }
 
@@ -322,15 +283,8 @@ body {
     margin-top: 24px;
 }
 
-/* Stagger: reset to invisible when screen not active */
-#screen-menu:not(.active) .main-nav .btn {
-    opacity: 0;
-    animation: none;
-}
-/* Stagger in when screen becomes active */
-#screen-menu.active .main-nav .btn {
-    animation: hudSlideIn 0.28s ease both;
-}
+#screen-menu:not(.active) .main-nav .btn { opacity: 0; animation: none; }
+#screen-menu.active .main-nav .btn { animation: hudSlideIn 0.28s ease both; }
 #screen-menu.active .main-nav .btn:nth-child(1) { animation-delay: 0.00s; }
 #screen-menu.active .main-nav .btn:nth-child(2) { animation-delay: 0.04s; }
 #screen-menu.active .main-nav .btn:nth-child(3) { animation-delay: 0.08s; }
@@ -356,10 +310,8 @@ body {
 }
 .screen-header::after {
     content: ''; position: absolute;
-    bottom: -1px; right: -1px;
-    width: 14px; height: 14px;
-    border-bottom: 2px solid var(--accent);
-    border-right: 2px solid var(--accent);
+    bottom: -1px; right: -1px; width: 14px; height: 14px;
+    border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent);
     pointer-events: none;
 }
 .screen-header h2 {
@@ -387,7 +339,14 @@ body {
     margin: 0 auto;
 }
 
-/* Level card — beveled clip-path */
+/* ─── Level card ─────────────────────────────────────────────────────────────
+   contain: layout style paint
+     · layout  → los cambios internos no afectan el layout del resto del DOM
+     · style   → contiene el alcance de estilos heredados costosos
+     · paint   → el browser puede omitir pintar tarjetas fuera del viewport
+   Esto es especialmente útil para las 64 tarjetas: el browser puede saltarse
+   el pintado de las que están por debajo del pliegue sin que JS lo gestione.
+   ─────────────────────────────────────────────────────────────────────────── */
 .level-card {
     position: relative;
     aspect-ratio: 1 / 1;
@@ -398,13 +357,19 @@ body {
     justify-content: center;
     align-items: center;
     cursor: pointer;
-    /* Stagger animation-delay applied via JS (0.04s × index) */
+    contain: layout style paint;     /* optimización de render para off-screen cards */
     animation: cardSlideIn 0.3s ease both;
     filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.85));
     overflow: hidden;
     transition: filter 0.12s;
 }
 .level-card:active { transform: scale3d(0.95, 0.95, 1); }
+
+/* Foco visible para navegación por teclado (WCAG 2.2 — 2.4.11) */
+.level-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
 
 .level-card img {
     width: 100%; height: 100%;
@@ -431,10 +396,7 @@ body {
     cursor: not-allowed;
 }
 .level-card.locked:active { transform: none; }
-
-.level-card.completed {
-    filter: drop-shadow(2px 2px 0 rgba(16,185,129,0.55));
-}
+.level-card.completed     { filter: drop-shadow(2px 2px 0 rgba(16,185,129,0.55)); }
 
 /* =========================================
    9. SCREEN: GAME — HUD
@@ -453,10 +415,8 @@ body {
 }
 .hud::after {
     content: ''; position: absolute;
-    bottom: -1px; right: -1px;
-    width: 12px; height: 12px;
-    border-bottom: 2px solid var(--accent);
-    border-right: 2px solid var(--accent);
+    bottom: -1px; right: -1px; width: 12px; height: 12px;
+    border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent);
     pointer-events: none;
 }
 
@@ -504,7 +464,6 @@ body {
 
 canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 
-/* [v16] Action buttons live in the HUD — no longer floated over the canvas */
 .hud-actions {
     display: flex;
     align-items: center;
@@ -528,11 +487,11 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 .btn-hud-action:active { transform: scale3d(0.96, 0.96, 1); background: var(--accent); color: var(--bg-dark); }
 .btn-hud-action.gold { box-shadow: inset 0 0 0 1px var(--warning); color: var(--warning); }
 .btn-hud-action.gold:active { background: var(--warning); color: var(--bg-dark); }
+.btn-hud-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* =========================================
-   10. BUTTONS — clip-path beveled, no border-radius
-   Release bounce driven by JS Web Animations API:
-   0.96 → 1.04 → 1.0 in 200ms
+   10. BUTTONS
+   Release bounce driven by JS Web Animations API: 0.96 → 1.04 → 1.0 in 200ms
    ========================================= */
 .btn {
     border: none; outline: none;
@@ -551,26 +510,15 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
     filter: drop-shadow(2px 2px 0 #000000);
 }
 .btn:active { transform: scale3d(0.96, 0.96, 1); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.btn-primary {
-    background: var(--bg-panel);
-    color: var(--primary);
-    box-shadow: inset 0 0 0 1px var(--primary);
-}
+.btn-primary  { background: var(--bg-panel); color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
 .btn-primary:active { background: var(--primary); color: var(--bg-dark); box-shadow: none; }
 
-.btn-secondary {
-    background: var(--bg-panel);
-    color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent);
-}
+.btn-secondary { background: var(--bg-panel); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .btn-secondary:active { background: var(--accent); color: var(--bg-dark); box-shadow: none; }
 
-.btn-danger {
-    background: transparent; color: #EF4444;
-    box-shadow: inset 0 0 0 1px rgba(239,68,68,0.45);
-    margin-top: 8px;
-}
+.btn-danger { background: transparent; color: #EF4444; box-shadow: inset 0 0 0 1px rgba(239,68,68,0.45); margin-top: 8px; }
 .btn-danger:active { background: #EF4444; color: var(--bg-dark); box-shadow: none; }
 
 .btn-icon {
@@ -586,11 +534,10 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
     transition: background 0.08s;
 }
 .btn-icon:active { transform: scale3d(0.96, 0.96, 1); background: var(--accent); color: var(--bg-dark); }
-
-
+.btn-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* =========================================
-   11. MODALS — bracket corners, hard shadow
+   11. MODALS
    ========================================= */
 .modal-backdrop {
     position: fixed; inset: 0;
@@ -641,7 +588,7 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 }
 
 /* =========================================
-   13. LOADING — 2px bar at top edge
+   13. LOADING
    ========================================= */
 .loading-overlay {
     position: absolute; inset: 0;
@@ -706,15 +653,12 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
     to   { opacity: 1; transform: translate3d(0,  0px, 0); }
 }
 
-/* Level cards drop in from 20px above (spec: translateY 20px → 0) */
 @keyframes cardSlideIn {
     from { opacity: 0; transform: translate3d(0, 20px, 0); }
     to   { opacity: 1; transform: translate3d(0,  0px, 0); }
 }
 
-/* Release bounce: press 0.96 → overshoot 1.04 → settle 1.0
-   Driven by JS Web Animations API — this keyframe is kept as
-   a CSS reference / fallback for static contexts only. */
+/* Referencia CSS del release bounce — la animación real la ejecuta el JS (Web Animations API) */
 @keyframes btnRelease {
     0%   { transform: scale3d(0.96, 0.96, 1); }
     60%  { transform: scale3d(1.04, 1.04, 1); }
@@ -745,3 +689,48 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb { background: #1E293B; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* =========================================
+   19. ACCESIBILIDAD — Screen Reader Only
+   Clase estándar para contenido visible solo para lectores de pantalla.
+   NO usar display:none ni visibility:hidden (ocultarían el texto a AT).
+   ========================================= */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* =========================================
+   20. UTILIDADES DE PANEL
+   Clases reutilizables para componentes que requieran profundidad
+   sin usar backdrop-filter (genera lag de scroll en gama baja).
+   ========================================= */
+
+/**
+ * Panel con corte biselado y borde izquierdo de profundidad.
+ * Usa clip-path en lugar de border-radius o backdrop-filter.
+ */
+.u-panel-bevel {
+    background: var(--bg-panel);
+    clip-path: var(--bevel-md);
+    border-left: 2px solid rgba(255, 255, 255, 0.05);
+    transition: transform 0.2s ease;
+}
+
+/**
+ * Contenedor cuadrado centrado para imágenes.
+ * Mantiene aspect-ratio 1:1 sin depender de object-fit externo.
+ */
+.u-img-container {
+    aspect-ratio: 1 / 1;
+    background: var(--bg-dark);
+    display: grid;
+    place-items: center;
+}
