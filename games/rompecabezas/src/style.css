@@ -358,6 +358,8 @@ body {
     align-items: center;
     cursor: pointer;
     contain: layout style paint;     /* optimización de render para off-screen cards */
+    content-visibility: auto;        /* Renderizado diferido nativo para gama baja */
+    contain-intrinsic-size: 112px;   /* Previene saltos de scroll al usar content-visibility */
     animation: cardSlideIn 0.3s ease both;
     filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.85));
     overflow: hidden;
@@ -472,7 +474,7 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 }
 
 .btn-hud-action {
-    width: 40px; height: 40px; min-height: 40px;
+    width: 44px; height: 44px; min-height: 44px; /* WCAG 2.2 AA: 44x44px mínimo */
     clip-path: var(--bevel-md);
     border: none;
     background: var(--bg-dark); color: var(--text-main);
@@ -522,7 +524,7 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 .btn-danger:active { background: #EF4444; color: var(--bg-dark); box-shadow: none; }
 
 .btn-icon {
-    width: 40px; height: 40px; min-height: 40px;
+    width: 44px; height: 44px; min-height: 44px; /* WCAG 2.2 AA: 44x44px mínimo */
     clip-path: var(--bevel-md);
     border: none;
     background: var(--bg-panel); color: var(--text-main);
