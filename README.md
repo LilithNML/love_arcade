@@ -98,4 +98,4 @@ Consulta `love-arcade-coin-system.md` para el contrato completo de integración.
 
 ## Versión
 
-**v10.0** — LTE Events System · Gachapón de Wallpapers · Hot Streak Weekend · Invasión de Monedas
+**v11.5** — Performance & Accessibility Audit · High-fluency optimizations for low-end devices · WCAG 2.2 Compliance

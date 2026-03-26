@@ -696,12 +696,9 @@ window.GameCenter = {
      * @returns {string}
      */
     _getTodayString: () => {
-        const d = new Date();
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-    },
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+},
 
     /**
      * Incrementa una estadística diaria de misiones.
@@ -1689,10 +1686,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Refresco periódico cada 30 min por si la app permanece abierta mucho tiempo
     setInterval(_syncTimeBackground, 30 * 60 * 1000);
 
-    // Avatar upload — navbar (#avatar-upload)
-    const avatarInput = document.getElementById('avatar-upload');
-    if (avatarInput) {
-        avatarInput.addEventListener('change', (e) => {
+    // Avatar upload — delegado único
+    document.addEventListener('change', (e) => {
+        if (e.target.id === 'avatar-upload' || e.target.id === 'avatar-upload-hud') {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -1700,25 +1696,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.GameCenter.setAvatar(evt.target.result);
             };
             reader.readAsDataURL(file);
-        });
-    }
-
-    // Avatar upload — HUD (#avatar-upload-hud)
-    // Este input está en el Player HUD (vista Home). Comparte el mismo handler
-    // que el de la navbar porque ambos llaman a GameCenter.setAvatar() y
-    // la imagen se aplica a todos los elementos de avatar simultáneamente.
-    const hudAvatarInput = document.getElementById('avatar-upload-hud');
-    if (hudAvatarInput) {
-        hudAvatarInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-                window.GameCenter.setAvatar(evt.target.result);
-            };
-            reader.readAsDataURL(file);
-        });
-    }
+        }
+    });
 
     // Bono diario — el botón se desactiva SÍNCRONAMENTE antes de cualquier operación
     // asíncrona para prevenir el "double-tap bug" (race condition por clics rápidos).
