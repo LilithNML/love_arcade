@@ -695,7 +695,10 @@ window.GameCenter = {
      * Usado para verificar si las misiones deben reiniciarse.
      * @returns {string}
      */
-    _getTodayString: () => new Date().toISOString().split('T')[0],
+    _getTodayString: () => {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+},
 
     /**
      * Incrementa una estadística diaria de misiones.
