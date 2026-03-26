@@ -29,6 +29,7 @@
 2v. [Novedades en v10.0 — Shadow-Gate Developer Filter](#2v-novedades-en-v100--shadow-gate-developer-filter)
 2w. [Novedades en v10.0 — LTE Events System (Gachapón)](#2w-novedades-en-v100--lte-events-system-gachapón)
 2x. [Novedades en v11.0 — Meta-Gameplay & Event Engine](#2x-novedades-en-v110--meta-gameplay--event-engine)
+2y. [Novedades en v11.5 — Performance & Accessibility Audit](#2y-novedades-en-v115--performance--accessibility-audit)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -4071,5 +4072,29 @@ Cualquier módulo de la plataforma puede escuchar `'la:levelcomplete'` sin modif
 
 ---
 
-*Love Arcade · Documentación técnica v11.0 Meta-Gameplay & Event Engine*
+## 2y. [Novedades en v11.5 — Performance & Accessibility Audit](#2y-novedades-en-v115--performance--accessibility-audit)
+
+### Resumen de la Auditoría
+
+Se ha realizado una revisión exhaustiva del proyecto enfocada en la fluidez extrema para dispositivos de gama baja y el cumplimiento avanzado de accesibilidad (WCAG 2.2).
+
+### Mejoras de Rendimiento
+
+- **Carga de Fuentes No Bloqueante**: Se migró el `@import` de CSS a `<link rel="preload">` en el HTML. Esto permite que el navegador comience a pintar la interfaz mientras se descargan las fuentes, eliminando el bloqueo del renderizado inicial.
+- **Content-Visibility**: Se aplicó `content-visibility: auto` a las secciones principales de la SPA. Esto permite al navegador omitir el renderizado de secciones fuera de la pantalla (como la Tienda cuando estás en Inicio), reduciendo significativamente el uso de CPU y memoria.
+- **Optimización de Transiciones**: Se refinaron las animaciones de hover en tarjetas para evitar "Layout Thrashing" y se unificaron manejadores de eventos para reducir el overhead del DOM.
+
+### Mejoras de Accesibilidad (WCAG 2.2)
+
+- **Foco y Navegación Táctil**: Se corrigieron los inputs de archivo que eran invisibles para lectores de pantalla y difíciles de activar con teclado. Ahora usan el patrón `.visually-hidden` que mantiene la funcionalidad intacta para tecnologías asistenciales.
+- **Contrastes AA**: Se ajustaron los colores de texto y acento en los temas Rosa, Cyan y Dorado para garantizar un ratio de contraste mínimo de 4.5:1, mejorando la legibilidad para usuarios con baja visión.
+- **Roles ARIA**: Se añadieron etiquetas `role="status"` y `aria-live="polite"` al contador de monedas para que los cambios en el saldo sean comunicados automáticamente a los usuarios de lectores de pantalla.
+
+### Refactorización
+
+- **Simplificación de Lógica**: Se optimizaron funciones internas como `_getTodayString` y se marcaron métodos obsoletos para futura remoción, manteniendo el core de la aplicación ligero.
+
+---
+
+*Love Arcade · Documentación técnica v11.5 Performance & Accessibility Audit*
 *Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*
