@@ -11,8 +11,7 @@
          costs on mockup loading state and offline fallback.
    ================================================================ */
 
-/* ── Google Fonts: display=swap ya está incluido en la URL para reducir FOIT ── */
-@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+/* ── Google Fonts: Migrado a link preload en HTML para carga no bloqueante ── */
 
 /*
  * Fuentes de sistema con métricas ajustadas para reducir el "salto" visible
@@ -186,12 +185,12 @@ span + .icon,
 /* ── WCAG AA contrast fixes for bright themes ── */
 [data-theme="pink"],
 [data-theme="cyan"] {
-    --text-med: #d0d0e0;
-    --text-low: #9898b0;
+    --text-med: #e2e2f0;
+    --text-low: #b4b4c8;
 }
 [data-theme="gold"] {
-    --text-med: #cacacc;
-    --text-low: #8888a0;
+    --text-med: #e5e5e7;
+    --text-low: #b0b0c0;
 }
 
 /* ================================================================
@@ -222,6 +221,17 @@ body {
 a { text-decoration: none; color: inherit; }
 ul { list-style: none; }
 .hidden { display: none !important; }
+.visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
 button { font-family: var(--font-body); }
 
 /* ================================================================
@@ -245,6 +255,8 @@ button { font-family: var(--font-body); }
     transition: opacity 0.25s ease-out, transform 0.25s ease-out;
     will-change: opacity, transform;
     contain: paint;
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 1000px;
 }
 .view-section:not(.hidden) {
     opacity: 1;
@@ -947,8 +959,8 @@ body::before {
 }
 /* Solid 3.0: hover brightens border with intense glow, no bg change */
 .game-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 15px var(--accent-glow);
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5), 0 0 10px var(--accent-glow);
     border-color: var(--accent-border);
 }
 

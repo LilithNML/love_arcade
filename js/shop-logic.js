@@ -168,17 +168,12 @@ let _lastFocusedElement = null;
 
 // ── Utilidad de iconos (v9.6 — SVG Sprite) ───────────────────────────────────
 /**
- * [v9.6] refreshIcons() es ahora un no-op. Los iconos se sirven como SVG Sprite
- * estático definido en index.html. No hay escaneo dinámico del DOM, no hay
- * reflow por reemplazo de nodos, y no hay dependencia de window.lucide.
- *
- * La función se mantiene declarada para compatibilidad con cualquier llamada
- * existente en el codebase; su cuerpo está intencionalmente vacío.
- *
- * @param {HTMLElement|null} [container]  Ignorado — parámetro preservado por API.
+ * [v11.5] refreshIcons() ha sido eliminada por obsolescencia.
+ * Los iconos se sirven como SVG Sprite estático desde v9.6.
+ * Esta referencia se mantiene solo si es estrictamente necesaria por compatibilidad externa,
+ * pero ha sido vaciada y marcada para remoción.
  */
-// eslint-disable-next-line no-unused-vars
-function refreshIcons(_container) { /* no-op: SVG Sprite estático v9.6 */ }
+function refreshIcons() { /* deprecated */ }
 
 /**
  * Helper: genera el markup de un icono SVG Sprite.

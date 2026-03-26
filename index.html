@@ -11,6 +11,12 @@
 
     <link rel="stylesheet" href="styles.css">
 
+    <!-- Pre-load de fuentes críticas para evitar saltos visuales -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+    </noscript>
+
     <!--
       ╔══════════════════════════════════════════════════════════════╗
       ║  CRITICAL INIT SCRIPT — Zero-Flicker v9.3                   ║
@@ -249,20 +255,22 @@
         <div class="nav-user">
             <!-- title muestra saldo exacto cuando el formato navbar usa "k" abreviado.
                  El valor se actualiza dinámicamente en app.js updateUI(). -->
-            <div class="coin-badge" title="0 monedas">
+            <div class="coin-badge" title="0 monedas" role="status" aria-live="polite">
                 <span class="moon-blessing-badge hidden" title="Bendición Lunar activa">
                     <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-moon"></use></svg>
+                    <span class="visually-hidden">Bendición Lunar activa</span>
                 </span>
                 <svg class="icon" width="15" height="15" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
                 <span class="coin-display">0</span>
+                <span class="visually-hidden">monedas</span>
             </div>
             <label for="avatar-upload" class="avatar-container" aria-label="Cambiar foto de perfil">
                 <div class="avatar" id="user-avatar-display" style="background-image: url('assets/default_avatar.png');">
                     <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-user"></use></svg>
                 </div>
-                <div class="avatar-edit-icon"><svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-plus"></use></svg></div>
+                <div class="avatar-edit-icon" aria-hidden="true"><svg class="icon" width="10" height="10"><use href="#icon-plus"></use></svg></div>
+                <input type="file" id="avatar-upload" class="visually-hidden" accept="image/*">
             </label>
-            <input type="file" id="avatar-upload" hidden accept="image/*">
         </div>
     </nav>
 
@@ -306,13 +314,13 @@
 
                 <div class="hud-top">
                     <div class="hud-avatar-wrap">
-                        <label for="avatar-upload-hud" aria-label="Cambiar foto de perfil">
+                    <label for="avatar-upload-hud" aria-label="Cambiar foto de perfil" class="avatar-label">
                             <div class="hud-avatar" id="hud-avatar-display" style="background-image: url('assets/default_avatar.png');">
                                 <svg class="icon" width="24" height="24" aria-hidden="true"><use href="#icon-user"></use></svg>
                             </div>
+                        <input type="file" id="avatar-upload-hud" class="visually-hidden" accept="image/*">
                         </label>
                         <div class="hud-avatar-ring"></div>
-                        <input type="file" id="avatar-upload-hud" hidden accept="image/*">
                     </div>
                     <div class="hud-info">
                         <p class="hud-greeting">
