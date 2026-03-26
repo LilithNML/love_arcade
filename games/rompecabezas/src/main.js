@@ -139,27 +139,46 @@ function setupDevTools() {
    ========================================================================= */
 
 /**
- * Moves the #grid-layer opposite to mouse/gyro with factor 0.05 (5 px max).
+ * Inicializa el efecto parallax de la cuadrícula de fondo.
+ * @description Utiliza requestAnimationFrame para desacoplar los eventos de alta frecuencia
+ * (mousemove, deviceorientation) del renderizado, evitando saturar el Main Thread en gama baja.
  */
 function initGridParallax() {
     const grid = document.getElementById('grid-layer');
     if (!grid) return;
 
     const FACTOR = 5; // max pixel shift
+    let ticking = false;
+    let targetX = 0, targetY = 0;
+
+    const updateTransform = () => {
+        grid.style.transform = `translate3d(${targetX}px, ${targetY}px, 0)`;
+        ticking = false;
+    };
 
     document.addEventListener('mousemove', (e) => {
         const xRatio = (e.clientX / window.innerWidth  - 0.5) * 2;
         const yRatio = (e.clientY / window.innerHeight - 0.5) * 2;
-        grid.style.transform =
-            `translate3d(${-xRatio * FACTOR}px, ${-yRatio * FACTOR}px, 0)`;
+        targetX = -xRatio * FACTOR;
+        targetY = -yRatio * FACTOR;
+        
+        if (!ticking) {
+            requestAnimationFrame(updateTransform);
+            ticking = true;
+        }
     }, { passive: true });
 
     window.addEventListener('deviceorientation', (e) => {
         if (e.gamma === null || e.beta === null) return;
         const xRatio = Math.max(-1, Math.min(1, e.gamma / 45));
         const yRatio = Math.max(-1, Math.min(1, (e.beta - 40) / 40));
-        grid.style.transform =
-            `translate3d(${-xRatio * FACTOR}px, ${-yRatio * FACTOR}px, 0)`;
+        targetX = -xRatio * FACTOR;
+        targetY = -yRatio * FACTOR;
+        
+        if (!ticking) {
+            requestAnimationFrame(updateTransform);
+            ticking = true;
+        }
     }, { passive: true });
 }
 
@@ -211,8 +230,15 @@ function initTwinkleDots() {
     })();
 
     let lastTs = 0;
+    let isRunning = true;
 
+    /**
+     * Bucle de renderizado de los puntos parpadeantes.
+     * @description Se detiene automáticamente si la pestaña no es visible para ahorrar batería.
+     */
     function render(ts) {
+        if (!isRunning) return;
+        
         const dt = Math.min((ts - lastTs) / 1000, 0.1);
         lastTs = ts;
 
@@ -235,8 +261,18 @@ function initTwinkleDots() {
             ctx.fillRect(d.x - 0.5, d.y - 0.5, 1, 1);
         }
 
-        requestAnimationFrame(render);
+        if (!document.hidden) {
+            requestAnimationFrame(render);
+        }
     }
+
+    // Reanudar el bucle cuando la pestaña vuelve a ser visible
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            lastTs = performance.now();
+            requestAnimationFrame(render);
+        }
+    });
 
     requestAnimationFrame(render);
 }
@@ -281,6 +317,7 @@ async function startGame(levelId, loadSaved = false) {
 
     const img = new Image();
     img.crossOrigin = 'Anonymous';   // Requerido para Cloudinary + canvas
+    img.fetchPriority = 'high';      // [Optimización] Prioridad máxima para el LCP (Largest Contentful Paint)
     img.src = levelConfig.image;
 
     try {

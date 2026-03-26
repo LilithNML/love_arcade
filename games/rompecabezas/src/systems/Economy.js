@@ -19,12 +19,12 @@ export const Economy = {
             console.error(`[Economy] Error: Cantidad inválida (${rewardCoins}). Debe ser entero positivo.`);
             return;
         }
-
+        
         if (!levelId || typeof levelId !== 'string') {
             console.error('[Economy] Error: levelId inválido.');
             return;
         }
-
+        
         // 2. Comprobación de existencia del Sistema Universal
         // Verificamos window.GameCenter antes de llamar 
         if (window.GameCenter && typeof window.GameCenter.completeLevel === 'function') {

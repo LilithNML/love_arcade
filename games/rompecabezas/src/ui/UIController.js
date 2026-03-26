@@ -211,6 +211,7 @@ export const UI = {
             img.dataset.src = level.thumbnail || level.image;
             img.loading     = 'lazy';    // hint nativo adicional (doble seguro)
             img.decoding    = 'async';   // decodificación no bloqueante
+            img.fetchPriority = 'low';   // [Optimización] Reduce prioridad en red para no bloquear assets críticos
             img.alt         = `Nivel ${levelNum}`;
             img.style.cssText = 'opacity:0; transition:opacity 0.3s ease; width:100%; height:100%; object-fit:cover; display:block;';
 
