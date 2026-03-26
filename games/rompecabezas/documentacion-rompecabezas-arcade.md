@@ -38,7 +38,7 @@
 
 ### Características principales
 
-- **64 niveles** generados algorítmicamente desde una constante única (`TOTAL_LEVELS`). No se requiere editar JSON para agregar niveles.
+- **100 niveles** generados algorítmicamente desde una constante única (`TOTAL_LEVELS`). No se requiere editar JSON para agregar niveles.
 - Activos visuales servidos desde **Cloudinary** con optimización automática de formato (WebP/AVIF).
 - Carga de thumbnails con **IntersectionObserver** real: solo se descargan las imágenes visibles en pantalla, eliminando el retraso de ~3 segundos al entrar a la pantalla de niveles.
 - Motor de renderizado en canvas con soporte para mouse y pantalla táctil.
@@ -160,7 +160,7 @@ Genera 64 niveles en memoria. Sin fetch de red. `async loadLevels()` es síncron
 | `id`          | `"lvl_${n}"`                                    | `"lvl_1"`     | `"lvl_64"`    |
 | `publicId`    | `` `Nivel${String(n).padStart(2,'0')}` ``        | `"Nivel01"`   | `"Nivel64"`   |
 | `pieces`      | `n ≤ 10 ? 16 : 25`                              | `16`          | `25`          |
-| `rewardCoins` | `150 + (n × 2)`                                 | `152`         | `278`         |
+| `rewardCoins` | `150 + (n × 2)`                                 | `152`         | `350`         |
 | `timeLimit`   | `0` (constante)                                 | Sin límite ("∞" en HUD)                 |
 
 #### Cambio v2.2 — Thumbnail w_400 → w_240

@@ -47,6 +47,11 @@ body {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    /* Safe areas for modern mobile devices */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* =========================================
@@ -106,13 +111,13 @@ body {
 #app { width: 100%; height: 100%; display: flex; flex-direction: column; }
 
 .top-bar {
-    height: var(--header-h);
+    height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
     background: var(--bg-panel);
     border-bottom: 1px solid #1E293B;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 20px;
+    padding: env(safe-area-inset-top, 0px) 20px 0;
     z-index: 50;
     flex-shrink: 0;
     position: relative;
@@ -174,12 +179,15 @@ body {
     flex-direction: column;
     width: 100%;
     position: absolute;
-    top: var(--header-h); bottom: 0; left: 0;
+    top: calc(var(--header-h) + env(safe-area-inset-top, 0px)); bottom: env(safe-area-inset-bottom, 0px); left: 0;
     opacity: 0;
     pointer-events: none;
     transform: translate3d(16px, 0, 0);
     transition: opacity 0.25s ease, transform 0.25s ease;
     overflow: hidden;
+    /* Optimize rendering for off-screen views */
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 1000px;
 }
 .screen.active {
     opacity: 1;
@@ -194,11 +202,11 @@ body {
 .micro-label {
     font-family: 'Rajdhani', sans-serif;
     font-size: 7px;
-    font-weight: 500;
+    font-weight: 600; /* Increased weight for better legibility */
     text-transform: uppercase;
     letter-spacing: 1.5px;
     color: var(--accent);
-    opacity: 0.6;
+    opacity: 0.85; /* Increased opacity for WCAG contrast compliance */
     line-height: 1;
     margin-bottom: 2px;
     white-space: nowrap;
@@ -658,12 +666,6 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
     to   { opacity: 1; transform: translate3d(0,  0px, 0); }
 }
 
-/* Referencia CSS del release bounce — la animación real la ejecuta el JS (Web Animations API) */
-@keyframes btnRelease {
-    0%   { transform: scale3d(0.96, 0.96, 1); }
-    60%  { transform: scale3d(1.04, 1.04, 1); }
-    100% { transform: scale3d(1.00, 1.00, 1); }
-}
 
 @keyframes progressScan {
     0%   { width: 0%;  left: 0%;   }

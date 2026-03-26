@@ -170,14 +170,17 @@ function initGridParallax() {
 /**
  * Draws 1px dots at each 40px grid intersection.
  * Every 3–5 s, ~5% of dots twinkle: fade up to full opacity then back.
+ * Loop only runs when screen-menu is active to save resources on low-end devices.
  */
 function initTwinkleDots() {
     const canvas = document.getElementById('twinkle-canvas');
-    if (!canvas) return;
+    const menuScreen = document.getElementById('screen-menu');
+    if (!canvas || !menuScreen) return;
 
     const ctx  = canvas.getContext('2d');
     const GRID = 40;
     let dots   = [];
+    let isLoopRunning = false;
 
     function buildDots() {
         dots = [];
@@ -202,9 +205,12 @@ function initTwinkleDots() {
     // Schedule random twinkle bursts every 3–5 s
     (function scheduleTwinkle() {
         setTimeout(() => {
-            const count = Math.max(1, Math.floor(dots.length * 0.05));
-            for (let i = 0; i < count; i++) {
-                dots[Math.floor(Math.random() * dots.length)].twinkle = 1.0;
+            // Only update dots if the menu is active
+            if (menuScreen.classList.contains('active')) {
+                const count = Math.max(1, Math.floor(dots.length * 0.05));
+                for (let i = 0; i < count; i++) {
+                    dots[Math.floor(Math.random() * dots.length)].twinkle = 1.0;
+                }
             }
             scheduleTwinkle();
         }, 3000 + Math.random() * 2000);
@@ -213,6 +219,13 @@ function initTwinkleDots() {
     let lastTs = 0;
 
     function render(ts) {
+        // Stop the loop if the menu is not active
+        if (!menuScreen.classList.contains('active')) {
+            isLoopRunning = false;
+            return;
+        }
+
+        isLoopRunning = true;
         const dt = Math.min((ts - lastTs) / 1000, 0.1);
         lastTs = ts;
 
@@ -238,7 +251,25 @@ function initTwinkleDots() {
         requestAnimationFrame(render);
     }
 
-    requestAnimationFrame(render);
+    // Monitor for screen changes to restart the loop
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.attributeName === 'class') {
+                const isActive = menuScreen.classList.contains('active');
+                if (isActive && !isLoopRunning) {
+                    lastTs = performance.now();
+                    requestAnimationFrame(render);
+                }
+            }
+        });
+    });
+
+    observer.observe(menuScreen, { attributes: true });
+
+    // Initial trigger
+    if (menuScreen.classList.contains('active')) {
+        requestAnimationFrame(render);
+    }
 }
 
 /* =========================================================================
@@ -268,6 +299,8 @@ async function startGame(levelId, loadSaved = false) {
     clearInterval(GameState.timerId);
 
     UI.showScreen('game');
+    const allLevels  = levelManager.getAllLevelsWithStatus();
+    const levelIndex = allLevels.findIndex(l => l.id === levelId);
 
     const bg = document.getElementById('dynamic-bg');
     if (bg) bg.style.backgroundImage = `url('${levelConfig.image}')`;
@@ -318,13 +351,14 @@ async function startGame(levelId, loadSaved = false) {
 
     GameState.isInGame = true;
 
+    // Actualiza el HUD usando UIController para consistencia
     if (levelConfig.timeLimit && levelConfig.timeLimit > 0) {
+        UI.updateHUD(`lvl_${levelIndex + 1}`, '00:00'); // Valor inicial
         startTimer(levelConfig);
     } else {
-        // timeLimit: 0 — modo sin límite de tiempo
+        UI.updateHUD(`lvl_${levelIndex + 1}`, '∞');
         const timerDisplay = document.getElementById('hud-timer');
         if (timerDisplay) {
-            timerDisplay.textContent = '∞';
             timerDisplay.classList.remove('low-time', 'timer-gold', 'timer-silver', 'timer-bronze');
         }
     }
@@ -439,7 +473,9 @@ function startTimer(levelConfig) {
     const totalTime     = levelConfig.timeLimit;
 
     display.className = 'timer-display value';
-    updateTimerDisplay(GameState.timeLeft);
+    const m  = Math.floor(GameState.timeLeft / 60).toString().padStart(2, '0');
+    const sc = (GameState.timeLeft % 60).toString().padStart(2, '0');
+    UI.updateHUD(currentLevelId, `${m}:${sc}`);
 
     const updateColor = () => {
         const elapsed = totalTime - GameState.timeLeft;
@@ -457,7 +493,12 @@ function startTimer(levelConfig) {
         if (GameState.isPaused) return;
 
         GameState.timeLeft--;
-        updateTimerDisplay(GameState.timeLeft);
+
+        // Use UIController for timer update
+        const m  = Math.floor(GameState.timeLeft / 60).toString().padStart(2, '0');
+        const sc = (GameState.timeLeft % 60).toString().padStart(2, '0');
+        UI.updateHUD(currentLevelId, `${m}:${sc}`);
+
         updateColor();
 
         if (GameState.timeLeft <= 0) {
@@ -572,13 +613,6 @@ function refreshLevelsScreen() {
 /* =========================================================================
    UTILITIES
    ========================================================================= */
-function updateTimerDisplay(s) {
-    const m  = Math.floor(s / 60).toString().padStart(2, '0');
-    const sc = (s % 60).toString().padStart(2, '0');
-    const el = document.getElementById('hud-timer');
-    if (el) el.textContent = `${m}:${sc}`;
-}
-
 function saveProgress(lid) {
     if (activeGame) Storage.set(`save_${lid}`, activeGame.exportState());
 }
