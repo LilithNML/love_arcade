@@ -1,32 +1,3 @@
-/**
- * PuzzleEngine.js v15.0 - Tactical HUD & Precision Geometry
- *
- * Nuevas funcionalidades respecto a v14.0:
- *
- * FONDO REACTIVO:
- * - gridCanvas (offscreen) para líneas de cuadrícula estáticas.
- *   No carga el loop del puzzle — se dibuja una sola vez por resize.
- * - Puntos de anclaje (micro-dots) en intersecciones con parpadeo aleatorio.
- * - Efecto Parallax: la rejilla se desplaza un 5% opuesto al puntero/giro.
- *   Driven by pointermove + DeviceOrientation. Lerp suavizado (0.08).
- *
- * SNAP & EFECTOS:
- * - Edge Pulse: al encajar una pieza, un anillo se expande desde el centro
- *   hasta los bordes de la pantalla (radio máx = diagonal) en 700ms.
- * - Flash perimetral esmeralda (150ms) se mantiene del v14.
- *
- * HÁPTICA (patrones específicos):
- * - 10ms al levantar una pieza (touchstart / pickup).
- * - [30, 20, 10] doble pulse al encajar (onSnap callback).
- * - Heavy pulse al completar el nivel (onWin callback en main.js).
- *
- * RENDIMIENTO:
- * - shadowBlur = 0 siempre.
- * - Loop se detiene si no hay nada activo (edgePulses/snapFlashes añadidos
- *   a la condición de parada).
- * - Idle blink: cada 5s activa el loop durante 60 frames para animar dots.
- */
-
 export class PuzzleEngine {
     constructor(canvasElement, config, callbacks) {
         this.canvas = canvasElement;
@@ -36,14 +7,12 @@ export class PuzzleEngine {
         this.gridSize = Math.sqrt(config.pieces);
         this.callbacks = callbacks || {};
 
-        // --- BUFFERS ---
         this.staticCanvas = document.createElement('canvas');
         this.staticCtx = this.staticCanvas.getContext('2d', { alpha: true });
 
         this.sourceCanvas = document.createElement('canvas');
         this.sourceCtx = this.sourceCanvas.getContext('2d', { alpha: false });
 
-        // [v15] Offscreen grid canvas (static lines, rebuilt only on resize)
         this.gridCanvas = document.createElement('canvas');
         this.gridCtx = this.gridCanvas.getContext('2d');
         this.gridCanvasW = 0;
@@ -52,23 +21,19 @@ export class PuzzleEngine {
 
         this.needsStaticUpdate = true;
 
-        // State
         this.pieces = [];
         this.lockedPieces = [];
         this.loosePieces = [];
         this.particles = [];
 
-        // [v15] Visual effects
-        this.snapFlashes = [];   // perimeter glow on snap (150ms)
-        this.edgePulses  = [];   // radial pulse to screen edges (700ms)
+        this.snapFlashes = [];
+        this.edgePulses  = [];
 
-        // [v15] Parallax state
         this.parallaxX = 0;
         this.parallaxY = 0;
         this.targetParallaxX = 0;
         this.targetParallaxY = 0;
 
-        // [v15] Micro-dot blink data (generated once on init)
         this.blinkDots = [];
 
         this.selectedPiece = null;
@@ -83,17 +48,14 @@ export class PuzzleEngine {
 
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-        // [v16] Mobile portrait flag — set by resizeCanvas, read by shufflePieces
         this.isMobilePortrait = false;
 
         this.isLoopRunning = false;
-        this._idleWakeCount = 0; // frames to keep loop alive for idle blink
+        this._idleWakeCount = 0;
 
-        // [v14/v15] shadowBlur = 0 always
         this.shadowBlur    = 0;
         this.particleLimit = this.gridSize >= 8 ? 20 : 50;
 
-        // Binds
         this.handleStart    = this.handleStart.bind(this);
         this.handleMove     = this.handleMove.bind(this);
         this.handleEnd      = this.handleEnd.bind(this);
@@ -113,7 +75,6 @@ export class PuzzleEngine {
         this.addEventListeners();
         this.wakeUp();
 
-        // Idle blink: wake loop every 5s for ~1s of dot animation
         this._idleTimer = setInterval(() => {
             if (!this.isLoopRunning) {
                 this._idleWakeCount = 70;
@@ -122,7 +83,6 @@ export class PuzzleEngine {
         }, 5000);
     }
 
-    /* ---- LOOP ---- */
     wakeUp() {
         if (!this.isLoopRunning) {
             this.isLoopRunning = true;
@@ -151,13 +111,27 @@ export class PuzzleEngine {
         requestAnimationFrame(() => this.animate());
     }
 
-    /* ---- RESIZE ---- */
     handleResize() {
+        const oldW = this.logicalWidth || 1;
+        const oldH = this.logicalHeight || 1;
+
         this.resizeCanvas();
         this.buildGridCanvas();
         this.generateBlinkDots();
         this.createPiecesPathsOnly();
-        this.shufflePieces(true);
+
+        const scaleX = this.logicalWidth / oldW;
+        const scaleY = this.logicalHeight / oldH;
+
+        for (const p of this.loosePieces) {
+            if (!p.isLocked) {
+                p.currentX *= scaleX;
+                p.currentY *= scaleY;
+                this.clampPosition(p);
+            }
+        }
+
+        this.updatePieceCaches();
         this.needsStaticUpdate = true;
         this.wakeUp();
     }
@@ -183,15 +157,12 @@ export class PuzzleEngine {
         this.logicalWidth  = w;
         this.logicalHeight = h;
 
-        // [v16] Mobile portrait: board fills nearly full width, anchored to top.
-        // Piece spawn area is the strip below the board.
         const isMobilePortrait = w < h && w < 520;
         this.isMobilePortrait  = isMobilePortrait;
 
         let cssW, cssH;
 
         if (isMobilePortrait) {
-            // 97% of screen width; cap at 68% of height so pieces always have room below
             cssW = w * 0.97;
             cssH = cssW / imgRatio;
             const maxH = h * 0.68;
@@ -200,9 +171,8 @@ export class PuzzleEngine {
             this.boardWidth  = cssW;
             this.boardHeight = cssH;
             this.boardX      = Math.round((w - cssW) / 2);
-            this.boardY      = 8; // tight top margin
+            this.boardY      = 8;
         } else {
-            // Original desktop / tablet / landscape layout
             cssW = w; cssH = w / imgRatio;
             if (cssH > h) { cssH = h; cssW = cssH * imgRatio; }
             cssW *= 0.65; cssH *= 0.65;
@@ -225,9 +195,8 @@ export class PuzzleEngine {
         this.needsStaticUpdate = true;
     }
 
-    /* ---- OFFSCREEN GRID CANVAS (spec: drawn independently) ---- */
     buildGridCanvas() {
-        const ext          = 0.12; // 12% padding each side absorbs parallax
+        const ext          = 0.12;
         const lw           = this.logicalWidth;
         const lh           = this.logicalHeight;
         this.gridPad       = Math.max(lw, lh) * ext;
@@ -241,10 +210,9 @@ export class PuzzleEngine {
         ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         ctx.clearRect(0, 0, this.gridCanvasW, this.gridCanvasH);
 
-        const cell = 40; // fixed background grid cell size (px)
+        const cell = 40;
 
-        // Subtle grid lines
-        ctx.strokeStyle = 'rgba(59, 130, 246, 0.055)';
+        ctx.strokeStyle = 'rgba(99, 102, 241, 0.05)';
         ctx.lineWidth   = 1;
 
         for (let x = 0; x < this.gridCanvasW; x += cell) {
@@ -261,17 +229,15 @@ export class PuzzleEngine {
         }
     }
 
-    /* ---- MICRO-DOTS (random subset of grid intersections, blink in render) ---- */
     generateBlinkDots() {
         this.blinkDots = [];
         const cell = 40;
-        const pad  = this.gridPad;
 
         for (let x = 0; x <= this.gridCanvasW; x += cell) {
             for (let y = 0; y <= this.gridCanvasH; y += cell) {
                 if (Math.random() < 0.22) {
                     this.blinkDots.push({
-                        x,          // coordinate inside gridCanvas space
+                        x,
                         y,
                         phase: Math.random() * Math.PI * 2,
                         speed: 0.25 + Math.random() * 1.1
@@ -281,9 +247,7 @@ export class PuzzleEngine {
         }
     }
 
-    /* ---- PARALLAX UPDATE (called on pointer/orientation events) ---- */
     _updateParallaxTarget(px, py) {
-        // Pointer or orientation offset → opposite direction, max 5% of screen
         const cx = this.logicalWidth  / 2;
         const cy = this.logicalHeight / 2;
         this.targetParallaxX = -((px - cx) / cx) * this.logicalWidth  * 0.05;
@@ -292,32 +256,26 @@ export class PuzzleEngine {
     }
 
     _onOrientation(e) {
-        // gamma: left/right (-90…90), beta: front/back (-180…180)
         const px = this.logicalWidth  * (0.5 + (e.gamma || 0) / 90  * 0.5);
         const py = this.logicalHeight * (0.5 + (e.beta  || 0) / 180 * 0.5);
         this._updateParallaxTarget(px, py);
     }
 
-    /* ---- RENDER ---- */
     render() {
         if (this.needsStaticUpdate) {
             this.updateStaticLayer();
             this.needsStaticUpdate = false;
         }
 
-        // Lerp parallax toward target (GPU-smooth, only transform)
         this.parallaxX += (this.targetParallaxX - this.parallaxX) * 0.08;
         this.parallaxY += (this.targetParallaxY - this.parallaxY) * 0.08;
 
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
 
-        // 1. Background grid with parallax
         this._renderGridLayer();
 
-        // 2. Static layer (board + locked pieces)
         this.ctx.drawImage(this.staticCanvas, 0, 0, this.logicalWidth, this.logicalHeight);
 
-        // 3. Preview
         if (this.showPreview) {
             this.ctx.save();
             this.ctx.globalAlpha = 0.28;
@@ -328,54 +286,43 @@ export class PuzzleEngine {
             this.ctx.restore();
         }
 
-        // 4. Loose pieces (not selected)
         for (let i = 0; i < this.loosePieces.length; i++) {
             const p = this.loosePieces[i];
             if (p !== this.selectedPiece) this.renderPieceToContext(this.ctx, p, false);
         }
 
-        // 5. Ghost + selected piece
         if (this.selectedPiece) {
             const p    = this.selectedPiece;
             const dist = Math.hypot(p.currentX - p.correctX, p.currentY - p.correctY);
             if (dist < this.pieceWidth * 0.4) {
                 this.ctx.save();
                 this.ctx.translate(p.correctX, p.correctY);
-                this.ctx.fillStyle   = 'rgba(255,255,255,0.2)';
+                this.ctx.fillStyle   = 'rgba(255,255,255,0.1)';
                 this.ctx.fill(p.path);
-                this.ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-                this.ctx.lineWidth   = 1.5;
+                this.ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                this.ctx.lineWidth   = 2;
                 this.ctx.stroke(p.path);
                 this.ctx.restore();
             }
             this.renderPieceToContext(this.ctx, this.selectedPiece, true);
         }
 
-        // 6. Particles
         this.updateParticles();
-
-        // 7. [v15] Snap perimeter flash (150ms, esmeralda)
         this._updateSnapFlashes();
-
-        // 8. [v15] Edge pulse (700ms, radial to screen corners)
         this._updateEdgePulses();
     }
 
-    /* ---- GRID LAYER with parallax + blinking micro-dots ---- */
     _renderGridLayer() {
         const dx = -this.gridPad + this.parallaxX;
         const dy = -this.gridPad + this.parallaxY;
 
-        // Composite offscreen grid canvas with parallax offset
         this.ctx.drawImage(
             this.gridCanvas,
             0, 0, this.gridCanvasW * this.dpr, this.gridCanvasH * this.dpr,
             dx, dy, this.gridCanvasW, this.gridCanvasH
         );
 
-        // Blinking micro-dots at grid intersections
         const now = performance.now() / 1000;
-        const pad = this.gridPad;
 
         for (let i = 0; i < this.blinkDots.length; i++) {
             const d     = this.blinkDots[i];
@@ -383,7 +330,7 @@ export class PuzzleEngine {
             const sx    = Math.round(d.x + dx);
             const sy    = Math.round(d.y + dy);
             if (sx < 0 || sx > this.logicalWidth || sy < 0 || sy > this.logicalHeight) continue;
-            this.ctx.fillStyle = `rgba(59,130,246,${alpha.toFixed(2)})`;
+            this.ctx.fillStyle = `rgba(99,102,241,${alpha.toFixed(2)})`;
             this.ctx.fillRect(sx - 1, sy - 1, 2, 2);
         }
     }
@@ -397,11 +344,9 @@ export class PuzzleEngine {
         const bw = Math.round(this.boardWidth);
         const bh = Math.round(this.boardHeight);
 
-        // Board background (dark solid)
-        ctx.fillStyle = '#0A1118';
+        ctx.fillStyle = '#151C2C';
         ctx.fillRect(bx, by, bw, bh);
 
-        // Board inner grid (piece boundaries reference)
         ctx.save();
         ctx.strokeStyle = '#1E293B';
         ctx.lineWidth   = 1;
@@ -415,12 +360,10 @@ export class PuzzleEngine {
         }
         ctx.restore();
 
-        // Board border — accent blue, 1px
-        ctx.strokeStyle = '#3B82F6';
-        ctx.lineWidth   = 1;
+        ctx.strokeStyle = '#6366F1';
+        ctx.lineWidth   = 2;
         ctx.strokeRect(bx, by, bw, bh);
 
-        // Locked pieces
         for (let i = 0; i < this.lockedPieces.length; i++) {
             this.renderPieceToContext(ctx, this.lockedPieces[i], false, true);
         }
@@ -432,7 +375,6 @@ export class PuzzleEngine {
         const drawY = Math.round(p.currentY);
         ctx.translate(drawX, drawY);
 
-        // [v15] Scale 1.05x when lifted; no shadow (shadowBlur = 0 always)
         if (!isStaticRender && !p.isLocked && isSelected) {
             ctx.translate(this.pieceWidth / 2, this.pieceHeight / 2);
             ctx.scale(1.05, 1.05);
@@ -463,22 +405,20 @@ export class PuzzleEngine {
         );
         ctx.restore();
 
-        // Piece edge stroke
         if (!isStaticRender && !p.isLocked) {
             ctx.save();
             ctx.translate(drawX, drawY);
 
             if (isSelected) {
-                // [v15] White 2px stroke while dragging (precision outline)
                 ctx.translate(this.pieceWidth / 2, this.pieceHeight / 2);
                 ctx.scale(1.05, 1.05);
                 ctx.translate(-this.pieceWidth / 2, -this.pieceHeight / 2);
                 ctx.strokeStyle = '#FFFFFF';
-                ctx.lineWidth   = 2;
+                ctx.lineWidth   = 3;
                 ctx.stroke(p.path);
             } else {
-                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-                ctx.lineWidth   = 1;
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.lineWidth   = 1.5;
                 ctx.stroke(p.path);
             }
 
@@ -486,31 +426,28 @@ export class PuzzleEngine {
         }
     }
 
-    /* ---- [v15] SNAP PERIMETER FLASH (150ms esmeralda) ---- */
     _updateSnapFlashes() {
         if (this.snapFlashes.length === 0) return;
         const now = performance.now();
         for (let i = this.snapFlashes.length - 1; i >= 0; i--) {
             const f = this.snapFlashes[i];
             if (!f.startTime) f.startTime = now;
-            const t = (now - f.startTime) / 150;
+            const t = (now - f.startTime) / 200;
             if (t >= 1) { this.snapFlashes.splice(i, 1); continue; }
             const p = f.piece;
             this.ctx.save();
             this.ctx.translate(Math.round(p.currentX), Math.round(p.currentY));
             this.ctx.strokeStyle = `rgba(16,185,129,${1 - t})`;
-            this.ctx.lineWidth   = 4 - t * 2;
+            this.ctx.lineWidth   = 6 - t * 4;
             this.ctx.stroke(p.path);
             this.ctx.restore();
         }
     }
 
-    /* ---- [v15] EDGE PULSE (snapped piece → screen edges, 700ms) ---- */
     _spawnEdgePulse(x, y) {
         const maxR = Math.hypot(this.logicalWidth, this.logicalHeight);
-        // Two concentric rings with slight delay for depth
         this.edgePulses.push({ x, y, maxR, startTime: null, delay: 0,   color: '16,185,129' });
-        this.edgePulses.push({ x, y, maxR, startTime: null, delay: 80,  color: '59,130,246' });
+        this.edgePulses.push({ x, y, maxR, startTime: null, delay: 100, color: '99,102,241' });
     }
 
     _updateEdgePulses() {
@@ -521,13 +458,12 @@ export class PuzzleEngine {
             if (!ep.startTime) ep.startTime = now;
             const elapsed = now - ep.startTime - ep.delay;
             if (elapsed < 0) continue;
-            const t = elapsed / 700;
+            const t = elapsed / 600;
             if (t >= 1) { this.edgePulses.splice(i, 1); continue; }
-            // Ease-out quad: fast start, gentle finish
             const eased = 1 - Math.pow(1 - t, 2);
             const r     = ep.maxR * eased;
-            const a     = (1 - t) * 0.35;
-            const lw    = Math.max(0.5, 2.5 - t * 2);
+            const a     = (1 - t) * 0.4;
+            const lw    = Math.max(1, 4 - t * 3);
             this.ctx.save();
             this.ctx.beginPath();
             this.ctx.arc(ep.x, ep.y, r, 0, Math.PI * 2);
@@ -538,7 +474,6 @@ export class PuzzleEngine {
         }
     }
 
-    /* ---- PIECE MANAGEMENT ---- */
     updatePieceCaches() {
         this.lockedPieces = this.pieces.filter(p => p.isLocked);
         this.loosePieces  = this.pieces.filter(p => !p.isLocked);
@@ -577,7 +512,6 @@ export class PuzzleEngine {
         }
     }
 
-    /* ---- SHUFFLE — Zonas Caóticas + Collision Avoidance (v13.3) ---- */
     shufflePieces(repositionOnly = false) {
         this.updatePieceCaches();
         const loose = this.loosePieces;
@@ -590,11 +524,10 @@ export class PuzzleEngine {
         }
 
         const topSafe    = 80;
-        const bottomSafe = 20; // buttons are now in HUD — no bottom clearance needed
+        const bottomSafe = 20;
 
         let zones;
         if (this.isMobilePortrait) {
-            // On mobile portrait the board fills ~97% width, so pieces live below it
             const belowY = this.boardY + this.boardHeight + 10;
             const belowH = this.logicalHeight - belowY - bottomSafe;
             zones = [{ x: 4, y: belowY, w: this.logicalWidth - 8, h: Math.max(0, belowH) }];
@@ -608,7 +541,6 @@ export class PuzzleEngine {
 
         const validZones = zones.filter(z => z.w > this.pieceWidth && z.h > this.pieceHeight);
         if (validZones.length === 0) {
-            // Last-resort fallback: scatter anywhere except the very top bar
             validZones.push({ x: 4, y: this.boardY + this.boardHeight + 4, w: this.logicalWidth - 8, h: Math.max(this.pieceHeight * 2, this.logicalHeight - (this.boardY + this.boardHeight) - 8) });
         }
 
@@ -635,14 +567,11 @@ export class PuzzleEngine {
         this.wakeUp();
     }
 
-    /* ---- CLAMPING ---- */
-    // [v16] Repulsion logic removed entirely — buttons are now in the HUD, not on the canvas.
     clampPosition(p) {
         p.currentX = Math.max(0, Math.min(p.currentX, this.logicalWidth  - this.pieceWidth));
         p.currentY = Math.max(0, Math.min(p.currentY, this.logicalHeight - this.pieceHeight));
     }
 
-    /* ---- TOPOLOGY ---- */
     generateSharedTopology() {
         const js = this.gridSize > 6 ? 0.08 : 0.15;
         this.shapes = [];
@@ -697,12 +626,24 @@ export class PuzzleEngine {
         path.lineTo(x2, y2);
     }
 
-    /* ---- INPUT HANDLING ---- */
     getPointerPos(e) {
         const rect    = this.canvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
         return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    cancelDrag() {
+        if (this.isDragging && this.selectedPiece) {
+            if (this.selectedPiece.originalX !== undefined && this.selectedPiece.originalY !== undefined) {
+                this.selectedPiece.currentX = this.selectedPiece.originalX;
+                this.selectedPiece.currentY = this.selectedPiece.originalY;
+            }
+            this.isDragging = false;
+            this.selectedPiece = null;
+            this.needsStaticUpdate = true;
+            this.wakeUp();
+        }
     }
 
     handleStart(e) {
@@ -719,9 +660,10 @@ export class PuzzleEngine {
                 this.isDragging    = true;
                 this.dragOffsetX   = x - p.currentX;
                 this.dragOffsetY   = y - p.currentY;
+                p.originalX        = p.currentX;
+                p.originalY        = p.currentY;
                 this.wakeUp();
                 this.callbacks.onSound && this.callbacks.onSound('click');
-                // [v15] 10ms haptic on pickup
                 if (navigator.vibrate) navigator.vibrate(10);
                 this.loosePieces.splice(i, 1);
                 this.loosePieces.push(p);
@@ -737,7 +679,6 @@ export class PuzzleEngine {
         this.selectedPiece.currentX = x - this.dragOffsetX;
         this.selectedPiece.currentY = y - this.dragOffsetY;
         this.clampPosition(this.selectedPiece);
-        // Update parallax target as piece moves
         this._updateParallaxTarget(x, y);
     }
 
@@ -756,7 +697,6 @@ export class PuzzleEngine {
             this.needsStaticUpdate = true;
             this.updatePieceCaches();
 
-            // [v15] Snap effects
             this.snapFlashes.push({ piece: this.selectedPiece, startTime: null });
             this._spawnEdgePulse(
                 this.selectedPiece.currentX + this.pieceWidth  / 2,
@@ -765,7 +705,6 @@ export class PuzzleEngine {
             this.wakeUp();
 
             this.callbacks.onSound && this.callbacks.onSound('snap');
-            // [v15] Double haptic [30, 20, 10] via callback (main.js)
             this.callbacks.onSnap && this.callbacks.onSnap();
 
             this.spawnParticles(
@@ -788,7 +727,6 @@ export class PuzzleEngine {
         if (this.loosePieces.length === 0) {
             if (this.gridSize < 8) this.spawnParticles(this.logicalWidth / 2, this.logicalHeight / 2, 'confetti');
             if (this.callbacks.onSound) this.callbacks.onSound('win');
-            // Victory: spawn a final massive edge pulse from screen center
             this._spawnEdgePulse(this.logicalWidth / 2, this.logicalHeight / 2);
             if (this.callbacks.onWin) setTimeout(this.callbacks.onWin, 1500);
             this.canvas.removeEventListener('mousedown', this.handleStart);
@@ -796,14 +734,13 @@ export class PuzzleEngine {
         }
     }
 
-    /* ---- PARTICLES ---- */
     spawnParticles(x, y, type) {
         if (type === 'ripple') {
             this.particles.push({ type: 'ripple', x, y, radius: 10, alpha: 1.0, color: '#ffffff', lineWidth: 4, speed: 3 });
-            this.particles.push({ type: 'ripple', x, y, radius: 5,  alpha: 1.0, color: '#fbbf24', lineWidth: 2, speed: 1.5 });
+            this.particles.push({ type: 'ripple', x, y, radius: 5,  alpha: 1.0, color: '#38BDF8', lineWidth: 2, speed: 1.5 });
         } else {
             if (this.particles.length > this.particleLimit) return;
-            const colors = ['#f43f5e', '#3b82f6', '#10b981', '#fbbf24', '#fff'];
+            const colors = ['#6366F1', '#38BDF8', '#10B981', '#F59E0B', '#fff'];
             for (let i = 0; i < 30; i++) {
                 this.particles.push({ type: 'confetti', x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1.0, color: colors[i % colors.length], size: Math.random()*4+2 });
             }
@@ -834,7 +771,6 @@ export class PuzzleEngine {
         this.ctx.globalAlpha = 1;
     }
 
-    /* ---- STATE ---- */
     exportState() { return this.pieces.map(p => ({ id: p.id, cx: p.currentX, cy: p.currentY, locked: p.isLocked })); }
 
     importState(s) {
@@ -850,7 +786,6 @@ export class PuzzleEngine {
         const p = this.loosePieces[Math.floor(Math.random() * this.loosePieces.length)];
         this.spawnParticles(p.correctX + this.pieceWidth / 2, p.correctY + this.pieceHeight / 2, 'ripple');
         p.currentX = p.correctX; p.currentY = p.correctY; p.isLocked = true;
-        // Flash + edge pulse for magnet too
         this.snapFlashes.push({ piece: p, startTime: null });
         this._spawnEdgePulse(p.correctX + this.pieceWidth / 2, p.correctY + this.pieceHeight / 2);
         this.updatePieceCaches(); this.needsStaticUpdate = true;
@@ -859,7 +794,6 @@ export class PuzzleEngine {
         return true;
     }
 
-    /* ---- EVENT LISTENERS ---- */
     addEventListeners() {
         this.canvas.addEventListener('mousedown', this.handleStart);
         window.addEventListener('mousemove', this.handleMove);
@@ -868,7 +802,6 @@ export class PuzzleEngine {
         window.addEventListener('touchmove', this.handleMove, { passive: false });
         window.addEventListener('touchend', this.handleEnd);
 
-        // [v15] Device orientation parallax (iOS 13+ needs permission; try silently)
         if (window.DeviceOrientationEvent) {
             window.addEventListener('deviceorientation', this._onOrientation, { passive: true });
         }

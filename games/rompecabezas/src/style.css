@@ -1,28 +1,29 @@
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Rubik:wght@400;600&display=swap');
-
-/* Force dark color scheme at the UA level — prevents the browser from
-   injecting a white background or light scrollbar before our styles load. */
-html {
-    color-scheme: dark;
-}
-
 /* =========================================
-   1. VARIABLES — Tactical HUD palette
+   1. VARIABLES — Minimalist Premium Indie
    ========================================= */
 :root {
-    --bg-dark:    #05070A;
-    --bg-panel:   #0F172A;
-    --primary:    #F43F5E;
-    --accent:     #3B82F6;
-    --text-main:  #FFFFFF;
-    --text-muted: #475569;
+    --bg-dark:    #0B0F19; /* Deep slate */
+    --bg-panel:   #151C2C; /* Slightly lighter slate */
+    --bg-card:    #1E293B; /* Card background */
+    --primary:    #6366F1; /* Indigo */
+    --primary-dark: #4F46E5;
+    --accent:     #38BDF8; /* Light Blue */
+    --text-main:  #F8FAFC;
+    --text-muted: #94A3B8;
     --success:    #10B981;
     --warning:    #F59E0B;
-    --header-h:   60px;
-    /* Beveled clip-path polygons — top-left + bottom-right 45° cuts */
-    --bevel-lg: polygon(12px 0%, 100% 0%, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0% 100%, 0% 12px);
-    --bevel-md: polygon(8px  0%, 100% 0%, 100% calc(100% - 8px),  calc(100% - 8px)  100%, 0% 100%, 0% 8px);
-    --bevel-sm: polygon(5px  0%, 100% 0%, 100% calc(100% - 5px),  calc(100% - 5px)  100%, 0% 100%, 0% 5px);
+    --danger:     #F43F5E;
+    --header-h:   64px;
+    --radius-sm:  8px;
+    --radius-md:  12px;
+    --radius-lg:  16px;
+    --shadow-sm:  0 2px 0 rgba(0,0,0,0.2);
+    --shadow-md:  0 4px 0 rgba(0,0,0,0.25);
+    --shadow-btn: 0 4px 0 rgba(0,0,0,0.3);
+}
+
+html {
+    color-scheme: dark;
 }
 
 /* =========================================
@@ -37,9 +38,9 @@ html {
 }
 
 body {
-    background: radial-gradient(circle at center, #111A30 0%, #05070A 100%);
+    background-color: var(--bg-dark);
     color: var(--text-main);
-    font-family: 'Rubik', sans-serif;
+    font-family: 'Outfit', sans-serif;
     position: fixed;
     inset: 0;
     width: 100%;
@@ -47,6 +48,10 @@ body {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+}
+
+.font-mono {
+    font-family: 'JetBrains Mono', monospace;
 }
 
 /* =========================================
@@ -58,45 +63,17 @@ body {
     z-index: -3;
     background-size: cover;
     background-position: center;
-    opacity: 0.07;
+    opacity: 0.15;
     transition: background-image 0.4s ease-in-out;
 }
 
-/* ─── Living Grid Layer ──────────────────
-   Parallax transform driven by JS (mouse / DeviceOrientation).
-   Sobredimensionado 10% en cada lado para ocultar el sangrado de bordes
-   durante el desplazamiento parallax.
-   ──────────────────────────────────────── */
-.grid-layer {
+.bg-pattern {
     position: fixed;
-    top: -10%;
-    left: -10%;
-    width: 120%;
-    height: 120%;
+    inset: 0;
     z-index: -2;
-    pointer-events: none;
-    will-change: transform;
-    background-image:
-        repeating-linear-gradient(0deg,   transparent, transparent 39px, rgba(59,130,246,0.07) 40px),
-        repeating-linear-gradient(90deg,  transparent, transparent 39px, rgba(59,130,246,0.07) 40px);
-    background-size: 40px 40px;
-}
-
-.twinkle-canvas {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-}
-
-.scanlines {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    background: repeating-linear-gradient(
-        to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.15) 4px
-    );
+    background-image: radial-gradient(var(--bg-panel) 1px, transparent 1px);
+    background-size: 24px 24px;
+    opacity: 0.3;
     pointer-events: none;
 }
 
@@ -108,65 +85,55 @@ body {
 .top-bar {
     height: var(--header-h);
     background: var(--bg-panel);
-    border-bottom: 1px solid #1E293B;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 20px;
     z-index: 50;
     flex-shrink: 0;
-    position: relative;
-}
-.top-bar::after {
-    content: '';
-    position: absolute;
-    bottom: -1px; right: -1px;
-    width: 18px; height: 18px;
-    border-bottom: 2px solid var(--accent);
-    border-right: 2px solid var(--accent);
-    pointer-events: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
 }
 
 .brand {
     display: flex;
     align-items: center;
     gap: 10px;
-    font-family: 'Rajdhani', sans-serif;
-    font-weight: 700;
-    font-size: 1.2rem;
-    text-transform: uppercase;
-    letter-spacing: 4px;
+    font-weight: 800;
+    font-size: 1.25rem;
+    letter-spacing: 1px;
+    color: var(--text-main);
 }
 
 .game-tag {
-    background: var(--primary);
-    font-size: 0.6rem;
-    padding: 2px 5px;
-    clip-path: var(--bevel-sm);
-    color: var(--bg-dark);
-    margin-left: 6px;
-    letter-spacing: 2px;
-    font-weight: 700;
-    font-family: 'Rajdhani', sans-serif;
+    color: var(--accent);
+    margin-left: 4px;
 }
 
 .coins-wrapper {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    align-items: center;
 }
 
-.coins-micro { margin-bottom: 1px; }
+.coins-display {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-dark);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--warning);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+}
 
 .icon {
     width: 20px; height: 20px;
-    fill: none; stroke: currentColor;
-    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
     display: inline-block; vertical-align: middle; flex-shrink: 0;
 }
 
 /* =========================================
-   5. SCREENS — transitions: translateX only
+   5. SCREENS
    ========================================= */
 .screen {
     flex: 1;
@@ -177,53 +144,19 @@ body {
     top: var(--header-h); bottom: 0; left: 0;
     opacity: 0;
     pointer-events: none;
-    transform: translate3d(16px, 0, 0);
-    transition: opacity 0.25s ease, transform 0.25s ease;
+    transform: translateY(10px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
     overflow: hidden;
 }
 .screen.active {
     opacity: 1;
     pointer-events: all;
-    transform: translate3d(0, 0, 0);
+    transform: translateY(0);
     z-index: 10;
 }
 
 /* =========================================
-   6. MICRO-LABELS
-   ========================================= */
-.micro-label {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 7px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--accent);
-    opacity: 0.6;
-    line-height: 1;
-    margin-bottom: 2px;
-    white-space: nowrap;
-    display: block;
-}
-
-.canvas-corner-data {
-    position: absolute;
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 7px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--accent);
-    opacity: 0.4;
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 25;
-    line-height: 1;
-}
-.canvas-corner-data.top-left    { top: 8px; left: 10px; }
-.canvas-corner-data.bottom-right { bottom: 8px; right: 10px; text-align: right; }
-
-/* =========================================
-   7. SCREEN: MENU
+   6. SCREEN: MENU
    ========================================= */
 #screen-menu {
     justify-content: center;
@@ -232,142 +165,96 @@ body {
 }
 
 .menu-content {
-    background: var(--bg-panel);
-    padding: 36px;
-    position: relative;
     text-align: center;
-    width: 90%;
-    max-width: 340px;
-    animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    filter: drop-shadow(4px 4px 0 #000000);
-}
-.menu-content::before {
-    content: ''; position: absolute;
-    top: -1px; left: -1px; width: 20px; height: 20px;
-    border-top: 2px solid var(--accent); border-left: 2px solid var(--accent);
-    pointer-events: none;
-}
-.menu-content::after {
-    content: ''; position: absolute;
-    bottom: -1px; right: -1px; width: 20px; height: 20px;
-    border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent);
-    pointer-events: none;
-}
-
-.game-title-label {
-    display: block;
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 8px;
-    text-transform: uppercase;
-    letter-spacing: 3px;
-    color: var(--accent);
-    opacity: 0.55;
-    margin-bottom: 10px;
+    width: 100%;
+    max-width: 320px;
+    padding: 20px;
 }
 
 .game-title {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 2.8rem;
-    font-weight: 700;
-    line-height: 0.9;
-    margin-bottom: 0;
-    text-transform: uppercase;
-    letter-spacing: 4px;
+    font-size: 3.5rem;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 8px;
     color: var(--text-main);
+    text-shadow: 0 4px 0 var(--primary-dark);
+}
+
+.game-subtitle {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 40px;
 }
 
 .main-nav {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    margin-top: 24px;
+    gap: 16px;
 }
 
-#screen-menu:not(.active) .main-nav .btn { opacity: 0; animation: none; }
-#screen-menu.active .main-nav .btn { animation: hudSlideIn 0.28s ease both; }
-#screen-menu.active .main-nav .btn:nth-child(1) { animation-delay: 0.00s; }
-#screen-menu.active .main-nav .btn:nth-child(2) { animation-delay: 0.04s; }
-#screen-menu.active .main-nav .btn:nth-child(3) { animation-delay: 0.08s; }
-#screen-menu.active .main-nav .btn:nth-child(4) { animation-delay: 0.12s; }
-
 /* =========================================
-   8. SCREEN: LEVELS
+   7. SCREEN: LEVELS
    ========================================= */
 #screen-levels { height: 100%; display: flex; flex-direction: column; }
 
 .screen-header {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 16px;
     padding: 0 20px;
-    height: 52px;
-    min-height: 48px;
+    height: 60px;
     flex-shrink: 0;
     background: var(--bg-panel);
-    border-bottom: 1px solid #1E293B;
     z-index: 5;
-    position: relative;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
-.screen-header::after {
-    content: ''; position: absolute;
-    bottom: -1px; right: -1px; width: 14px; height: 14px;
-    border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent);
-    pointer-events: none;
-}
+
 .screen-header h2 {
-    font-family: 'Rajdhani', sans-serif;
-    text-transform: uppercase;
-    letter-spacing: 4px;
-    font-size: 1rem;
-    font-weight: 700;
+    font-weight: 800;
+    font-size: 1.25rem;
+    letter-spacing: 1px;
 }
 
 #levels-container {
     flex: 1;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     grid-auto-rows: max-content;
     align-content: start;
-    gap: 10px;
-    padding: 14px;
+    gap: 16px;
+    padding: 20px;
     padding-bottom: 100px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
     width: 100%;
-    max-width: 1000px;
+    max-width: 800px;
     margin: 0 auto;
 }
 
-/* ─── Level card ─────────────────────────────────────────────────────────────
-   contain: layout style paint
-     · layout  → los cambios internos no afectan el layout del resto del DOM
-     · style   → contiene el alcance de estilos heredados costosos
-     · paint   → el browser puede omitir pintar tarjetas fuera del viewport
-   Esto es especialmente útil para las 64 tarjetas: el browser puede saltarse
-   el pintado de las que están por debajo del pliegue sin que JS lo gestione.
-   ─────────────────────────────────────────────────────────────────────────── */
 .level-card {
     position: relative;
     aspect-ratio: 1 / 1;
-    min-height: 112px;
-    background: var(--bg-panel);
-    clip-path: var(--bevel-sm);
+    min-height: 100px;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: pointer;
-    contain: layout style paint;     /* optimización de render para off-screen cards */
-    content-visibility: auto;        /* Renderizado diferido nativo para gama baja */
-    contain-intrinsic-size: 112px;   /* Previene saltos de scroll al usar content-visibility */
-    animation: cardSlideIn 0.3s ease both;
-    filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.85));
+    contain: layout style paint;
+    content-visibility: auto;
+    contain-intrinsic-size: 100px;
+    box-shadow: var(--shadow-md);
     overflow: hidden;
-    transition: filter 0.12s;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
-.level-card:active { transform: scale3d(0.95, 0.95, 1); }
-
-/* Foco visible para navegación por teclado (WCAG 2.2 — 2.4.11) */
+.level-card:active { 
+    transform: translateY(2px);
+    box-shadow: var(--shadow-sm);
+}
 .level-card:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -385,70 +272,49 @@ body {
 .level-overlay {
     position: absolute; inset: 0; z-index: 2;
     display: flex; justify-content: center; align-items: center;
-    background: linear-gradient(to top, rgba(0,0,0,0.88), rgba(0,0,0,0.08));
+    background: rgba(15, 23, 42, 0.6);
     color: white;
-    font-size: 1.3rem; font-weight: bold;
+    font-size: 1.5rem; font-weight: 800;
     pointer-events: none;
 }
 
-.stars-display { letter-spacing: 2px; }
-
 .level-card.locked {
-    filter: grayscale(100%) brightness(0.4) drop-shadow(2px 2px 0 rgba(0,0,0,0.85));
+    background: var(--bg-panel);
     cursor: not-allowed;
+    box-shadow: none;
 }
-.level-card.locked:active { transform: none; }
-.level-card.completed     { filter: drop-shadow(2px 2px 0 rgba(16,185,129,0.55)); }
+.level-card.locked img { display: none; }
+.level-card.locked .level-overlay { background: transparent; color: var(--text-muted); }
+.level-card.locked:active { transform: none; box-shadow: none; }
+
+.level-card.completed {
+    border: 2px solid var(--success);
+}
 
 /* =========================================
-   9. SCREEN: GAME — HUD
+   8. SCREEN: GAME — HUD
    ========================================= */
 .hud {
-    padding: 0 20px;
-    height: 48px;
+    padding: 0 16px;
+    height: 60px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     background: var(--bg-panel);
-    border-bottom: 1px solid #1E293B;
     flex-shrink: 0;
     z-index: 20;
-    position: relative;
-}
-.hud::after {
-    content: ''; position: absolute;
-    bottom: -1px; right: -1px; width: 12px; height: 12px;
-    border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent);
-    pointer-events: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
 .hud-stats {
-    font-family: 'Rajdhani', sans-serif;
     display: flex;
     gap: 24px;
-    align-items: flex-end;
-}
-
-.hud-stat {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    align-items: center;
 }
 
 .hud-stat .value {
-    font-size: 1rem;
-    font-weight: 700;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--text-main);
-    line-height: 1;
-}
-
-.timer-display {
-    font-family: 'Courier New', 'Lucida Console', monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: 0.95rem;
-    letter-spacing: 1.5px;
+    font-size: 1.1rem;
+    font-weight: 800;
     color: var(--text-main);
 }
 
@@ -461,7 +327,6 @@ body {
     align-items: center;
     z-index: 1;
     touch-action: none;
-    background: var(--bg-dark);
 }
 
 canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -469,81 +334,101 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 .hud-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
+    gap: 12px;
 }
 
 .btn-hud-action {
-    width: 44px; height: 44px; min-height: 44px; /* WCAG 2.2 AA: 44x44px mínimo */
-    clip-path: var(--bevel-md);
+    width: 44px; height: 44px; min-height: 44px;
+    border-radius: var(--radius-sm);
     border: none;
-    background: var(--bg-dark); color: var(--text-main);
-    box-shadow: inset 0 0 0 1px var(--accent);
+    background: var(--bg-card); 
+    color: var(--text-main);
     cursor: pointer;
     display: flex; justify-content: center; align-items: center;
     touch-action: manipulation;
-    filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.8));
-    transition: background 0.08s;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
     flex-shrink: 0;
 }
-.btn-hud-action:active { transform: scale3d(0.96, 0.96, 1); background: var(--accent); color: var(--bg-dark); }
-.btn-hud-action.gold { box-shadow: inset 0 0 0 1px var(--warning); color: var(--warning); }
-.btn-hud-action.gold:active { background: var(--warning); color: var(--bg-dark); }
+.btn-hud-action:active { 
+    transform: translateY(2px); 
+    box-shadow: none;
+    background: var(--bg-panel);
+}
+.btn-hud-action.gold { color: var(--warning); }
 .btn-hud-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* =========================================
-   10. BUTTONS
-   Release bounce driven by JS Web Animations API: 0.96 → 1.04 → 1.0 in 200ms
+   9. BUTTONS (Flat 2.0)
    ========================================= */
 .btn {
     border: none; outline: none;
-    padding: 0 18px;
-    height: 48px; min-height: 48px;
-    clip-path: var(--bevel-lg);
-    font-family: 'Rajdhani', sans-serif;
-    font-weight: 700; font-size: 1rem;
-    text-transform: uppercase; letter-spacing: 3px;
+    padding: 0 24px;
+    height: 56px; min-height: 48px;
+    border-radius: var(--radius-md);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800; font-size: 1.1rem;
+    letter-spacing: 1px;
     cursor: pointer;
-    display: flex; justify-content: center; align-items: center; gap: 10px;
+    display: flex; justify-content: center; align-items: center; gap: 12px;
     text-decoration: none;
     touch-action: manipulation;
     position: relative;
-    transition: background 0.08s, color 0.08s;
-    filter: drop-shadow(2px 2px 0 #000000);
+    transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
+    box-shadow: var(--shadow-btn);
+    width: 100%;
 }
-.btn:active { transform: scale3d(0.96, 0.96, 1); }
+.btn:active { 
+    transform: translateY(4px); 
+    box-shadow: none;
+}
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.btn-primary  { background: var(--bg-panel); color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
-.btn-primary:active { background: var(--primary); color: var(--bg-dark); box-shadow: none; }
+.btn-primary { 
+    background: var(--primary); 
+    color: #fff; 
+    box-shadow: 0 4px 0 var(--primary-dark);
+}
+.btn-primary:active { box-shadow: 0 0 0 var(--primary-dark); }
 
-.btn-secondary { background: var(--bg-panel); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.btn-secondary:active { background: var(--accent); color: var(--bg-dark); box-shadow: none; }
+.btn-secondary { 
+    background: var(--bg-card); 
+    color: var(--text-main); 
+    box-shadow: 0 4px 0 #0F172A;
+}
+.btn-secondary:active { box-shadow: 0 0 0 #0F172A; }
 
-.btn-danger { background: transparent; color: #EF4444; box-shadow: inset 0 0 0 1px rgba(239,68,68,0.45); margin-top: 8px; }
-.btn-danger:active { background: #EF4444; color: var(--bg-dark); box-shadow: none; }
+.btn-danger { 
+    background: var(--danger); 
+    color: #fff; 
+    box-shadow: 0 4px 0 #BE123C;
+}
+.btn-danger:active { box-shadow: 0 0 0 #BE123C; }
 
 .btn-icon {
-    width: 44px; height: 44px; min-height: 44px; /* WCAG 2.2 AA: 44x44px mínimo */
-    clip-path: var(--bevel-md);
+    width: 44px; height: 44px; min-height: 44px;
+    border-radius: var(--radius-sm);
     border: none;
-    background: var(--bg-panel); color: var(--text-main);
-    box-shadow: inset 0 0 0 1px #1E293B;
+    background: var(--bg-card); 
+    color: var(--text-main);
     cursor: pointer;
     display: flex; justify-content: center; align-items: center;
     touch-action: manipulation;
-    filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.8));
-    transition: background 0.08s;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.1s, box-shadow 0.1s;
 }
-.btn-icon:active { transform: scale3d(0.96, 0.96, 1); background: var(--accent); color: var(--bg-dark); }
+.btn-icon:active { 
+    transform: translateY(2px); 
+    box-shadow: none;
+}
 .btn-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* =========================================
-   11. MODALS
+   10. MODALS
    ========================================= */
 .modal-backdrop {
     position: fixed; inset: 0;
-    background: rgba(0,0,0,0.92);
+    background: rgba(11, 15, 25, 0.85);
     display: flex; justify-content: center; align-items: center;
     z-index: 100; opacity: 1;
     transition: opacity 0.2s;
@@ -552,151 +437,148 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 
 .modal-content {
     background: var(--bg-panel);
-    padding: 28px; position: relative;
-    text-align: center; width: 90%; max-width: 340px;
-    animation: popIn 0.22s ease;
-    filter: drop-shadow(4px 4px 0 #000000);
+    padding: 32px 24px;
+    border-radius: var(--radius-lg);
+    text-align: center; 
+    width: 90%; max-width: 360px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    transform: scale(1);
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
-.modal-content::before {
-    content: ''; position: absolute;
-    top: -1px; left: -1px; width: 18px; height: 18px;
-    border-top: 2px solid var(--accent); border-left: 2px solid var(--accent);
-    pointer-events: none;
+.modal-backdrop.hidden .modal-content {
+    transform: scale(0.9);
 }
-.modal-content::after {
-    content: ''; position: absolute;
-    bottom: -1px; right: -1px; width: 18px; height: 18px;
-    border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent);
-    pointer-events: none;
-}
+
 .modal-content h3 {
-    font-family: 'Rajdhani', sans-serif; font-weight: 700;
-    font-size: 1.2rem; text-transform: uppercase; letter-spacing: 4px;
-    margin-bottom: 6px;
+    font-weight: 800;
+    font-size: 1.5rem; 
+    margin-bottom: 12px;
+    letter-spacing: 1px;
+}
+
+.modal-content p {
+    color: var(--text-muted);
+    margin-bottom: 24px;
+    font-size: 1rem;
+}
+
+.modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.text-danger { color: var(--danger); }
+.text-success { color: var(--success); }
+
+.victory-reward {
+    display: flex; align-items: center; justify-content: center; gap: 8px; 
+    margin-bottom: 24px;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--warning);
+}
+.icon-coin {
+    width: 28px; height: 28px;
 }
 
 /* =========================================
-   12. SETTINGS
+   11. SETTINGS
    ========================================= */
-.settings-list { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.settings-list { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
 .setting-item {
     display: flex; justify-content: space-between; align-items: center;
-    background: var(--bg-panel);
-    padding: 14px 16px; min-height: 48px;
-    color: var(--text-main); font-size: 0.9rem;
+    background: var(--bg-card);
+    padding: 16px 20px; min-height: 56px;
+    border-radius: var(--radius-md);
+    color: var(--text-main); font-size: 1.1rem; font-weight: 600;
+}
+
+/* Toggle Switch */
+.toggle-switch {
     position: relative;
-    clip-path: var(--bevel-lg);
-    box-shadow: inset 0 0 0 1px #1E293B;
+    display: inline-block;
+    width: 50px;
+    height: 28px;
+}
+.toggle-switch input { 
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: var(--bg-panel);
+    transition: .2s;
+    border-radius: 34px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 4px;
+    bottom: 4px;
+    background-color: var(--text-muted);
+    transition: .2s;
+    border-radius: 50%;
+}
+input:checked + .slider {
+    background-color: var(--primary);
+}
+input:checked + .slider:before {
+    transform: translateX(22px);
+    background-color: #fff;
 }
 
 /* =========================================
-   13. LOADING
+   12. LOADING
    ========================================= */
 .loading-overlay {
     position: absolute; inset: 0;
     background: var(--bg-dark); z-index: 30;
-    display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch;
+    display: flex; justify-content: center; align-items: center;
 }
 .loading-overlay.hidden { display: none; }
 
-.progress-bar-track {
-    width: 100%; height: 2px;
-    background: #1E293B;
-    flex-shrink: 0; position: relative; overflow: hidden;
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(255,255,255,0.1);
+    border-left-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
 }
-.progress-bar-fill {
-    position: absolute; top: 0; left: 0; height: 100%;
-    background: var(--primary);
-    animation: progressScan 1.4s ease-in-out infinite;
-}
-.loading-overlay p {
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    color: var(--text-muted);
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 0.75rem; letter-spacing: 4px; text-transform: uppercase;
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 /* =========================================
-   14. SKELETON
+   13. SKELETON
    ========================================= */
-.skeleton { background: #0A1018; position: relative; overflow: hidden; }
+.skeleton { background: var(--bg-panel); position: relative; overflow: hidden; }
 .skeleton::after {
     content: ''; position: absolute; inset: 0;
-    transform: translate3d(-100%, 0, 0);
+    transform: translateX(-100%);
     background-image: linear-gradient(
-        90deg, transparent 0, rgba(255,255,255,0.04) 20%, rgba(255,255,255,0.07) 60%, transparent
+        90deg, transparent 0, rgba(255,255,255,0.05) 20%, rgba(255,255,255,0.08) 60%, transparent
     );
-    animation: shimmer 2.2s infinite;
+    animation: shimmer 2s infinite;
 }
+@keyframes shimmer { 100% { transform: translateX(100%); } }
 
 /* =========================================
-   15. COINS DISPLAY
-   ========================================= */
-.coins-display {
-    font-family: 'Rajdhani', sans-serif; font-weight: 700;
-    letter-spacing: 2px; color: var(--warning);
-    display: flex; align-items: center; gap: 6px; font-size: 1rem;
-}
-
-/* =========================================
-   16. TIMER COLORS
-   ========================================= */
-.timer-display.low-time { color: #EF4444 !important; animation: pulse 1s infinite; font-weight: 800; }
-#hud-timer.timer-gold   { color: #FBBF24 !important; font-weight: 800; }
-#hud-timer.timer-silver { color: #94A3B8 !important; font-weight: 700; }
-#hud-timer.timer-bronze { color: #D97706 !important; font-weight: 600; }
-
-/* =========================================
-   17. ANIMATIONS — only transform/opacity
-   ========================================= */
-@keyframes hudSlideIn {
-    from { opacity: 0; transform: translate3d(0, 12px, 0); }
-    to   { opacity: 1; transform: translate3d(0,  0px, 0); }
-}
-
-@keyframes cardSlideIn {
-    from { opacity: 0; transform: translate3d(0, 20px, 0); }
-    to   { opacity: 1; transform: translate3d(0,  0px, 0); }
-}
-
-/* Referencia CSS del release bounce — la animación real la ejecuta el JS (Web Animations API) */
-@keyframes btnRelease {
-    0%   { transform: scale3d(0.96, 0.96, 1); }
-    60%  { transform: scale3d(1.04, 1.04, 1); }
-    100% { transform: scale3d(1.00, 1.00, 1); }
-}
-
-@keyframes progressScan {
-    0%   { width: 0%;  left: 0%;   }
-    45%  { width: 55%; left: 20%;  }
-    100% { width: 0%;  left: 100%; }
-}
-
-@keyframes shimmer { 100% { transform: translate3d(100%, 0, 0); } }
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.3; }
-}
-
-@keyframes popIn {
-    from { transform: scale3d(0.92, 0.92, 1) translate3d(0, 8px, 0); opacity: 0; }
-    to   { transform: scale3d(1.00, 1.00, 1) translate3d(0,  0,  0); opacity: 1; }
-}
-
-/* =========================================
-   18. SCROLLBAR
+   15. SCROLLBAR
    ========================================= */
 ::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-thumb { background: #1E293B; }
+::-webkit-scrollbar-thumb { background: var(--bg-card); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* =========================================
-   19. ACCESIBILIDAD — Screen Reader Only
-   Clase estándar para contenido visible solo para lectores de pantalla.
-   NO usar display:none ni visibility:hidden (ocultarían el texto a AT).
-   ========================================= */
 .sr-only {
     position: absolute;
     width: 1px;
@@ -707,32 +589,4 @@ canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
-}
-
-/* =========================================
-   20. UTILIDADES DE PANEL
-   Clases reutilizables para componentes que requieran profundidad
-   sin usar backdrop-filter (genera lag de scroll en gama baja).
-   ========================================= */
-
-/**
- * Panel con corte biselado y borde izquierdo de profundidad.
- * Usa clip-path en lugar de border-radius o backdrop-filter.
- */
-.u-panel-bevel {
-    background: var(--bg-panel);
-    clip-path: var(--bevel-md);
-    border-left: 2px solid rgba(255, 255, 255, 0.05);
-    transition: transform 0.2s ease;
-}
-
-/**
- * Contenedor cuadrado centrado para imágenes.
- * Mantiene aspect-ratio 1:1 sin depender de object-fit externo.
- */
-.u-img-container {
-    aspect-ratio: 1 / 1;
-    background: var(--bg-dark);
-    display: grid;
-    place-items: center;
 }

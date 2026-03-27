@@ -5,229 +5,181 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Rompecabezas</title>
 
-    <!--
-        Preconnect a Cloudinary:
-        Establece la conexión TCP + TLS con el CDN ANTES de que el JS
-        solicite la primera imagen. En redes móviles, la negociación TLS
-        puede tomar 200-400ms. Hacerla aquí, en paralelo con el parse del HTML,
-        elimina ese costo del tiempo de carga de las primeras thumbnails.
-        crossorigin es obligatorio porque las imágenes se usan en canvas (CORS).
-    -->
     <link rel="preconnect" href="https://res.cloudinary.com" crossorigin>
     <link rel="dns-prefetch" href="https://res.cloudinary.com">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Rubik:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="./src/style.css">
 
-    <!-- PWA manifest -->
     <link rel="manifest" href="./manifest.json">
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#0B0F19">
 </head>
 <body>
 
-    <!-- ═══ BACKGROUND STACK (bottom → top) ═══════════════════════════════════ -->
-    <!-- Capas decorativas: aria-hidden para que los lectores de pantalla las ignoren -->
     <div id="dynamic-bg" class="dynamic-bg" aria-hidden="true"></div>
-
-    <div id="grid-layer" class="grid-layer" aria-hidden="true">
-        <canvas id="twinkle-canvas" class="twinkle-canvas"></canvas>
-    </div>
-
-    <div class="scanlines" aria-hidden="true"></div>
+    <div class="bg-pattern" aria-hidden="true"></div>
 
     <main id="app">
 
-        <!-- ═══════════════════════════════ TOP BAR ══════════════════════════════ -->
+        <!-- TOP BAR -->
         <header class="top-bar" role="banner">
             <div class="brand" aria-label="Love Arcade — Neural Puzzle">
-                <!-- SVG decorativo: aria-hidden ya que el texto de .brand lo describe -->
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M19.439 15.435c-1.127 0-2.046.91-2.046 2.028s.919 2.028 2.046 2.028c1.127 0 2.046-.91 2.046-2.028 0-1.118-.92-2.028-2.046-2.028zM4.561 8.565c1.127 0 2.046-.91 2.046-2.028S5.688 4.509 4.561 4.509c-1.127 0-2.046.91-2.046 2.028 0 1.118.919 2.028 2.046 2.028z"/>
-                    <path d="M12 4.524c-1.127 0-2.046.91-2.046 2.028s.919 2.028 2.046 2.028c1.127 0 2.046-.91 2.046-2.028S13.127 4.524 12 4.524zM12 15.435c-1.127 0-2.046.91-2.046 2.028s.919 2.028 2.046 2.028c1.127 0 2.046-.91 2.046-2.028 0-1.118-.92-2.028-2.046-2.028z"/>
-                    <path d="M12.5 9h-1v2.5H9v1h2.5V15h1v-2.5H15v-1h-2.5z"/>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" rx="2"></rect>
+                    <rect x="14" y="3" width="7" height="7" rx="2"></rect>
+                    <rect x="14" y="14" width="7" height="7" rx="2"></rect>
+                    <path d="M3 14h7v7H3z"></path>
                 </svg>
-                <div>Love Arcade <span class="game-tag">PUZZLE</span></div>
-            </div>
-            <div class="coins-wrapper" aria-label="Monedas acumuladas">
-                <span class="micro-label coins-micro" aria-hidden="true">[ACQ_UNIT_ID // 004-TRK]</span>
-                <div class="coins-display" id="global-coins-display" aria-live="polite"></div>
+                <div>NEURAL<span class="game-tag">PUZZLE</span></div>
             </div>
         </header>
 
-        <!-- ═══════════════════════════════ MENU ════════════════════════════════ -->
+        <!-- MENU -->
         <section id="screen-menu" class="screen active" aria-label="Menú principal">
             <div class="menu-content">
-                <span class="game-title-label" aria-hidden="true">SYS_INIT // MODULE_READY</span>
-                <h1 class="game-title">Neural<br>Puzzle</h1>
+                <h1 class="game-title">NEURAL<br>PUZZLE</h1>
+                <p class="game-subtitle">Arcade Edition</p>
                 <nav class="main-nav" aria-label="Navegación principal">
                     <button id="btn-play" class="btn btn-primary" type="button">
-                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z" fill="currentColor"></path></svg>
                         JUGAR
                     </button>
                     <button id="btn-levels" class="btn btn-secondary" type="button">
-                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect></svg>
                         NIVELES
                     </button>
                     <button id="btn-settings" class="btn btn-secondary" type="button">
-                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                         AJUSTES
                     </button>
-                    <a href="../../index.html" class="btn btn-danger">
-                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    <button id="btn-exit" class="btn btn-danger" type="button">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                         SALIR
-                    </a>
+                    </button>
                 </nav>
             </div>
-            <div style="position:absolute; bottom:10px; opacity:0.2; font-size:0.7rem; font-family:'Rajdhani',sans-serif; letter-spacing:3px; text-transform:uppercase;" aria-hidden="true">v1.0</div>
         </section>
 
-        <!-- ═══════════════════════════════ LEVELS ═══════════════════════════════ -->
+        <!-- LEVELS -->
         <section id="screen-levels" class="screen" aria-label="Selección de misiones">
             <div class="screen-header">
-                <button class="btn-icon btn-back" data-target="screen-menu" type="button"
-                        aria-label="Volver al menú principal">
-                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                <button class="btn-icon btn-back" data-target="screen-menu" type="button" aria-label="Volver al menú principal">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                 </button>
-                <h2>Misiones</h2>
+                <h2>MISIONES</h2>
             </div>
-            <!-- aria-live="polite": anuncia a lectores cuando las tarjetas se renderizan -->
             <div class="levels-grid" id="levels-container" role="list" aria-label="Lista de niveles" aria-live="polite"></div>
         </section>
 
-        <!-- ═══════════════════════════════ GAME ════════════════════════════════ -->
+        <!-- GAME -->
         <section id="screen-game" class="screen" aria-label="Partida activa">
             <div class="hud" role="toolbar" aria-label="Panel de control">
                 <button class="btn-icon" id="btn-pause" type="button" aria-label="Pausar partida">
-                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                    <svg class="icon" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"></rect><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"></rect></svg>
                 </button>
 
                 <div class="hud-stats" aria-label="Estadísticas de la partida">
                     <div class="hud-stat">
-                        <span class="micro-label" aria-hidden="true">MISSION_ID // ACTIVE</span>
                         <span class="value" id="hud-level" aria-label="Nivel actual">LVL 1</span>
-                    </div>
-                    <div class="hud-stat">
-                        <span class="micro-label" aria-hidden="true">SYS_CLOCK_UPDATE // SYNC_ON</span>
-                        <span class="value timer-display" id="hud-timer" aria-label="Tiempo transcurrido" aria-live="off">00:00</span>
                     </div>
                 </div>
 
                 <div class="hud-actions">
-                    <button id="btn-preview" class="btn-hud-action" type="button"
-                            aria-label="Vista previa — mantener pulsado para ver la imagen completa">
-                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    <button id="btn-preview" class="btn-hud-action" type="button" aria-label="Vista previa">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                     </button>
-                    <button id="btn-magnet" class="btn-hud-action gold" type="button"
-                            aria-label="Imán automático — coloca una pieza en su lugar por 10 monedas">
-                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12h-2a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2H5a2 2 0 0 0-2 2v7h18v-7a2 2 0 0 0-2-2z"></path><path d="M8 12V7a4 4 0 0 1 8 0v5"></path></svg>
+                    <button id="btn-magnet" class="btn-hud-action gold" type="button" aria-label="Imán automático">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12h-2a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2H5a2 2 0 0 0-2 2v7h18v-7a2 2 0 0 0-2-2z"></path><path d="M8 12V7a4 4 0 0 1 8 0v5"></path></svg>
                     </button>
                 </div>
             </div>
 
             <div class="canvas-wrapper" id="game-container">
                 <div id="game-loader" class="loading-overlay hidden" role="status" aria-label="Cargando nivel…">
-                    <div class="progress-bar-track" aria-hidden="true">
-                        <div class="progress-bar-fill"></div>
-                    </div>
-                    <p aria-hidden="true">Loading Assets...</p>
+                    <div class="spinner"></div>
                 </div>
-
-                <!-- El canvas es el tablero de juego; el aria-label lo describe para AT -->
                 <canvas id="puzzle-canvas" role="img" aria-label="Tablero del rompecabezas"></canvas>
-
-                <span class="canvas-corner-data top-left" id="canvas-pos-tl" aria-hidden="true">POS_X: 000 // POS_Y: 000</span>
-                <span class="canvas-corner-data bottom-right" id="canvas-pos-br" aria-hidden="true">RES: 000×000 // PCE: 00</span>
             </div>
         </section>
 
-        <!-- ═══════════════════════════════ SETTINGS ═════════════════════════════ -->
+        <!-- SETTINGS -->
         <section id="screen-settings" class="screen" aria-label="Ajustes del juego">
             <div class="screen-header">
-                <button class="btn-icon btn-back" data-target="screen-menu" type="button"
-                        aria-label="Volver al menú principal">
-                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                <button class="btn-icon btn-back" data-target="screen-menu" type="button" aria-label="Volver al menú principal">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                 </button>
-                <h2>Sistema</h2>
+                <h2>AJUSTES</h2>
             </div>
             <div class="settings-list">
                 <div class="setting-item">
-                    <label for="setting-sound">Sonido FX</label>
-                    <input type="checkbox" id="setting-sound" checked
-                           aria-label="Activar o desactivar efectos de sonido">
+                    <label for="setting-sound">Efectos de Sonido</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="setting-sound" checked aria-label="Activar o desactivar efectos de sonido">
+                        <span class="slider"></span>
+                    </label>
                 </div>
-                <button id="btn-reset-progress" class="btn btn-danger" type="button"
-                        style="width:100%" aria-label="Resetear todo el progreso del juego">
-                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    Resetear Progreso
-                </button>
             </div>
         </section>
 
-        <!-- ═══════════════════════════════ MODALS ═══════════════════════════════ -->
-        <div id="modal-resume" class="modal-backdrop hidden" role="dialog"
-             aria-modal="true" aria-labelledby="modal-resume-title">
+        <!-- MODALS -->
+        <div id="modal-resume" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-resume-title">
             <div class="modal-content">
                 <h3 id="modal-resume-title">PARTIDA GUARDADA</h3>
-                <p>¿Quieres continuar donde lo dejaste?</p>
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
+                <p>¿Continuar donde lo dejaste?</p>
+                <div class="modal-actions">
                     <button id="btn-yes-resume" class="btn btn-primary" type="button">CONTINUAR</button>
                     <button id="btn-no-resume"  class="btn btn-secondary" type="button">REINICIAR</button>
                 </div>
             </div>
         </div>
 
-        <div id="modal-pause" class="modal-backdrop hidden" role="dialog"
-             aria-modal="true" aria-labelledby="modal-pause-title">
+        <div id="modal-pause" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-pause-title">
             <div class="modal-content">
                 <h3 id="modal-pause-title">PAUSA</h3>
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
-                    <button id="btn-resume"      class="btn btn-primary" type="button">REANUDAR</button>
-                    <button id="btn-quit-level"  class="btn btn-danger" type="button">ABANDONAR</button>
+                <div class="modal-actions">
+                    <button id="btn-resume" class="btn btn-primary" type="button">REANUDAR</button>
+                    <button id="btn-quit-level" class="btn btn-danger" type="button">ABANDONAR</button>
                 </div>
             </div>
         </div>
 
-        <div id="modal-gameover" class="modal-backdrop hidden" role="dialog"
-             aria-modal="true" aria-labelledby="modal-gameover-title">
+        <div id="modal-victory" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-victory-title">
             <div class="modal-content">
-                <h3 id="modal-gameover-title" style="color:#ef4444">TIEMPO AGOTADO</h3>
-                <p>No lograste completar la misión a tiempo.</p>
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
-                    <button id="btn-retry"     class="btn btn-primary" type="button">REINTENTAR</button>
-                    <button id="btn-quit-fail" class="btn btn-secondary" type="button">MENÚ</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="modal-victory" class="modal-backdrop hidden" role="dialog"
-             aria-modal="true" aria-labelledby="modal-victory-title">
-            <div class="modal-content">
-                <h3 id="modal-victory-title" style="color:var(--success)">¡MISIÓN CUMPLIDA!</h3>
-
-                <div id="victory-stars" style="font-size:3rem; color:#fbbf24; text-align:center; margin:15px 0;"
-                     aria-live="polite"></div>
-
-                <p>Tiempo: <span id="victory-time">--:--</span></p>
-
-                <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:8px;">
-                    +<span id="victory-coins">0</span>
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         style="width:26px; height:26px; color:var(--warning);" aria-hidden="true">
+                <h3 id="modal-victory-title" class="text-success">¡MISIÓN CUMPLIDA!</h3>
+                <div class="victory-reward">
+                    <span class="reward-plus">+</span><span id="victory-coins">0</span>
+                    <svg class="icon-coin" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path>
-                        <line x1="12" y1="18" x2="12" y2="22"></line>
-                        <line x1="12" y1="2"  x2="12" y2="6"></line>
+                        <path d="M12 6v12m-3-6h6" stroke="#0B0F19" stroke-width="2" stroke-linecap="round"></path>
                     </svg>
-                    <span class="sr-only">monedas ganadas</span>
                 </div>
-
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
-                    <button id="btn-next-level"   class="btn btn-primary" type="button">SIGUIENTE</button>
+                <div class="modal-actions">
+                    <button id="btn-next-level" class="btn btn-primary" type="button">SIGUIENTE</button>
                     <button id="btn-victory-menu" class="btn btn-secondary" type="button">MENÚ</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-alert" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-alert-title">
+            <div class="modal-content">
+                <h3 id="modal-alert-title">AVISO</h3>
+                <p id="modal-alert-message"></p>
+                <div class="modal-actions">
+                    <button id="btn-alert-ok" class="btn btn-primary" type="button">ENTENDIDO</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-confirm" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-confirm-title">
+            <div class="modal-content">
+                <h3 id="modal-confirm-title">CONFIRMAR</h3>
+                <p id="modal-confirm-message"></p>
+                <div class="modal-actions">
+                    <button id="btn-confirm-yes" class="btn btn-primary" type="button">SÍ</button>
+                    <button id="btn-confirm-no" class="btn btn-secondary" type="button">NO</button>
                 </div>
             </div>
         </div>
