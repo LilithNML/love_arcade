@@ -2,8 +2,8 @@
 
 **Proyecto:** Rompecabezas Arcade (Neural Puzzle)
 **Plataforma:** Love Arcade
-**Versión del motor:** `PuzzleEngine v19.1` · `main.js v8.0` · `UIController v6.0` · `LevelManager v6.1` · `Storage v3.0`
-**Última revisión:** Marzo 2026 (v19.1 / v6.1)
+**Versión del motor:** `PuzzleEngine v19.1` · `main.js v9.0` · `UIController v6.0` · `LevelManager v7.0` · `Storage v3.0`
+**Última revisión:** Marzo 2026 (v19.1 / v7.0 / v9.0)
 
 ---
 
@@ -49,6 +49,7 @@
 - Activos visuales de **1600×1600 px** servidos desde **Cloudinary** en formato **WebP calidad máxima** (`f_webp,q_100`). A q_100, el codificador WebP de Cloudinary activa automáticamente el modo sin pérdida (VP8L), equivalente a `fl_lossless` pero compatible con todos los planes de Cloudinary (evita el error HTTP 400). A partir de v6.1 se elimina `fl_lossless` que causaba fallos de red en cuentas sin transformaciones activas habilitadas.
 - Escalado de alta fidelidad en cliente mediante **step-down scaling** (v19.0): la textura 1600×1600 se reduce escalonadamente, nunca más del 50% por paso, neutralizando el blur bilineal y el ruido de mosquito que producía el downsampling en un solo paso.
 - **Protección de VRAM (v19.1):** el `sourceCanvas` se limita a un máximo de 1600 px por dimensión, redondeado al múltiplo inferior de `gridSize`. Previene el desbordamiento en dispositivos DPR 3× con tableros grandes sin perder nitidez, ya que la imagen fuente tiene exactamente 1600 px nativos.
+- **Prefetching Predictivo de ImageBitmap (v7.0 / v9.0):** mientras el usuario juega el nivel N, el sistema descarga y decodifica en background la imagen del nivel N+1 mediante `fetch({ priority: 'low' })` + `createImageBitmap()`. La decodificación ocurre completamente fuera del Event Loop (worker interno del navegador). Al iniciar el siguiente nivel, la textura está lista en VRAM y la transición es imperceptible. Si la precarga falla o no termina a tiempo, el flujo de carga estándar actúa como fallback transparente.
 - Carga progresiva de thumbnails con **IntersectionObserver**: las miniaturas se descargan únicamente cuando están a punto de entrar al área visible de la pantalla, eliminando sobrecarga de red al navegar una lista de 150 niveles.
 - Decodificación de imagen fuera del hilo principal con **`createImageBitmap`**: la textura 1600×1600 se transfiere al motor sin bloquear la UI. Liberación determinista con `ImageBitmap.close()` al destruir el motor.
 - Gestión estricta de VRAM: en `destroy()` todos los buffers offscreen se invalidan con `width/height = 0`, liberando la memoria de GPU de forma síncrona antes de que actúe el GC.
@@ -76,11 +77,11 @@
 ├── manifest.json               # Manifiesto PWA
 ├── service-worker.js           # Service Worker (modo purge activo)
 └── src/
-    ├── main.js                 # Punto de entrada y orquestador (v8.0)
+    ├── main.js                 # Punto de entrada y orquestador (v9.0)
     ├── style.css               # Estilos globales — Flat 2.0, variables CSS, .sr-only
     ├── core/
     │   ├── PuzzleEngine.js     # Motor de renderizado y lógica de piezas (v19.1)
-    │   └── LevelManager.js     # Generación algorítmica de niveles (v6.1)
+    │   └── LevelManager.js     # Generación algorítmica de niveles + prefetch (v7.0)
     ├── ui/
     │   └── UIController.js     # Gestión de pantallas y DOM (v6.0)
     └── systems/
@@ -96,6 +97,7 @@
 ```
 main.js
  ├── LevelManager   → [genera en memoria] 150 objetos de nivel + URLs Cloudinary
+ │                    [prefetch] descarga/decodifica nivel N+1 en background
  ├── UI             → [manipula] DOM / pantallas / IntersectionObserver (lazy thumbnails)
  ├── Storage        → [lee/escribe] localStorage
  ├── PuzzleEngine   → [renderiza] <canvas>
@@ -118,19 +120,54 @@ DOMContentLoaded
        └─ UI.showScreen('menu')               // muestra pantalla inicial
 ```
 
-### Flujo de carga de imagen (v8.0)
+### Flujo de carga de imagen (v9.0)
 
 ```
 startGame(levelId)
-  ├─ new Image() + img.decode()               // decodificación DOM (hilo principal)
-  ├─ createImageBitmap(img)                   // transfiere textura al worker de GPU
-  │   └─ fallback a HTMLImageElement si no disponible
-  ├─ new PuzzleEngine(canvas, { image: imageBitmap })
-  │   └─ resizeCanvas()
-  │       └─ _buildSourceCanvasHQ(img, srcW, srcH)  // step-down scaling (v19.0)
-  │           ├─ Si NW ≤ srcW×2: drawImage directo (bicúbico)
-  │           └─ Si NW > srcW×2: halvening iterativo hasta ≤2× → paso final
-  └─ al destruir: imageBitmap.close()         // liberación determinista de VRAM
+  │
+  ├─ [CAMINO RÁPIDO — bitmap precargado disponible]
+  │   levelManager.getAndClearPrefetchedBitmap(levelId) → ImageBitmap
+  │   └─ sin red, sin decodificación → loader oculto inmediatamente
+  │
+  └─ [CAMINO NORMAL — sin bitmap precargado]
+      ├─ new Image() + img.decode()               // decodificación DOM (hilo principal)
+      ├─ createImageBitmap(img)                   // transfiere textura al worker de GPU
+      │   └─ fallback a HTMLImageElement si no disponible
+      └─ loader visible hasta resolución
+
+  → new PuzzleEngine(canvas, { image: imageSource })
+      └─ resizeCanvas()
+          └─ _buildSourceCanvasHQ(img, srcW, srcH)  // step-down scaling (v19.0)
+              ├─ Si NW ≤ srcW×2: drawImage directo (bicúbico)
+              └─ Si NW > srcW×2: halvening iterativo hasta ≤2× → paso final
+
+  → [2 s después, en requestIdleCallback o setTimeout]
+      levelManager.prefetchNextLevel(levelId)
+          ├─ fetch(url, { priority: 'low' })        // no compite con nivel activo
+          ├─ response.blob()                        // bytes fuera del heap JS
+          └─ createImageBitmap(blob)                // decodificación off-thread
+
+  → al destruir: imageBitmap.close()               // liberación determinista de VRAM
+```
+
+### Ciclo de vida del ImageBitmap precargado
+
+```
+prefetchNextLevel()
+  └─ #prefetchedData = { id: 'lvl_N+1', bitmap: ImageBitmap }
+                              │
+           ┌──────────────────┴──────────────────┐
+           │                                     │
+  [usuario llega al nivel N+1]          [usuario va al menú /
+           │                             cambia nivel / error]
+           ▼                                     ▼
+  getAndClearPrefetchedBitmap()          clearPrefetch()
+  devuelve bitmap → PuzzleEngine         bitmap.close()
+  #prefetchedData = null                 #prefetchedData = null
+           │
+           ▼
+  PuzzleEngine.destroy()
+  bitmap.close()  ← liberación determinista
 ```
 
 ---
@@ -186,14 +223,25 @@ startGame(levelId)
 
 ### 5.1 main.js — Orquestador
 
+**Versión actual: v9.0**
+
 Punto de entrada. Responsabilidades:
 
 - Inicializar todos los módulos y registrar `window.dev`.
 - Gestionar el ciclo de vida de `PuzzleEngine` (crear, destruir, pausar).
-- Cargar imagen con `img.decode()` + `createImageBitmap()`.
+- Cargar imagen: primero intenta consumir el bitmap de `levelManager.getAndClearPrefetchedBitmap()`; si no existe, ejecuta el flujo estándar `img.decode()` + `createImageBitmap()`.
+- Disparar `levelManager.prefetchNextLevel()` tras 2 s de juego activo, usando `requestIdleCallback` (con fallback a `setTimeout`) para no interferir con los primeros frames.
+- Llamar `levelManager.clearPrefetch()` en todas las salidas del nivel que no sean la transición natural al nivel siguiente (menú, quit, btn-back), para liberar VRAM del bitmap no consumido.
 - Manejar victoria: marcar completado, desbloquear siguiente, pagar recompensa.
 - Guardar/restaurar estado de partida en curso.
 - Auto-pausa en `visibilitychange` y `blur`.
+
+**Cambios en v9.0 respecto a v8.0:**
+- `startGame()` comprueba primero `levelManager.getAndClearPrefetchedBitmap(levelId)` antes de abrir el loader y arrancar la descarga. Si el bitmap está disponible, la transición es instantánea.
+- `startGame()` llama `levelManager.clearPrefetch()` cuando no existe bitmap para el nivel pedido, descartando posibles residuos de navegación no lineal.
+- Se añade el bloque `schedulePrefetch()` al final de `startGame()`, que dispara `levelManager.prefetchNextLevel()` 2 s después de que `GameState.isInGame = true`, con una guardia `currentLevelId === levelId` para cancelar prefetches huérfanos.
+- `handleVictory()`: el callback de "Volver al menú" llama `levelManager.clearPrefetch()` antes de destruir el motor.
+- Los callbacks de `btn-back` y `btn-quit-level` llaman `levelManager.clearPrefetch()` antes de cambiar de pantalla.
 
 ### 5.2 PuzzleEngine.js — Motor de Juego
 
@@ -215,20 +263,32 @@ Motor canvas 2D de renderizado de piezas de rompecabezas. Maneja geometría, fí
 
 ### 5.3 LevelManager.js — Gestor de Niveles
 
-**Versión actual: v6.1**
+**Versión actual: v7.0**
 
-Genera algorítmicamente 150 objetos de configuración de nivel y construye las URLs de Cloudinary.
+Genera algorítmicamente 150 objetos de configuración de nivel, construye las URLs de Cloudinary y gestiona el sistema de prefetching predictivo de ImageBitmap.
 
-**Cambios en v6.1:**
-- `buildImageUrl()` sustituye `fl_lossless` por `q_100`. El flag `fl_lossless` causaba HTTP 400/Network Error en cuentas de Cloudinary sin transformaciones activas habilitadas. Con `f_webp,q_100`, el codificador WebP de Cloudinary activa automáticamente el modo sin pérdida (VP8L) al nivel de calidad 100, obteniendo la misma fidelidad cromática sin depender del flag privado.
-- El resto del módulo es idéntico a v6.0.
+**Cambios en v7.0:**
 
-**Cambios en v6.0 (heredados, sin modificación en v6.1):**
-- `buildImageUrl()` eliminó los umbrales dinámicos de ancho (`w_700`/`w_900`/`w_1200`) y la función `getFullImageWidth()`. La imagen de juego siempre se solicita a resolución nativa 1600×1600.
-- Los parámetros Cloudinary cambiaron de `f_auto,q_auto` a `f_webp,q_100` (vía `fl_lossless` en v6.0, corregido en v6.1).
-- `buildThumbnailUrl()` sin cambios: los thumbnails siguen usando `f_auto,q_auto`.
-- `_thumbW` y `getThumbnailWidth()` se mantienen para la cuadrícula de niveles.
-- La variable `_fullW` se eliminó (ya no tiene uso).
+- Se añade el campo privado `#prefetchedData` (`{ id, bitmap } | null`) que almacena el único bitmap precargado vigente.
+- Se añade `async prefetchNextLevel(currentId)`:
+  - Resuelve el nivel N+1 con `getNextLevelId()`.
+  - Salida temprana si el bitmap correcto ya existe (idempotente).
+  - Limpia cualquier bitmap previo no consumido (`clearPrefetch()`) antes de sobreescribir.
+  - Ejecuta el pipeline off-thread: `fetch({ priority: 'low' })` → `response.blob()` → `createImageBitmap(blob)`.
+  - Errores capturados silenciosamente; `#prefetchedData` queda en `null` para que `startGame()` use el flujo normal.
+- Se añade `getAndClearPrefetchedBitmap(id)`:
+  - Devuelve el `ImageBitmap` si el ID coincide y limpia `#prefetchedData` en el mismo acto.
+  - Devuelve `null` si no coincide, sin efecto secundario.
+- Se añade `clearPrefetch()`:
+  - Llama `bitmap.close()` si existe un bitmap pendiente, liberando VRAM de forma determinista.
+  - Idempotente: no hace nada si `#prefetchedData` es `null`.
+
+**Cambios en v6.1 (heredados, sin modificación en v7.0):**
+- `buildImageUrl()` sustituye `fl_lossless` por `q_100`. Compatible con todos los planes de Cloudinary.
+
+**Cambios en v6.0 (heredados, sin modificación en v7.0):**
+- Eliminados `_fullW` / `getFullImageWidth()`. Resolución nativa 1600×1600 siempre.
+- `buildThumbnailUrl()` sin cambios: thumbnails usan `f_auto,q_auto`.
 
 ### 5.4 UIController.js — Controlador de Interfaz
 
@@ -311,13 +371,13 @@ Un WebP Lossless 1600×1600 de ilustración/anime típico ocupa entre 800 KB y 2
   ├─ HUD: nivel, piezas restantes, tiempo, acciones
   ├─ [Pause] → modal-pause
   │     ├─ [Resume]
-  │     └─ [Quit] → guarda progreso → [Menu]
+  │     └─ [Quit] → clearPrefetch() + guarda progreso → [Menu]
   ├─ [Preview] (hold): muestra imagen completa translúcida
   └─ [Magnet]: auto-coloca una pieza suelta (cuesta monedas)
 
 [Victory] → modal-victory
-  ├─ [Next Level] → startGame(nextLvlId)
-  └─ [Menu]
+  ├─ [Next Level] → startGame(nextLvlId)  ← consume bitmap precargado
+  └─ [Menu]       → clearPrefetch() + destroy()
 ```
 
 Los modales de confirmación y alerta (`modal-alert`, `modal-confirm`) son genéricos y se invocan desde `UI.showAlert()` / `UI.showConfirm()`.
@@ -519,6 +579,12 @@ Si se revierte a lossy, restaurar también `getFullImageWidth()` y `_fullW` del 
 
 ---
 
+### Deshabilitar el prefetching predictivo
+
+El sistema de prefetch es transparente; si `createImageBitmap` no está disponible o el fetch falla, `startGame()` carga el nivel normalmente. Para desactivarlo completamente, eliminar el bloque `schedulePrefetch()` del final de `startGame()` en `main.js` y los tres métodos de `LevelManager` (`prefetchNextLevel`, `getAndClearPrefetchedBitmap`, `clearPrefetch`). Eliminar también las llamadas a `clearPrefetch()` en los callbacks de navegación.
+
+---
+
 ### Diagnóstico de errores comunes
 
 | Síntoma                                               | Causa probable                                                      | Solución                                                                                   |
@@ -542,3 +608,6 @@ Si se revierte a lossy, restaurar también `getFullImageWidth()` y `_fullW` del 
 | "Ruido de mosquito" en líneas de alto contraste       | Artefactos DCT del JPEG/WebP lossy                                  | Verificado en v6.1: `q_100` activa VP8L, eliminando el codificador DCT                    |
 | Blur generalizado en el tablero                       | `drawImage` único 1600→target (bilineal en un paso)                 | Verificado en v19.0: `_buildSourceCanvasHQ()` implementa step-down ≤2:1 por paso          |
 | Canvas intermedio no liberado (posible OOM)           | Referencia a canvas intermedio sobrevive el scope                   | `_buildSourceCanvasHQ()` invalida `width=0/height=0` en cada iteración                    |
+| **Fuga de VRAM entre niveles (bitmap precargado)**    | **`clearPrefetch()` no invocado en salida del nivel**               | **Verificado en v9.0: todos los puntos de salida del nivel llaman `levelManager.clearPrefetch()`** |
+| **Petición de red huérfana tras cambio rápido de nivel** | **Prefetch disparado para nivel que ya no es el activo**         | **Verificado en v9.0: guardia `currentLevelId === levelId` en `schedulePrefetch()`**      |
+| **Nivel N+2 descargado al repasar la grid**           | **`prefetchNextLevel()` llamado desde la pantalla de niveles**      | **El prefetch solo se dispara dentro de `startGame()` con `isInGame = true`; no aplica a la grid** |
