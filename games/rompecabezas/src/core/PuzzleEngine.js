@@ -22,6 +22,8 @@ export class PuzzleEngine {
         //                 needsStaticUpdate === true (snap, resize, import).
         // sourceCanvas  : imagen completa escalada al tamaño del tablero en DPR.
         //                 Fuente de píxeles para drawImage de cada pieza.
+        //                 A partir de v19.0 se rellena mediante step-down scaling
+        //                 de alta fidelidad en _buildSourceCanvasHQ().
         // gridCanvas    : rejilla de fondo con parallax, también offscreen.
         this.staticCanvas = document.createElement('canvas');
         this.staticCtx    = this.staticCanvas.getContext('2d', { alpha: true });
@@ -66,11 +68,12 @@ export class PuzzleEngine {
         this.verticalEdges   = [];
         this.horizontalEdges = [];
 
-        // DPR limitado a 2 para evitar buffers de 3× innecesarios en la
-        // mayoría de dispositivos: la diferencia visual entre 2× y 3× en
-        // un canvas de juego es imperceptible, pero el coste en VRAM escala
-        // al cuadrado (3×3 = 9× más píxeles que 1×).
-        this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+        // DPR capado a 3× para renderizar nativamente en pantallas de alta densidad
+        // (iPhone 14/15 Pro, Galaxy S-series, Pixel 6/7). El cap en 3 previene
+        // consumos extremos en posibles DPR futuros (>3×) sin afectar ningún
+        // dispositivo comercial actual. El coste de VRAM se amortiza por el
+        // imageamiento 1:1 que elimina el escalado por software; ver resizeCanvas().
+        this.dpr = Math.min(window.devicePixelRatio || 1, 3);
 
         this.isMobilePortrait = false;
 
@@ -164,15 +167,38 @@ export class PuzzleEngine {
      * Configura las dimensiones físicas (DPR) y lógicas de todos los canvases,
      * y escala la imagen al tamaño del tablero en el sourceCanvas.
      *
-     * Configuración de calidad de imagen (v17.0):
-     *   imageSmoothingEnabled = true  → activar interpolación al escalar.
-     *   imageSmoothingQuality = 'high' → bicúbica (en lugar de bilinear).
-     *   Esto garantiza que la imagen 1600×1600 se vea nítida y sin artefactos
-     *   al reducirse al tamaño del tablero, que en móvil puede ser ~300×300px.
+     * Alineación a la rejilla — pixel-perfect (v18.0, sin cambios en v19.0):
+     *   El tablero se recorta al múltiplo inmediatamente inferior de `gridSize`
+     *   mediante `Math.floor(cssW / gridSize) * gridSize`. Esto garantiza que:
      *
-     *   La propiedad se reaplica después de cada cambio de dimensión porque
-     *   asignar canvas.width/height resetea el contexto 2D a sus valores por
-     *   defecto (imageSmoothingEnabled = true, quality = 'low').
+     *     pieceWidth  = boardWidth  / gridSize  →  entero exacto (sin residuo)
+     *     pieceHeight = boardHeight / gridSize  →  entero exacto
+     *     correctX    = boardX + col * pieceWidth  → entero (boardX es Math.round)
+     *     correctY    = boardY + row * pieceHeight → entero
+     *
+     *   El sourceCanvas se alinea de la misma forma en el espacio físico:
+     *     sourceCanvas.width  = Math.round(boardWidth  × DPR / gridSize) × gridSize
+     *     sourceCanvas.height = Math.round(boardHeight × DPR / gridSize) × gridSize
+     *
+     *   Así srcPieceW_SC = sourceCanvas.width / gridSize es también un entero
+     *   exacto, eliminando el muestreo sub-píxel en renderPieceToContext().
+     *
+     *   En DPR no-entero (e.g. 2.625×), el `Math.round` antes del snap absorbe
+     *   el residuo fraccional sin perder más de medio píxel físico.
+     *
+     * Relleno del sourceCanvas — step-down scaling (v19.0):
+     *   La imagen nativa 1600×1600 ya no se vierte en un único drawImage al
+     *   tamaño final (que causaba el blur bilineal). En su lugar,
+     *   `_buildSourceCanvasHQ()` reduce la textura de forma escalonada,
+     *   nunca más del 50% por paso, hasta alcanzar las dimensiones del
+     *   sourceCanvas. Ver el método para el análisis completo.
+     *
+     * Calidad de imagen:
+     *   `_applySmoothing(ctx)` se reaplica después de cada cambio de dimensión
+     *   porque `canvas.width = N` resetea el contexto 2D a sus valores por defecto
+     *   (`imageSmoothingQuality = 'low'`). La interpolación bicúbica ('high') es
+     *   necesaria tanto en los pasos intermedios del step-down como en el paso
+     *   final al tamaño del tablero.
      */
     resizeCanvas() {
         const parent   = this.canvas.parentElement;
@@ -209,36 +235,175 @@ export class PuzzleEngine {
             cssH = cssW / imgRatio;
             const maxH = h * 0.68;
             if (cssH > maxH) { cssH = maxH; cssW = cssH * imgRatio; }
-
-            this.boardWidth  = cssW;
-            this.boardHeight = cssH;
-            this.boardX      = Math.round((w - cssW) / 2);
-            this.boardY      = 8;
         } else {
             cssW = w; cssH = w / imgRatio;
             if (cssH > h) { cssH = h; cssW = cssH * imgRatio; }
             cssW *= 0.65; cssH *= 0.65;
-
-            this.boardWidth  = cssW;
-            this.boardHeight = cssH;
-            this.boardX      = Math.round((w - cssW) / 2);
-            this.boardY      = Math.round((h - cssH) / 2);
         }
 
-        this.pieceWidth  = this.boardWidth  / this.gridSize;
-        this.pieceHeight = this.boardHeight / this.gridSize;
+        // ── Alineación pixel-perfect a la rejilla ─────────────────────────
+        // Truncar cssW/cssH al múltiplo inferior de gridSize para que
+        // pieceWidth y pieceHeight sean enteros exactos sin residuo decimal.
+        this.boardWidth  = Math.floor(cssW / this.gridSize) * this.gridSize;
+        this.boardHeight = Math.floor(cssH / this.gridSize) * this.gridSize;
+        this.boardX = Math.round((w - this.boardWidth)  / 2);
+        this.boardY = isMobilePortrait ? 8 : Math.round((h - this.boardHeight) / 2);
+
+        this.pieceWidth  = this.boardWidth  / this.gridSize;  // entero exacto
+        this.pieceHeight = this.boardHeight / this.gridSize;  // entero exacto
         this.tabSize     = Math.min(this.pieceWidth, this.pieceHeight) * 0.25;
 
-        // sourceCanvas: imagen escalada al tamaño físico (DPR) del tablero.
-        // Dimensiones en píxeles de pantalla para que cada pieza lea su región
-        // con resolución nativa sin interpolación adicional en renderPieceToContext.
-        this.sourceCanvas.width  = Math.ceil(this.boardWidth  * this.dpr);
-        this.sourceCanvas.height = Math.ceil(this.boardHeight * this.dpr);
+        // ── sourceCanvas alineado al espacio físico de la rejilla ─────────
+        // Math.round neutraliza el residuo de DPR no-entero (ej. 2.625×).
+        // El snap posterior al múltiplo de gridSize garantiza que
+        // sourceCanvas.width / gridSize sea un entero exacto, eliminando
+        // el muestreo sub-píxel en drawImage() dentro de renderPieceToContext.
+        const srcW = Math.round(this.boardWidth  * this.dpr / this.gridSize) * this.gridSize;
+        const srcH = Math.round(this.boardHeight * this.dpr / this.gridSize) * this.gridSize;
+        this.sourceCanvas.width  = srcW;
+        this.sourceCanvas.height = srcH;
         _applySmoothing(this.sourceCtx);
-        this.sourceCtx.clearRect(0, 0, this.sourceCanvas.width, this.sourceCanvas.height);
-        this.sourceCtx.drawImage(this.img, 0, 0, this.sourceCanvas.width, this.sourceCanvas.height);
+        this.sourceCtx.clearRect(0, 0, srcW, srcH);
+
+        // ── Relleno del sourceCanvas con step-down scaling (v19.0) ────────
+        // Sustituye el anterior drawImage directo (1600→srcW en un solo paso)
+        // que causaba blur bilineal y pérdida colorimétrica. Ver
+        // _buildSourceCanvasHQ() para el análisis completo del algoritmo.
+        this._buildSourceCanvasHQ(this.img, srcW, srcH);
 
         this.needsStaticUpdate = true;
+    }
+
+    /**
+     * Rellena el sourceCanvas con la textura escalada mediante step-down
+     * (reducción escalonada) para preservar la máxima fidelidad visual.
+     *
+     * PROBLEMA QUE RESUELVE
+     * ─────────────────────
+     * El método `drawImage(img, 0, 0, srcW, srcH)` en un solo paso aplica
+     * interpolación bilineal al reducir la imagen. Bilineal toma 4 píxeles
+     * vecinos por cada píxel destino y los promedia con pesos lineales.
+     * Cuando la ratio de reducción supera 2:1 (ej. 1600→600 = 2.67:1),
+     * el muestreo bilineal salta píxeles de la fuente, resultando en:
+     *   • Aliasing en líneas diagonales y bordes duros (anime, ilustración).
+     *   • Desaturación generalizada: el promediado diluye los colores.
+     *   • "Ruido de mosquito": rebote de alta frecuencia no atenuado entre
+     *     el kernel y los píxeles descartados.
+     *   • Blur generalizado: pérdida de energía de alta frecuencia.
+     *
+     * SOLUCIÓN: STEP-DOWN SCALING (reducción escalonada)
+     * ───────────────────────────────────────────────────
+     * Nunca reducimos más del 50% en un solo paso. Cuando la imagen fuente
+     * supera 2× el tamaño destino en cualquier dimensión, la reducimos a la
+     * mitad iterativamente en canvases offscreen intermedios hasta quedar
+     * dentro de ese umbral. El paso final realiza la reducción residual.
+     *
+     * Por qué ≤50% es la frontera óptima:
+     *   Un filtro bilineal con ratio ≤2:1 es equivalente a un filtro de caja
+     *   2×2 (box filter), que es la base del mipmap de nivel 1. A este ratio,
+     *   el kernel cubre la mayoría de la señal de alta frecuencia antes de
+     *   muestrearla, actuando como un pre-filtro antialiasing. Por encima de
+     *   2:1 el filtro empieza a descartar ciclos de frecuencia enteros,
+     *   generando los artefactos descritos.
+     *
+     * Con `imageSmoothingQuality = 'high'` (bicúbico, ya activo en todos los
+     * contextos via `_applySmoothing`), cada paso intermedio aplica un kernel
+     * bicúbico de 4×4 muestras, equivalente a un filtro paso-bajo Catmull-Rom
+     * que preserva la nitidez mientras suprime el aliasing.
+     *
+     * PRESERVACIÓN DE LA MATEMÁTICA PIXEL-PERFECT
+     * ────────────────────────────────────────────
+     * Los canvases intermedios no necesitan ser múltiplos de gridSize; sólo
+     * son buffers transitorios de paso. La única dimensión que importa para
+     * la aritmética pixel-perfect es la final: `srcW` × `srcH`, que ya llega
+     * a este método como múltiplo exacto de `gridSize` (garantizado por
+     * `resizeCanvas()`). El algoritmo no toca ni modifica `srcW`/`srcH`.
+     *
+     * LIBERACIÓN DE BUFFERS INTERMEDIOS
+     * ───────────────────────────────────
+     * Cada canvas intermedio se invalida asignando `width = 0` / `height = 0`
+     * inmediatamente después de ser copiado al siguiente paso. Esto libera la
+     * textura de VRAM de forma síncrona sin esperar al GC.
+     *
+     * FALLBACK PARA IMÁGENES YA PEQUEÑAS
+     * ────────────────────────────────────
+     * Si la imagen fuente ya cabe en 2× el destino en ambas dimensiones
+     * (p.ej. DPR 3× con tablero grande), se dibuja directamente sobre el
+     * sourceCanvas sin crear ningún intermedio. El suavizado bicúbico
+     * garantiza calidad óptima también en este camino.
+     *
+     * @param {HTMLImageElement|ImageBitmap} img  Textura fuente (1600×1600).
+     * @param {number} srcW  Ancho final del sourceCanvas (múltiplo de gridSize).
+     * @param {number} srcH  Alto  final del sourceCanvas (múltiplo de gridSize).
+     */
+    _buildSourceCanvasHQ(img, srcW, srcH) {
+        // Dimensiones intrínsecas de la fuente.
+        // HTMLImageElement: naturalWidth/naturalHeight (disponibles post-decode).
+        // ImageBitmap:      width/height (siempre definidos).
+        // El fallback a 1600 cubre cualquier fuente sin metadatos de dimensión.
+        const NW = (img.naturalWidth  || img.width)  || 1600;
+        const NH = (img.naturalHeight || img.height) || 1600;
+
+        // ── Camino directo ─────────────────────────────────────────────────
+        // La imagen ya cabe en ≤2× el destino en ambas dimensiones.
+        // Se dibuja directamente; el bicúbico maneja la reducción final.
+        if (NW <= srcW * 2 && NH <= srcH * 2) {
+            this.sourceCtx.drawImage(img, 0, 0, srcW, srcH);
+            return;
+        }
+
+        // ── Step-down: preparar el primer intermedio a tamaño nativo ──────
+        // Copiamos la imagen en un canvas del tamaño original para tener
+        // una fuente rasterizable independientemente del tipo de `img`.
+        let curCanvas = document.createElement('canvas');
+        curCanvas.width  = NW;
+        curCanvas.height = NH;
+        const curCtx0 = curCanvas.getContext('2d');
+        _applySmoothing(curCtx0);
+        curCtx0.drawImage(img, 0, 0, NW, NH);
+
+        let cw = NW;
+        let ch = NH;
+
+        // ── Bucle de reducciones al 50% ────────────────────────────────────
+        // Condición: si cualquier dimensión aún supera 2× su destino,
+        // se requiere otro paso de halvening. Así nunca hay una reducción
+        // superior a 2:1 en ningún eje en el paso siguiente.
+        while (cw > srcW * 2 || ch > srcH * 2) {
+            // Halving: Math.ceil evita llegar a 0 en dimensiones impares
+            // y garantiza que el canvas intermedio sea siempre ≥ 1px.
+            const halfW = Math.ceil(cw / 2);
+            const halfH = Math.ceil(ch / 2);
+
+            const tmpCanvas = document.createElement('canvas');
+            tmpCanvas.width  = halfW;
+            tmpCanvas.height = halfH;
+            const tmpCtx = tmpCanvas.getContext('2d');
+            _applySmoothing(tmpCtx);
+
+            // Dibujamos el canvas anterior a la mitad de su tamaño.
+            // Con imageSmoothingQuality='high' cada paso aplica bicúbico 4×4,
+            // equivalente al mipmap lineal usado en motores de renderizado 3D.
+            tmpCtx.drawImage(curCanvas, 0, 0, halfW, halfH);
+
+            // Invalidar el canvas previo para liberar VRAM de inmediato.
+            curCanvas.width  = 0;
+            curCanvas.height = 0;
+
+            curCanvas = tmpCanvas;
+            cw = halfW;
+            ch = halfH;
+        }
+
+        // ── Paso final: reducción residual al tamaño exacto del sourceCanvas
+        // En este punto cw ≤ srcW×2 y ch ≤ srcH×2, por lo que la ratio de
+        // reducción no supera 2:1 en ningún eje. El bicúbico produce un
+        // resultado limpio sin aliasing ni pérdida colorimétrica.
+        this.sourceCtx.drawImage(curCanvas, 0, 0, srcW, srcH);
+
+        // Liberar el último buffer intermedio.
+        curCanvas.width  = 0;
+        curCanvas.height = 0;
     }
 
     buildGridCanvas() {
@@ -430,29 +595,60 @@ export class PuzzleEngine {
 
         ctx.clip(p.path);
 
-        const margin        = Math.min(Math.max(this.pieceWidth, this.pieceHeight), this.tabSize * 3);
-        const overlapFix    = isStaticRender ? 0.6 : 0;
-        const scaleToSource = this.dpr;
+        // ── Coordenadas pixel-perfect para drawImage (v18.0, sin cambios) ──
+        //
+        // margin: redondeado a entero para que el rectángulo de origen y destino
+        //   no caigan entre píxeles físicos. Se calcula en espacio lógico (CSS px).
+        //
+        // srcMargin: margen escalado al espacio físico del sourceCanvas.
+        //   Math.round absorbe el residuo de DPR no-entero (ej. 2.625×).
+        //
+        // overlapFix: 1px entero en renders estáticos (antes era 0.6 fraccionario).
+        //   Elimina la grieta de medio píxel visible entre piezas adyacentes sin
+        //   introducir un solapamiento perceptible.
+        //
+        // srcPieceW/H_SC: enteros exactos garantizados porque sourceCanvas.width/height
+        //   son múltiplos de gridSize (ver resizeCanvas()). La división no produce
+        //   residuo fraccional.
+        //
+        // Con todos los argumentos enteros, el navegador realiza un blit 1:1
+        // (copia directa de píxeles) sin interpolación, obteniendo la máxima
+        // nitidez posible. En renders estáticos se deshabilita además el
+        // imageSmoothingEnabled para blindar ese path ante cualquier interpolación
+        // de hardware que el driver pudiera aplicar en el drawImage.
+        //
+        // Nota v19.0: el sourceCanvas ahora contiene una textura de alta fidelidad
+        // generada por step-down scaling. La lógica de coordenadas aquí no cambia;
+        // la mejora es exclusivamente en la fuente de datos del sourceCanvas.
 
-        const srcPieceW_SC  = this.sourceCanvas.width  / this.gridSize;
-        const srcPieceH_SC  = this.sourceCanvas.height / this.gridSize;
-        const srcOriginX_SC = p.gridX * srcPieceW_SC;
+        const margin     = Math.round(Math.min(Math.max(this.pieceWidth, this.pieceHeight), this.tabSize * 3));
+        const srcMargin  = Math.round(margin * this.dpr);
+        const overlapFix = isStaticRender ? 1 : 0;
+
+        const srcPieceW_SC  = this.sourceCanvas.width  / this.gridSize;  // entero exacto
+        const srcPieceH_SC  = this.sourceCanvas.height / this.gridSize;  // entero exacto
+        const srcOriginX_SC = p.gridX * srcPieceW_SC;                    // entero × entero
         const srcOriginY_SC = p.gridY * srcPieceH_SC;
 
-        // imageSmoothingQuality se preserva dentro del par save/restore
-        // porque el estado de suavizado forma parte del stack del contexto.
-        // No se reaplica aquí por rendimiento.
+        // En renders estáticos el mapeo es 1:1 píxel físico → desactivar suavizado
+        // elimina cualquier dispersión de color entre píxeles adyacentes de la rejilla.
+        // El par save/restore garantiza que el estado original se restaura.
+        if (isStaticRender) ctx.imageSmoothingEnabled = false;
+
         ctx.drawImage(
             this.sourceCanvas,
-            srcOriginX_SC - (margin * scaleToSource),
-            srcOriginY_SC - (margin * scaleToSource),
-            srcPieceW_SC  + (margin * 2 * scaleToSource),
-            srcPieceH_SC  + (margin * 2 * scaleToSource),
+            srcOriginX_SC - srcMargin,
+            srcOriginY_SC - srcMargin,
+            srcPieceW_SC  + srcMargin * 2,
+            srcPieceH_SC  + srcMargin * 2,
             -margin - overlapFix,
             -margin - overlapFix,
-            this.pieceWidth  + (margin * 2) + (overlapFix * 2),
-            this.pieceHeight + (margin * 2) + (overlapFix * 2)
+            this.pieceWidth  + margin * 2 + overlapFix * 2,
+            this.pieceHeight + margin * 2 + overlapFix * 2
         );
+
+        if (isStaticRender) ctx.imageSmoothingEnabled = true;
+
         ctx.restore();
 
         if (!isStaticRender && !p.isLocked) {
@@ -865,7 +1061,7 @@ export class PuzzleEngine {
     /**
      * Detiene el loop, elimina todos los listeners y libera memoria de GPU.
      *
-     * Liberación de buffers (v17.0):
+     * Liberación de buffers (v17.0, sin cambios en v19.0):
      *   Asignar width = 0 / height = 0 a un canvas HTMLCanvasElement fuerza
      *   al browser a liberar inmediatamente la textura de VRAM asociada.
      *   Esto es especialmente crítico para imágenes 1600×1600 a DPR 2×:
@@ -878,6 +1074,10 @@ export class PuzzleEngine {
      *   main.js v8.0), llamar a .close() libera su memoria nativa antes de
      *   que el GC lo recoja, lo que equivale a una liberación determinista
      *   de la textura en el worker de decodificación.
+     *
+     *   Nota v19.0: los canvases intermedios de _buildSourceCanvasHQ() ya
+     *   se invalidan durante su propia ejecución (width=0/height=0). No
+     *   quedan referencias pendientes al finalizar resizeCanvas().
      */
     destroy() {
         // 1. Detener el loop de animación.
@@ -932,9 +1132,12 @@ export class PuzzleEngine {
  *   - imageSmoothingEnabled: true   (ya es el default, pero lo forzamos)
  *   - imageSmoothingQuality: 'low'  (default del navegador — cambiamos a 'high')
  *
- * 'high' activa interpolación bicúbica (vs bilinear en 'low'/'medium'),
- * eliminando el efecto "borroso pixelado" al escalar las piezas de 1600px
- * al tamaño lógico del tablero (aprox. 300–700px según dispositivo).
+ * 'high' activa interpolación bicúbica (vs bilinear en 'low'/'medium').
+ * En el contexto del step-down scaling (v19.0), bicúbico en cada paso
+ * intermedio equivale a un filtro Catmull-Rom 4×4 que preserva las altas
+ * frecuencias (bordes, líneas finas) mientras suprime el aliasing de Nyquist.
+ * En el paso final (copia 1:1 del sourceCanvas a piezas encajadas), el
+ * suavizado se desactiva puntualmente en isStaticRender para un blit exacto.
  *
  * @param {CanvasRenderingContext2D} ctx
  */
