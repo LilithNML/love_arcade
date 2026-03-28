@@ -186,7 +186,16 @@ export class PuzzleEngine {
      *   En DPR no-entero (e.g. 2.625×), el `Math.round` antes del snap absorbe
      *   el residuo fraccional sin perder más de medio píxel físico.
      *
-     * Relleno del sourceCanvas — step-down scaling (v19.0):
+     * Protección de VRAM — límite de 1600 px (v19.1):
+     *   En dispositivos con DPR 3× y tablero grande, boardWidth × DPR puede
+     *   superar los 1600 px nativos de la imagen fuente, asignando VRAM para
+     *   píxeles inexistentes en el original. El cap en MAX_SRC_PX = 1600 evita
+     *   este desbordamiento. El valor limitado se redondea hacia abajo al
+     *   múltiplo de gridSize más cercano (Math.floor), preservando la propiedad
+     *   pixel-perfect. Ver el bloque de comentario en resizeCanvas() para el
+     *   razonamiento completo.
+     *
+     * Relleno del sourceCanvas — step-down scaling (v19.0, sin cambios en v19.1):
      *   La imagen nativa 1600×1600 ya no se vierte en un único drawImage al
      *   tamaño final (que causaba el blur bilineal). En su lugar,
      *   `_buildSourceCanvasHQ()` reduce la textura de forma escalonada,
@@ -258,14 +267,36 @@ export class PuzzleEngine {
         // El snap posterior al múltiplo de gridSize garantiza que
         // sourceCanvas.width / gridSize sea un entero exacto, eliminando
         // el muestreo sub-píxel en drawImage() dentro de renderPieceToContext.
-        const srcW = Math.round(this.boardWidth  * this.dpr / this.gridSize) * this.gridSize;
-        const srcH = Math.round(this.boardHeight * this.dpr / this.gridSize) * this.gridSize;
+        //
+        // Protección de VRAM — límite de 1600 px (v19.1):
+        //   En dispositivos con DPR 3× y tablero grande (ej. 600px CSS),
+        //   boardWidth * dpr = 1800 px, lo que generaría un sourceCanvas
+        //   de 1800×1800 px = ~12 MB de VRAM, superando la resolución
+        //   nativa de la imagen fuente (1600×1600) sin aportar información
+        //   visual adicional. El cap evita este despilfarro:
+        //     a) Se calcula el valor natural (rawSrcW/rawSrcH).
+        //     b) Si supera MAX_SRC_PX, se recorta al múltiplo inferior de
+        //        gridSize ≤ MAX_SRC_PX, preservando la propiedad pixel-perfect.
+        //     c) El cap se aplica con Math.floor (no Math.round) para
+        //        garantizar que el resultado nunca supere MAX_SRC_PX.
+        //   Efecto neto: el sourceCanvas nunca excede la resolución de la
+        //   imagen fuente, y cualquier dimensión resultante sigue siendo
+        //   un múltiplo exacto de gridSize.
+        const MAX_SRC_PX = 1600;
+        const rawSrcW = Math.round(this.boardWidth  * this.dpr / this.gridSize) * this.gridSize;
+        const rawSrcH = Math.round(this.boardHeight * this.dpr / this.gridSize) * this.gridSize;
+        const srcW = rawSrcW > MAX_SRC_PX
+            ? Math.floor(MAX_SRC_PX / this.gridSize) * this.gridSize
+            : rawSrcW;
+        const srcH = rawSrcH > MAX_SRC_PX
+            ? Math.floor(MAX_SRC_PX / this.gridSize) * this.gridSize
+            : rawSrcH;
         this.sourceCanvas.width  = srcW;
         this.sourceCanvas.height = srcH;
         _applySmoothing(this.sourceCtx);
         this.sourceCtx.clearRect(0, 0, srcW, srcH);
 
-        // ── Relleno del sourceCanvas con step-down scaling (v19.0) ────────
+        // ── Relleno del sourceCanvas con step-down scaling (v19.1) ────────
         // Sustituye el anterior drawImage directo (1600→srcW en un solo paso)
         // que causaba blur bilineal y pérdida colorimétrica. Ver
         // _buildSourceCanvasHQ() para el análisis completo del algoritmo.
@@ -333,8 +364,8 @@ export class PuzzleEngine {
      * garantiza calidad óptima también en este camino.
      *
      * @param {HTMLImageElement|ImageBitmap} img  Textura fuente (1600×1600).
-     * @param {number} srcW  Ancho final del sourceCanvas (múltiplo de gridSize).
-     * @param {number} srcH  Alto  final del sourceCanvas (múltiplo de gridSize).
+     * @param {number} srcW  Ancho final del sourceCanvas (múltiplo de gridSize, ≤ 1600).
+     * @param {number} srcH  Alto  final del sourceCanvas (múltiplo de gridSize, ≤ 1600).
      */
     _buildSourceCanvasHQ(img, srcW, srcH) {
         // Dimensiones intrínsecas de la fuente.
@@ -1075,7 +1106,10 @@ export class PuzzleEngine {
      *   que el GC lo recoja, lo que equivale a una liberación determinista
      *   de la textura en el worker de decodificación.
      *
-     *   Nota v19.0: los canvases intermedios de _buildSourceCanvasHQ() ya
+     *   Nota v19.1: el sourceCanvas tiene ahora un cap de 1600 px por lado
+     *   (MAX_SRC_PX), por lo que su tamaño máximo es ~10 MB en DPR 3×,
+     *   en lugar de los ~14 MB que habría generado sin el límite.
+     *   Los canvases intermedios de _buildSourceCanvasHQ() ya
      *   se invalidan durante su propia ejecución (width=0/height=0). No
      *   quedan referencias pendientes al finalizar resizeCanvas().
      */

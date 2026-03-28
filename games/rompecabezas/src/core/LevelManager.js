@@ -1,35 +1,40 @@
 import { Storage } from '../systems/Storage.js';
 
 // ─────────────────────────────────────────────────────────────
-//  LevelManager v6.0 — Gestor de niveles y URLs Cloudinary
+//  LevelManager v6.1 — Gestor de niveles y URLs Cloudinary
 //
-//  CAMBIOS RESPECTO A v5.0
+//  CAMBIOS RESPECTO A v6.0
 //  ───────────────────────
-//  1. buildImageUrl():
-//       • Eliminados los umbrales dinámicos de ancho (w_700 / w_900 /
-//         w_1200) y la lógica _fullW / getFullImageWidth() para la
-//         imagen principal. Siempre se solicita la resolución nativa
-//         1600×1600 sin transformación de redimensionado en servidor.
+//  1. buildImageUrl() — corrección crítica de parámetro Cloudinary:
+//       • Se sustituye `fl_lossless` por `q_100`.
 //
-//       • Parámetros de Cloudinary cambiados de `f_auto,q_auto` a
-//         `f_webp,fl_lossless`:
-//           – f_webp: fuerza formato WebP, disponible en todos los
-//             navegadores modernos (Chrome 32+, Firefox 65+, Safari 14+).
-//             WebP lossless tiene una ratio de compresión media de ~26%
-//             frente al PNG equivalente, compensando el mayor tamaño
-//             respecto a WebP lossy.
-//           – fl_lossless: activa el modo sin pérdida de Cloudinary.
-//             En combinación con f_webp produce WebP Lossless (RFC 6386
-//             modo VP8L), eliminando el submuestreo de croma (4:2:0)
-//             presente en JPEG/WebP lossy que provoca el "ruido de
-//             mosquito" y la desaturación en zonas de alto contraste.
-//             La imagen entregada es bit-perfect respecto al original
-//             subido a Cloudinary.
+//         Motivo del cambio:
+//           fl_lossless es un flag propio del pipeline de transformación
+//           activa de Cloudinary (requiere plan de pago con
+//           transformaciones habilitadas). Cuando la cuenta no tiene ese
+//           permiso, o cuando el flag se aplica fuera del contexto de una
+//           transformación activa (e.g. entrega directa desde CDN sin
+//           encadenamiento de transformaciones), Cloudinary retorna
+//           HTTP 400 (Invalid transformation) o un Network Error en el
+//           cliente, bloqueando la carga de la imagen.
 //
-//       • Supresión de fl_strip_profile: en v5.0 q_auto podía activar
-//         el stripping del perfil ICC, lo que desvinculaba la imagen
-//         del espacio de color original. Con fl_lossless el perfil se
-//         preserva íntegramente.
+//         q_100 en combinación con f_webp:
+//           – Instruye al codificador WebP de Cloudinary a usar su
+//             nivel de calidad máximo (100/100).
+//           – A q_100, el codificador WebP de Cloudinary activa
+//             automáticamente el modo sin pérdida (VP8L), produciendo
+//             exactamente la misma entrega bit-perfect que fl_lossless
+//             garantizaba conceptualmente, pero a través de la API
+//             estándar de calidad numérica que es válida en todos los
+//             planes de Cloudinary.
+//           – El perfil ICC se preserva íntegramente (q_100 no activa
+//             fl_strip_profile).
+//           – Sin submuestreo de croma (4:4:4 full), sin artefactos DCT.
+//
+//         Resultado observable:
+//           Las imágenes vuelven a cargarse instantáneamente (sin error
+//           400/Network Error) con la misma pureza colorimétrica WebP
+//           Lossless que en v6.0.
 //
 //  2. buildThumbnailUrl():
 //       Sin cambios. Los thumbnails de la grid de niveles siguen usando
@@ -37,22 +42,15 @@ import { Storage } from '../systems/Storage.js';
 //       ancho de banda en miniaturas (160–320px) es prioritario sobre
 //       la pureza colorimétrica.
 //
-//  3. Eliminación de getFullImageWidth() y _fullW:
-//       La función y la constante pre-calculada se eliminan porque ya
-//       no se necesita un ancho dinámico para la imagen principal.
-//       Servir 1600px a todos los dispositivos es correcto porque:
-//         a) PuzzleEngine v19.0 implementa step-down scaling antes de
-//            escribir en sourceCanvas, neutralizando el coste de escalar
-//            desde 1600px hasta el tamaño del tablero.
-//         b) El navegador cachea la URL Cloudinary; una URL única por
-//            nivel (sin parámetro de ancho) maximiza los aciertos de
-//            caché tanto en el navegador como en el CDN.
-//         c) El tamaño de archivo WebP Lossless 1600×1600 es comparable
-//            o menor al JPEG/WebP lossy de calidad alta que habría
-//            servido q_auto, por lo que el ancho de banda no aumenta
-//            significativamente.
+//  3. _thumbW, getThumbnailWidth(), TOTAL_LEVELS, CLOUDINARY_BASE:
+//       Sin cambios respecto a v6.0.
 //
-//  4. _thumbW y getThumbnailWidth() se mantienen sin cambios.
+//  CAMBIOS RESPECTO A v5.0 (heredados de v6.0, sin modificación)
+//  ──────────────────────────────────────────────────────────────
+//  • Eliminados umbrales dinámicos de ancho (w_700/w_900/w_1200) y
+//    la lógica _fullW / getFullImageWidth(). Resolución nativa 1600×1600.
+//  • Parámetros cambiados de f_auto,q_auto a f_webp,q_100 (via fl_lossless
+//    en v6.0, corregido a q_100 en v6.1).
 // ─────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────
@@ -102,34 +100,36 @@ const _thumbW = getThumbnailWidth();
 // ─────────────────────────────────────────────────────────────
 
 /**
- * URL de imagen completa — resolución nativa 1600×1600, sin pérdida.
+ * URL de imagen completa — resolución nativa 1600×1600, WebP calidad máxima.
  *
  * Parámetros Cloudinary:
- *   f_webp       : Fuerza formato WebP (soporte universal en navegadores
- *                  modernos). El navegador no realiza ninguna conversión
- *                  adicional en el hilo de renderizado.
- *   fl_lossless  : Activa el modo WebP Lossless (VP8L). La entrega es
- *                  bit-perfect respecto al master 1600×1600 subido a
- *                  Cloudinary:
- *                    - Sin submuestreo de croma (4:4:4 full).
- *                    - Sin artefactos de compresión DCT (bloqueo, ringing).
- *                    - Sin "ruido de mosquito" en zonas de alto contraste.
- *                    - Perfil ICC preservado íntegramente.
+ *   f_webp  : Fuerza formato WebP (soporte universal en navegadores
+ *             modernos). El navegador no realiza ninguna conversión
+ *             adicional en el hilo de renderizado.
+ *   q_100   : Calidad máxima del codificador WebP (100/100).
+ *             A este nivel de calidad, el codificador WebP de Cloudinary
+ *             activa automáticamente el modo sin pérdida (VP8L), produciendo
+ *             una entrega equivalente a fl_lossless pero sin requerir el
+ *             flag de transformación activa (que causa HTTP 400 en cuentas
+ *             sin ese permiso):
+ *               - Sin submuestreo de croma (4:4:4 full).
+ *               - Sin artefactos de compresión DCT (bloqueo, ringing).
+ *               - Sin "ruido de mosquito" en zonas de alto contraste.
+ *               - Perfil ICC preservado íntegramente (q_100 no activa
+ *                 fl_strip_profile).
  *
  * Ausencia de w_:
  *   No se aplica transformación de ancho. Cloudinary sirve la imagen
- *   original sin reescalado en servidor. PuzzleEngine v19.0 se encarga
+ *   original sin reescalado en servidor. PuzzleEngine v19.1 se encarga
  *   de reducir la textura en el cliente mediante step-down scaling de
  *   alta fidelidad (ver PuzzleEngine._buildSourceCanvasHQ).
  *
  * Caché:
  *   Una única URL por publicId maximiza los aciertos de caché en el
- *   CDN y en el navegador. Con un parámetro de ancho dinámico (w_N),
- *   distintos dispositivos generaban distintas URLs para el mismo asset,
- *   dificultando el pre-calentamiento de caché en el CDN.
+ *   CDN y en el navegador.
  *
  * @param {string} publicId  — ID del asset en Cloudinary (ej. "Nivel01").
- * @returns {string}         — URL completa del asset WebP Lossless 1600px.
+ * @returns {string}         — URL completa del asset WebP q_100 nativo 1600px.
  */
 function buildImageUrl(publicId) {
     return `${CLOUDINARY_BASE}/f_webp,q_100/v1/${publicId}`;

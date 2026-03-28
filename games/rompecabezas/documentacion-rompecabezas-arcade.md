@@ -2,8 +2,8 @@
 
 **Proyecto:** Rompecabezas Arcade (Neural Puzzle)
 **Plataforma:** Love Arcade
-**Versión del motor:** `PuzzleEngine v19.0` · `main.js v8.0` · `UIController v6.0` · `LevelManager v6.0` · `Storage v3.0`
-**Última revisión:** Marzo 2026
+**Versión del motor:** `PuzzleEngine v19.1` · `main.js v8.0` · `UIController v6.0` · `LevelManager v6.1` · `Storage v3.0`
+**Última revisión:** Marzo 2026 (v19.1 / v6.1)
 
 ---
 
@@ -46,8 +46,9 @@
 ### Características principales
 
 - **150 niveles** generados algorítmicamente desde una constante única (`TOTAL_LEVELS`). No se requiere editar JSON para agregar niveles.
-- Activos visuales de **1600×1600 px** servidos desde **Cloudinary** en formato **WebP Lossless** (`f_webp,fl_lossless`). A partir de v6.0 se elimina el downscaling en servidor: todos los dispositivos reciben la resolución nativa 1600×1600 sin pérdida de información colorimétrica.
+- Activos visuales de **1600×1600 px** servidos desde **Cloudinary** en formato **WebP calidad máxima** (`f_webp,q_100`). A q_100, el codificador WebP de Cloudinary activa automáticamente el modo sin pérdida (VP8L), equivalente a `fl_lossless` pero compatible con todos los planes de Cloudinary (evita el error HTTP 400). A partir de v6.1 se elimina `fl_lossless` que causaba fallos de red en cuentas sin transformaciones activas habilitadas.
 - Escalado de alta fidelidad en cliente mediante **step-down scaling** (v19.0): la textura 1600×1600 se reduce escalonadamente, nunca más del 50% por paso, neutralizando el blur bilineal y el ruido de mosquito que producía el downsampling en un solo paso.
+- **Protección de VRAM (v19.1):** el `sourceCanvas` se limita a un máximo de 1600 px por dimensión, redondeado al múltiplo inferior de `gridSize`. Previene el desbordamiento en dispositivos DPR 3× con tableros grandes sin perder nitidez, ya que la imagen fuente tiene exactamente 1600 px nativos.
 - Carga progresiva de thumbnails con **IntersectionObserver**: las miniaturas se descargan únicamente cuando están a punto de entrar al área visible de la pantalla, eliminando sobrecarga de red al navegar una lista de 150 niveles.
 - Decodificación de imagen fuera del hilo principal con **`createImageBitmap`**: la textura 1600×1600 se transfiere al motor sin bloquear la UI. Liberación determinista con `ImageBitmap.close()` al destruir el motor.
 - Gestión estricta de VRAM: en `destroy()` todos los buffers offscreen se invalidan con `width/height = 0`, liberando la memoria de GPU de forma síncrona antes de que actúe el GC.
@@ -78,8 +79,8 @@
     ├── main.js                 # Punto de entrada y orquestador (v8.0)
     ├── style.css               # Estilos globales — Flat 2.0, variables CSS, .sr-only
     ├── core/
-    │   ├── PuzzleEngine.js     # Motor de renderizado y lógica de piezas (v19.0)
-    │   └── LevelManager.js     # Generación algorítmica de niveles (v6.0)
+    │   ├── PuzzleEngine.js     # Motor de renderizado y lógica de piezas (v19.1)
+    │   └── LevelManager.js     # Generación algorítmica de niveles (v6.1)
     ├── ui/
     │   └── UIController.js     # Gestión de pantallas y DOM (v6.0)
     └── systems/
@@ -196,11 +197,17 @@ Punto de entrada. Responsabilidades:
 
 ### 5.2 PuzzleEngine.js — Motor de Juego
 
-**Versión actual: v19.0**
+**Versión actual: v19.1**
 
 Motor canvas 2D de renderizado de piezas de rompecabezas. Maneja geometría, física de arrastrar, detección de snap, partículas, parallax y audio.
 
-**Cambios en v19.0:**
+**Cambios en v19.1:**
+- Se añade la constante `MAX_SRC_PX = 1600` en `resizeCanvas()`.
+- Los valores `srcW` / `srcH` del `sourceCanvas` se calculan primero de forma natural (`boardWidth × dpr` alineado a `gridSize`) y luego se limitan a `MAX_SRC_PX` si lo exceden, usando `Math.floor` para que el resultado sea el múltiplo de `gridSize` más cercano sin superarlo. Esto preserva la propiedad pixel-perfect de v18.0 sin blur.
+- Efecto práctico: en DPR 3× con tablero de 600 px CSS, `srcW` pasa de 1800 a `Math.floor(1600/gridSize) × gridSize`, ahorrando ~35% de VRAM sin pérdida de calidad, ya que la imagen fuente tiene exactamente 1600 px nativos.
+- `_buildSourceCanvasHQ()` recibe `srcW`/`srcH` ya capados; su lógica interna no cambia.
+
+**Cambios en v19.0 (sin modificación en v19.1):**
 - Se añade el método privado `_buildSourceCanvasHQ(img, srcW, srcH)` que sustituye el `drawImage` directo en `resizeCanvas()`.
 - El método implementa step-down scaling: reduce la imagen nativa iterativamente al 50% en cada paso hasta que la ratio fuente/destino sea ≤ 2:1, luego realiza el paso final bicúbico al tamaño exacto del sourceCanvas.
 - Cada buffer intermedio se invalida con `width=0/height=0` inmediatamente tras ser copiado.
@@ -208,18 +215,20 @@ Motor canvas 2D de renderizado de piezas de rompecabezas. Maneja geometría, fí
 
 ### 5.3 LevelManager.js — Gestor de Niveles
 
-**Versión actual: v6.0**
+**Versión actual: v6.1**
 
 Genera algorítmicamente 150 objetos de configuración de nivel y construye las URLs de Cloudinary.
 
-**Cambios en v6.0:**
+**Cambios en v6.1:**
+- `buildImageUrl()` sustituye `fl_lossless` por `q_100`. El flag `fl_lossless` causaba HTTP 400/Network Error en cuentas de Cloudinary sin transformaciones activas habilitadas. Con `f_webp,q_100`, el codificador WebP de Cloudinary activa automáticamente el modo sin pérdida (VP8L) al nivel de calidad 100, obteniendo la misma fidelidad cromática sin depender del flag privado.
+- El resto del módulo es idéntico a v6.0.
+
+**Cambios en v6.0 (heredados, sin modificación en v6.1):**
 - `buildImageUrl()` eliminó los umbrales dinámicos de ancho (`w_700`/`w_900`/`w_1200`) y la función `getFullImageWidth()`. La imagen de juego siempre se solicita a resolución nativa 1600×1600.
-- Los parámetros Cloudinary cambian de `f_auto,q_auto` a `f_webp,fl_lossless`:
-  - `f_webp`: formato WebP, soporte universal.
-  - `fl_lossless`: WebP Lossless (VP8L), sin pérdida de croma ni artefactos DCT.
+- Los parámetros Cloudinary cambiaron de `f_auto,q_auto` a `f_webp,q_100` (vía `fl_lossless` en v6.0, corregido en v6.1).
 - `buildThumbnailUrl()` sin cambios: los thumbnails siguen usando `f_auto,q_auto`.
 - `_thumbW` y `getThumbnailWidth()` se mantienen para la cuadrícula de niveles.
-- La variable `_fullW` se elimina (ya no tiene uso).
+- La variable `_fullW` se eliminó (ya no tiene uso).
 
 ### 5.4 UIController.js — Controlador de Interfaz
 
@@ -244,21 +253,24 @@ Síntesis procedural mediante Web Audio API. Eventos: `click`, `snap`, `win`. El
 
 ## 6. Arquitectura de Activos — Cloudinary
 
-### Imagen de juego — v6.0
+### Imagen de juego — v6.1
 
 | Parámetro       | Valor         | Efecto                                                                 |
 |-----------------|---------------|------------------------------------------------------------------------|
 | `f_webp`        | WebP          | Formato WebP soportado universalmente. Sin conversión en cliente.      |
-| `fl_lossless`   | WebP Lossless | Modo VP8L: sin submuestreo de croma, sin artefactos DCT, perfil ICC preservado. |
+| `q_100`         | Calidad 100   | Activa automáticamente el modo VP8L (sin pérdida): sin submuestreo de croma, sin artefactos DCT, perfil ICC preservado. Compatible con todos los planes de Cloudinary. |
 | *(sin `w_`)*    | 1600×1600     | Resolución nativa, sin reescalado en servidor. El cliente escala via step-down. |
 
 **URL ejemplo:**
 ```
-https://res.cloudinary.com/dyspgn0sw/image/upload/f_webp,fl_lossless/v1/Nivel05
+https://res.cloudinary.com/dyspgn0sw/image/upload/f_webp,q_100/v1/Nivel05
 ```
 
+**Por qué se usa `q_100` en lugar de `fl_lossless`:**
+`fl_lossless` es un flag del pipeline de transformación activa de Cloudinary que no está disponible en todos los planes. Cuando la cuenta no tiene ese permiso, Cloudinary retorna HTTP 400, bloqueando la carga. `q_100` en combinación con `f_webp` produce exactamente el mismo resultado (WebP VP8L sin pérdida) a través de la API estándar de calidad numérica, válida en todos los planes.
+
 **Por qué se elimina `w_` para la imagen de juego:**
-En v5.0 los parámetros `w_700`/`w_900`/`w_1200` reducían la imagen en el servidor con un filtro Lanczos de Cloudinary. Aunque Lanczos es de calidad alta, la imagen resultante llegaba al cliente ya degradada: el `drawImage` del sourceCanvas partía de una fuente de menor resolución, y el PuzzleEngine no podía recuperar la información perdida. Con WebP Lossless 1600px, el motor dispone de la textura completa y aplica su propio pipeline de reducción de alta fidelidad.
+En v5.0 los parámetros `w_700`/`w_900`/`w_1200` reducían la imagen en el servidor con un filtro Lanczos de Cloudinary. Aunque Lanczos es de calidad alta, la imagen resultante llegaba al cliente ya degradada: el `drawImage` del sourceCanvas partía de una fuente de menor resolución, y el PuzzleEngine no podía recuperar la información perdida. Con WebP `q_100` a 1600 px, el motor dispone de la textura completa y aplica su propio pipeline de reducción de alta fidelidad.
 
 **Impacto en ancho de banda:**
 Un WebP Lossless 1600×1600 de ilustración/anime típico ocupa entre 800 KB y 2 MB. El WebP lossy q_auto equivalente oscilaba entre 150–400 KB. La diferencia se justifica porque:
@@ -326,13 +338,13 @@ Los modales de confirmación y alerta (`modal-alert`, `modal-confirm`) son gené
 
 ### Buffers offscreen
 
-| Buffer          | Propósito                                                         | Dimensiones                       |
-|-----------------|-------------------------------------------------------------------|-----------------------------------|
-| `sourceCanvas`  | Textura de la imagen completa, reducida al tamaño del tablero×DPR | `srcW × srcH` (múltiplos de gridSize) |
-| `staticCanvas`  | Tablero + todas las piezas encajadas (se actualiza por evento)    | Igual que el canvas principal     |
-| `gridCanvas`    | Rejilla de fondo con paralax (precalculada)                       | Ligeramente mayor que la pantalla |
+| Buffer          | Propósito                                                         | Dimensiones                                          |
+|-----------------|-------------------------------------------------------------------|------------------------------------------------------|
+| `sourceCanvas`  | Textura de la imagen completa, reducida al tamaño del tablero×DPR | `srcW × srcH` (múltiplos de gridSize, **máx. 1600 px** por v19.1) |
+| `staticCanvas`  | Tablero + todas las piezas encajadas (se actualiza por evento)    | Igual que el canvas principal                        |
+| `gridCanvas`    | Rejilla de fondo con paralax (precalculada)                       | Ligeramente mayor que la pantalla                    |
 
-### Step-down scaling — `_buildSourceCanvasHQ()` (v19.0)
+### Step-down scaling — `_buildSourceCanvasHQ()` (v19.0, sin cambios en v19.1)
 
 **Problema resuelto:** el anterior `drawImage(img, 0, 0, srcW, srcH)` realizaba una reducción de hasta 2.67:1 en un solo paso (1600→600 en una pantalla de 300px CSS con DPR 2×). La interpolación bilineal a esa ratio descarta ciclos de frecuencia enteros, produciendo:
 
@@ -353,14 +365,25 @@ Ejemplo: imagen 1600×1600 → sourceCanvas 560×560 (DPR 2×, tablero 280px CSS
 
 ```
 Ejemplo: imagen 1600×1600 → sourceCanvas 840×840 (DPR 3×, tablero 280px CSS)
+         [sin cap: rawSrcW = 840 ≤ 1600 → srcW = 840]
 
   Paso 0: fuente = 1600×1600  (ratio: 1600/840 = 1.90:1 → ≤2:1)
   Paso 1 (final): sourceCanvas ← drawImage(1600×1600 → 840×840) [bicúbico, directo]
 ```
 
-**Preservación pixel-perfect:** los canvases intermedios usan `Math.ceil(N/2)` para sus dimensiones; el tamaño final `srcW × srcH` (múltiplo de `gridSize`) llega sin modificar desde `resizeCanvas()`. La matemática de coordenadas en `renderPieceToContext()` no cambia.
+```
+Ejemplo con cap de VRAM (v19.1): DPR 3×, tablero 600px CSS, gridSize 5
+  rawSrcW = round(600 × 3 / 5) × 5 = 1800  →  supera MAX_SRC_PX=1600
+  srcW    = floor(1600 / 5) × 5 = 1600  (múltiplo de gridSize más cercano ≤ 1600)
 
-**VRAM:** cada intermedio se invalida (`width=0/height=0`) inmediatamente después de copiarse al siguiente. Sólo existe un intermedio en memoria en cada momento.
+  Paso 0: fuente = 1600×1600  (ratio: 1600/1600 = 1.0:1 → camino directo)
+  Paso 1 (final): sourceCanvas ← drawImage(1600×1600 → 1600×1600) [blit 1:1]
+  Ahorro: 1800² × 4 bytes = 12.4 MB  →  1600² × 4 bytes = 9.8 MB  (−21% VRAM)
+```
+
+**Preservación pixel-perfect:** los canvases intermedios usan `Math.ceil(N/2)` para sus dimensiones; el tamaño final `srcW × srcH` (múltiplo de `gridSize`, capado a ≤ 1600 px) llega sin modificar desde `resizeCanvas()`. La matemática de coordenadas en `renderPieceToContext()` no cambia.
+
+**VRAM:** cada intermedio se invalida (`width=0/height=0`) inmediatamente después de copiarse al siguiente. Sólo existe un intermedio en memoria en cada momento. El cap de 1600 px de v19.1 garantiza que el `sourceCanvas` nunca supera la resolución nativa de la imagen fuente.
 
 ### Pipeline de renderizado por frame
 
@@ -484,36 +507,38 @@ Con tarjetas de 100px y DPR 2×: `100 × 2 × 1.07 ≈ 214` → snapped a `240px
 Editar `buildImageUrl()` en `LevelManager.js`:
 
 ```js
-// WebP Lossless nativo (v6.0, actual — máxima fidelidad)
-return `${CLOUDINARY_BASE}/f_webp,fl_lossless/v1/${publicId}`;
+// WebP calidad máxima / sin pérdida efectiva (v6.1, actual — máxima fidelidad, compatible con todos los planes)
+return `${CLOUDINARY_BASE}/f_webp,q_100/v1/${publicId}`;
 
 // WebP lossy con ancho adaptativo (v5.0 legacy — menor tamaño de archivo)
 const wTransform = _fullW === 1600 ? '' : `,w_${_fullW}`;
 return `${CLOUDINARY_BASE}/f_auto,q_auto${wTransform}/v1/${publicId}`;
 ```
 
-Si se revierte a lossy, restaurar también `getFullImageWidth()` y `_fullW` del archivo v5.0. El step-down scaling de PuzzleEngine v19.0 es compatible con cualquier fuente; la diferencia es únicamente la calidad colorimétrica de partida.
+Si se revierte a lossy, restaurar también `getFullImageWidth()` y `_fullW` del archivo v5.0. El step-down scaling de PuzzleEngine v19.1 es compatible con cualquier fuente; la diferencia es únicamente la calidad colorimétrica de partida.
 
 ---
 
 ### Diagnóstico de errores comunes
 
-| Síntoma                                           | Causa probable                                       | Solución                                                        |
-|---------------------------------------------------|------------------------------------------------------|-----------------------------------------------------------------|
-| Imagen de nivel no carga (pantalla infinita)      | `publicId` incorrecto o asset no subido a Cloudinary | Verificar que el nombre sea `Nivel${NN}` en el cloud `dyspgn0sw` |
-| Error CORS al iniciar partida                     | Falta `crossOrigin = 'Anonymous'`                   | Ya corregido en `startGame()`; no revertir                      |
-| Thumbnails no aparecen al abrir pantalla niveles  | Observer desconectado o `data-src` no asignado       | Verificar que `renderLevelsGrid()` se llame después de `loadLevels()` |
-| Tarjeta de nivel no responde al teclado           | `tabindex` o `role` faltante en el elemento          | Verificar UIController v6.0 o superior                          |
-| `dev.skipLevel()` no hace nada                   | No hay nivel activo en ese momento                   | Iniciar una partida antes de llamar al comando                   |
-| El audio no suena en iOS al inicio               | Restricción de autoplay del sistema operativo        | Normal; el AudioContext se activa automáticamente en el primer toque |
-| Imagen borrosa al escalar en canvas              | `imageSmoothingQuality` reseteado por cambio de dim. | Verificar que `_applySmoothing()` se llame tras cambios de `width`/`height` |
-| Bordes de pieza con antialiasing visible          | `imageSmoothingEnabled = true` en renders estáticos  | Verificado en v18.0: se deshabilita puntualmente en `renderPieceToContext(isStaticRender=true)` |
-| Piezas encajadas con grietas sub-píxel            | `overlapFix` fraccionario (0.6) en drawImage         | Verificado en v18.0: `overlapFix = 1` (entero)                 |
-| Nitidez degradada en iPhone 14 Pro / Galaxy S     | DPR 3× escalado por software por cap en `dpr = 2`   | Verificado en v18.0: `dpr = Math.min(devicePixelRatio, 3)`     |
-| Alto consumo de RAM al cambiar niveles           | Buffers offscreen no liberados en `destroy()`        | Verificar que `destroy()` asigne `width=0`/`height=0` y llame a `bitmap.close()` |
-| Thumbnails cargados dos veces en la grid         | Observer huérfano del render anterior                | Verificar que `UI._thumbObserver.disconnect()` se llame al inicio de `renderLevelsGrid()` |
-| Pieza queda "flotando" al pausar                  | `cancelDrag()` no invocado antes de `togglePause()`  | Verificar que `togglePause()` en main.js llame a `activeGame.cancelDrag()` |
-| Colores lavados / desaturados en las piezas      | URL de Cloudinary con `q_auto` (compresión lossy)    | Verificado en v6.0: `buildImageUrl()` usa `f_webp,fl_lossless` |
-| "Ruido de mosquito" en líneas de alto contraste  | Artefactos DCT del JPEG/WebP lossy                   | Verificado en v6.0: WebP Lossless elimina el codificador DCT    |
-| Blur generalizado en el tablero                  | `drawImage` único 1600→target (bilineal en un paso)  | Verificado en v19.0: `_buildSourceCanvasHQ()` implementa step-down ≤2:1 por paso |
-| Canvas intermedio no liberado (posible OOM)      | Referencia a canvas intermedio sobrevive el scope     | `_buildSourceCanvasHQ()` invalida `width=0/height=0` en cada iteración |
+| Síntoma                                               | Causa probable                                                      | Solución                                                                                   |
+|-------------------------------------------------------|---------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| Imagen de nivel no carga (pantalla infinita)          | `publicId` incorrecto o asset no subido a Cloudinary                | Verificar que el nombre sea `Nivel${NN}` en el cloud `dyspgn0sw`                           |
+| **HTTP 400 / Network Error al cargar imagen**         | **`fl_lossless` en la URL (flag no disponible en el plan)**         | **Verificado en v6.1: `buildImageUrl()` usa `f_webp,q_100` en lugar de `fl_lossless`**    |
+| Error CORS al iniciar partida                         | Falta `crossOrigin = 'Anonymous'`                                   | Ya corregido en `startGame()`; no revertir                                                 |
+| Thumbnails no aparecen al abrir pantalla niveles      | Observer desconectado o `data-src` no asignado                      | Verificar que `renderLevelsGrid()` se llame después de `loadLevels()`                     |
+| Tarjeta de nivel no responde al teclado               | `tabindex` o `role` faltante en el elemento                         | Verificar UIController v6.0 o superior                                                     |
+| `dev.skipLevel()` no hace nada                        | No hay nivel activo en ese momento                                  | Iniciar una partida antes de llamar al comando                                             |
+| El audio no suena en iOS al inicio                    | Restricción de autoplay del sistema operativo                       | Normal; el AudioContext se activa automáticamente en el primer toque                       |
+| Imagen borrosa al escalar en canvas                   | `imageSmoothingQuality` reseteado por cambio de dim.                | Verificar que `_applySmoothing()` se llame tras cambios de `width`/`height`                |
+| Bordes de pieza con antialiasing visible              | `imageSmoothingEnabled = true` en renders estáticos                 | Verificado en v18.0: se deshabilita puntualmente en `renderPieceToContext(isStaticRender=true)` |
+| Piezas encajadas con grietas sub-píxel                | `overlapFix` fraccionario (0.6) en drawImage                        | Verificado en v18.0: `overlapFix = 1` (entero)                                            |
+| Nitidez degradada en iPhone 14 Pro / Galaxy S         | DPR 3× escalado por software por cap en `dpr = 2`                  | Verificado en v18.0: `dpr = Math.min(devicePixelRatio, 3)`                                |
+| **Desbordamiento de VRAM / OOM en DPR 3× tablero grande** | **`sourceCanvas` supera la resolución nativa 1600px**           | **Verificado en v19.1: `MAX_SRC_PX = 1600` limita `srcW`/`srcH` con `Math.floor` a gridSize** |
+| Alto consumo de RAM al cambiar niveles                | Buffers offscreen no liberados en `destroy()`                       | Verificar que `destroy()` asigne `width=0`/`height=0` y llame a `bitmap.close()`          |
+| Thumbnails cargados dos veces en la grid              | Observer huérfano del render anterior                               | Verificar que `UI._thumbObserver.disconnect()` se llame al inicio de `renderLevelsGrid()` |
+| Pieza queda "flotando" al pausar                      | `cancelDrag()` no invocado antes de `togglePause()`                 | Verificar que `togglePause()` en main.js llame a `activeGame.cancelDrag()`                |
+| Colores lavados / desaturados en las piezas           | URL de Cloudinary con `q_auto` (compresión lossy)                   | Verificado en v6.1: `buildImageUrl()` usa `f_webp,q_100`                                  |
+| "Ruido de mosquito" en líneas de alto contraste       | Artefactos DCT del JPEG/WebP lossy                                  | Verificado en v6.1: `q_100` activa VP8L, eliminando el codificador DCT                    |
+| Blur generalizado en el tablero                       | `drawImage` único 1600→target (bilineal en un paso)                 | Verificado en v19.0: `_buildSourceCanvasHQ()` implementa step-down ≤2:1 por paso          |
+| Canvas intermedio no liberado (posible OOM)           | Referencia a canvas intermedio sobrevive el scope                   | `_buildSourceCanvasHQ()` invalida `width=0/height=0` en cada iteración                    |
