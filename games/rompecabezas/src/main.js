@@ -15,7 +15,7 @@ const GameState = {
 };
 
 async function init() {
-    console.log('[Main] Iniciando Rompecabezas Arcade v6.0...');
+    console.log('[Main] Iniciando Rompecabezas Arcade v8.0...');
 
     await levelManager.loadLevels();
     Storage.validateUnlockedLevels(levelManager.levels);
@@ -66,6 +66,28 @@ function setupDevTools() {
     console.log('[Dev] Herramientas disponibles: dev.unlockAll() · dev.addCoins(n) · dev.skipLevel()');
 }
 
+/**
+ * Carga y lanza una partida para el nivel indicado.
+ *
+ * Flujo de carga de imagen (v8.0):
+ *   1. Se crea un HTMLImageElement con crossOrigin para cumplir CORS.
+ *   2. img.decode() — espera la decodificación en el hilo principal.
+ *   3. createImageBitmap(img) — transfiere la imagen a un ImageBitmap,
+ *      que es decodificado/procesado fuera del hilo principal (OffscreenCanvas).
+ *      Esto evita que el parseo de 1600×1600px bloquee la UI al construir
+ *      el sourceCanvas dentro de PuzzleEngine.
+ *   4. Se pasa el ImageBitmap como config.image. Al terminar la partida
+ *      PuzzleEngine llama a imageBitmap.close() desde destroy(), liberando
+ *      la memoria de la textura inmediatamente.
+ *
+ * Si createImageBitmap no está disponible en el navegador (navegadores
+ * muy antiguos), se hace fallback al HTMLImageElement directamente con
+ * un aviso en consola; el juego continúa funcionando sin degradación
+ * funcional.
+ *
+ * @param {string}  levelId     ID del nivel a cargar (ej. "lvl_5").
+ * @param {boolean} loadSaved   Si true, intenta restaurar la partida guardada.
+ */
 async function startGame(levelId, loadSaved = false) {
     const levelConfig = levelManager.getLevelById(levelId);
     if (!levelConfig) return;
@@ -93,44 +115,58 @@ async function startGame(levelId, loadSaved = false) {
     if (loader) loader.classList.remove('hidden');
 
     const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.fetchPriority = 'high';
-    img.src = levelConfig.image;
+    img.crossOrigin    = 'Anonymous';
+    img.fetchPriority  = 'high';
+    img.src            = levelConfig.image;
 
     try {
+        // Paso 1: decodificar en el hilo principal.
         await img.decode();
+
+        // Paso 2: transferir a ImageBitmap para liberar al hilo principal
+        // del procesamiento de textura en PuzzleEngine.resizeCanvas().
+        // createImageBitmap retorna una Promise y resuelve en un worker
+        // interno del navegador en navegadores modernos (Chrome 50+, Firefox 42+,
+        // Safari 15+). En entornos sin soporte se usa el img como fallback.
+        let imageSource = img;
+        if (typeof createImageBitmap === 'function') {
+            try {
+                imageSource = await createImageBitmap(img);
+            } catch (bitmapErr) {
+                console.warn('[Main] createImageBitmap falló, usando HTMLImageElement.', bitmapErr);
+            }
+        }
+
+        if (loader) loader.classList.add('hidden');
+
+        activeGame = new PuzzleEngine(puzzleCanvas, { image: imageSource, pieces: levelConfig.pieces }, {
+            onSound:      (t) => AudioSynth.play(t),
+            onWin:        () => handleVictory(levelConfig),
+            onStateChange: () => saveProgress(levelId),
+            onSnap: () => {
+                if (navigator.vibrate) navigator.vibrate([30, 20, 10]);
+            }
+        });
+
+        if (loadSaved) {
+            const savedState = Storage.get(`save_${levelId}`);
+            if (savedState) activeGame.importState(savedState);
+        }
+
+        requestAnimationFrame(() => {
+            if (puzzleCanvas) puzzleCanvas.style.opacity = '1';
+        });
+
+        GameState.isInGame = true;
+        setupGameControls();
+
     } catch (err) {
-        console.error('[Main] Error decodificando imagen pesada:', err);
+        console.error('[Main] Error cargando imagen del nivel:', err);
         if (loader) loader.classList.add('hidden');
         if (puzzleCanvas) puzzleCanvas.style.opacity = '1';
         UI.showAlert('Error', 'Error cargando la imagen del nivel. Verifica tu conexión.');
         UI.showScreen('levels');
-        return;
     }
-
-    if (loader) loader.classList.add('hidden');
-
-    activeGame = new PuzzleEngine(puzzleCanvas, { image: img, pieces: levelConfig.pieces }, {
-        onSound: (t) => AudioSynth.play(t),
-        onWin:   () => handleVictory(levelConfig),
-        onStateChange: () => saveProgress(levelId),
-        onSnap: () => {
-            if (navigator.vibrate) navigator.vibrate([30, 20, 10]);
-        }
-    });
-
-    if (loadSaved) {
-        const savedState = Storage.get(`save_${levelId}`);
-        if (savedState) activeGame.importState(savedState);
-    }
-
-    requestAnimationFrame(() => {
-        if (puzzleCanvas) puzzleCanvas.style.opacity = '1';
-    });
-
-    GameState.isInGame = true;
-
-    setupGameControls();
 }
 
 function handleVictory(levelConfig) {
@@ -202,9 +238,9 @@ function setupGameControls() {
         }
         const balance = window.GameCenter.getBalance ? window.GameCenter.getBalance() : 0;
         const COST    = 10;
-        if (balance < COST) { 
-            UI.showAlert('Saldo insuficiente', `Costo: ${COST}\nTienes: ${balance} 💰`); 
-            return; 
+        if (balance < COST) {
+            UI.showAlert('Saldo insuficiente', `Costo: ${COST}\nTienes: ${balance} 💰`);
+            return;
         }
         UI.showConfirm('Comprar Imán', `¿Usar Imán por ${COST} monedas?`, () => {
             const result = window.GameCenter.buyItem({ id: 'magnet', price: COST });
@@ -220,9 +256,9 @@ function setupGameControls() {
 
 function setupNavigation() {
     document.getElementById('btn-play').onclick = () => {
-        const levels = levelManager.getAllLevelsWithStatus();
+        const levels        = levelManager.getAllLevelsWithStatus();
         const firstUnplayed = levels.find(l => l.status === 'unlocked');
-        
+
         let levelToPlayId;
         if (firstUnplayed) {
             levelToPlayId = firstUnplayed.id;
