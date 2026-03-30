@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics · Mobile Performance Pass · CDN Offline Resilience
+### Plataforma de Recompensas · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v11.0 · Mobile Performance Pass · CDN Offline Resilience
 
 ---
 
@@ -30,6 +30,7 @@
 2w. [Novedades en v10.0 — LTE Events System (Gachapón)](#2w-novedades-en-v100--lte-events-system-gachapón)
 2x. [Novedades en v11.0 — Meta-Gameplay & Event Engine](#2x-novedades-en-v110--meta-gameplay--event-engine)
 2y. [Novedades en v11.5 — Performance & Accessibility Audit](#2y-novedades-en-v115--performance--accessibility-audit)
+2z. [Novedades en Ghost Analytics v11.0 — Doble Candado (Anti-Bot + Human Gate)](#2z-novedades-en-ghost-analytics-v110--doble-candado-anti-bot--human-gate)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -4096,5 +4097,177 @@ Se ha realizado una revisión exhaustiva del proyecto enfocada en la fluidez ext
 
 ---
 
-*Love Arcade · Documentación técnica v11.5 Performance & Accessibility Audit*
+## 2z. Novedades en Ghost Analytics v11.0 — Doble Candado (Anti-Bot + Human Gate)
+
+### Motivación
+
+El sistema de analíticas enviaba reportes automáticamente al cargar la página (`onload` / `DOMContentLoaded`), lo que generaba ruido constante en el canal de Discord por tres fuentes no deseadas: visitas de bots de motores de búsqueda y auditores de rendimiento, health-checks de Vercel y monitores de uptime, y pruebas del equipo en entornos `localhost`. Esta entrega implementa un **Doble Candado** que garantiza que únicamente los eventos generados por usuarios humanos reales en producción lleguen al Webhook.
+
+---
+
+### Arquitectura del Doble Candado
+
+```
+track(event, meta)
+    │
+    ├── 0. Shadow-Gate activo?           → descarte silencioso (sesión dev excluida)
+    │
+    ├── CANDADO 1A: _isLocalhost()?      → descarte silencioso (localhost / 127.0.0.1)
+    │
+    ├── CANDADO 1B: _isBot()?            → descarte silencioso (UA en blacklist)
+    │
+    ├── CANDADO 2: _humanGateUnlocked?
+    │     └─ false  → _pendingQueue.push({event, meta})   (max 50 items)
+    │                  esperando: click | keydown | scroll
+    │
+    ├── Nickname disponible?
+    │     └─ false  → _pendingQueue.push({event, meta})
+    │                  _startNicknamePoller() cada 500 ms
+    │
+    ├── _isRateLimited(key)?             → descarte silencioso (< 3 s desde mismo evento)
+    │
+    └── _send(event, { usuario: nickname, ...meta })   ✅ ENVÍO REAL
+```
+
+---
+
+### Candado 1A — Anti-Localhost (`_isLocalhost()`)
+
+| Hostname detectado | Resultado |
+|---|---|
+| `localhost` | ⛔ Bloqueado |
+| `127.0.0.1` | ⛔ Bloqueado |
+| `''` (protocolo `file://`) | ⛔ Bloqueado |
+| `*.local` (mDNS, Bonjour) | ⛔ Bloqueado |
+| Cualquier dominio de producción | ✅ Permitido |
+
+La verificación se evalúa en **cada llamada** a `track()`, no solo al cargar el módulo, para cubrir el caso improbable de un cambio de hostname durante la sesión.
+
+---
+
+### Candado 1B — Anti-Bot (`_isBot()`)
+
+La función `_isBot()` verifica `navigator.userAgent` contra un array de 40+ patrones regex (`_BOT_UA_PATTERNS`). Las categorías cubiertas son:
+
+| Categoría | Ejemplos de UAs bloqueados |
+|---|---|
+| **Motores de búsqueda** | Googlebot, Bingbot, YandexBot, Baiduspider, DuckDuckBot |
+| **Auditorías de rendimiento** | Lighthouse, Chrome-Lighthouse, PageSpeed, PTST |
+| **Plataformas CI/CD** | Vercel, Vercel-Screenshot |
+| **Monitores de uptime** | UptimeRobot, Pingdom, StatusCake, Site24x7, GTmetrix |
+| **Previews de redes sociales** | Slackbot, Twitterbot, facebookexternalhit, linkedinbot |
+| **Browsers headless** | HeadlessChrome, PhantomJS, Puppeteer, Selenium, WebDriver |
+| **Clientes HTTP** | curl, Wget, axios, node-fetch, python-requests |
+
+Todos los patrones son **case-insensitive** (`/i`) para mayor robustez.
+
+---
+
+### Candado 2 — Human Gate (`_humanGateUnlocked`)
+
+#### Flujo de inicialización (`_humanGateInit`)
+
+```
+Al cargar analytics.js:
+    │
+    ├── _getNickname() devuelve un valor?
+    │     └─ SÍ  →  _humanGateUnlocked = true   ← Usuario recurrente
+    │
+    └─  NO  →  registrar listeners (once: true, passive: true):
+                  document 'click'
+                  document 'keydown'
+                  window  'scroll'
+                      │
+                      └── Primer evento  → _unlockHumanGate()
+                                              │
+                                              └── _flushPendingQueue()
+```
+
+#### Cola de eventos pendientes (`_pendingQueue`)
+
+- **Capacidad máxima:** 50 items (protección contra acumulación excesiva).
+- **Descarte por capacidad:** si la cola está llena, el nuevo evento se descarta con log en modo debug.
+- **Flush con nickname:** al abrir el gate, si el nickname está disponible, todos los eventos se envían inmediatamente con el rate limiter normal.
+- **Flush sin nickname:** si el usuario es nuevo (en el Identity Modal), `_startNicknamePoller()` sondea localStorage cada 500 ms hasta detectar el nickname. Al encontrarlo, envía toda la cola.
+- **Timeout del poller:** si el poller lleva activo más de 10 minutos sin detectar nickname, se cancela y la cola se descarta (evita pollers zombi en sesiones abandonadas).
+
+---
+
+### Nickname obligatorio en todos los payloads
+
+A partir de v11.0, **todas** las peticiones al Webhook incluyen el campo `usuario` con el nickname del jugador como primer campo del embed.
+
+```javascript
+// Antes (v10.0) — meta sin identificación del usuario
+_send('buy_item', { wallpaper: 'Cyber Neon', precio: 500, cashback: 50 });
+
+// Después (v11.0) — usuario inyectado automáticamente por track()
+_send('buy_item', { usuario: 'NombreJugador', wallpaper: 'Cyber Neon', precio: 500, cashback: 50 });
+```
+
+El campo `usuario` **no debe pasarse manualmente** en las llamadas a `track()` desde `app.js` o `shop-logic.js`; se inyecta siempre dentro de `track()` para garantizar consistencia.
+
+El valor se lee con `_getNickname()` desde `localStorage['gamecenter_v6_promos'].nickname`. Si el nickname cambia durante la sesión (caso raro), las siguientes llamadas a `track()` siempre leerán el valor actualizado.
+
+---
+
+### Integración con `app.js` — Sin cambios funcionales
+
+Todas las llamadas existentes a `GhostAnalytics.track()` en `app.js` son **inherentemente seguras** con el nuevo sistema:
+
+| Llamada en `app.js` | Disparador | Compatible con Human Gate |
+|---|---|---|
+| `track('insufficient_funds', ...)` en `buyItem()` | Click en botón de compra | ✅ Sí |
+| `track('insufficient_funds', ...)` en `buyMoonBlessing()` | Click en botón Luna | ✅ Sí |
+| `track('daily_bonus', ...)` en `claimDaily()` | Click en botón diario | ✅ Sí |
+| `track('open_game', ...)` en delegación de clicks | Click en link de juego | ✅ Sí |
+
+Ninguna llamada es automática (no existe ningún `track()` dentro de `DOMContentLoaded` o en el INIT síncrono de `app.js`). El campo `usuario` no debe añadirse manualmente — `track()` lo inyecta.
+
+---
+
+### Integración con `shop-logic.js` — Comportamiento del `user_snapshot`
+
+El evento `user_snapshot` (disparado automáticamente después de cargar el catálogo) queda retenido en `_pendingQueue` hasta que se cumplan ambas condiciones:
+
+| Condición | Estado | Resultado |
+|---|---|---|
+| **Usuario recurrente** (tiene nickname al cargar) | Gate abierto desde el inicio | Se envía en cuanto el catálogo carga ✅ |
+| **Usuario nuevo** (sin nickname, catálogo carga antes del Identity Modal) | Gate cerrado | Se encola → se envía cuando el usuario confirme su nickname en el modal ✅ |
+
+Esto elimina definitivamente el `user_snapshot` emitido por bots o en local.
+
+---
+
+### Diagnóstico desde DevTools
+
+```javascript
+// Ver el estado completo del Doble Candado
+window.GhostAnalytics.status()
+// → muestra Shadow-Gate, Anti-Localhost, Anti-Bot, Human Gate,
+//   nickname, cola pendiente, poller activo, rate limiter
+
+// Activar logs en tiempo real
+window.GhostAnalytics.debug(true)
+// → Muestra en consola el estado de cada llamada a track()
+//   (incluyendo descartados, encolados y enviados)
+
+// Verificar que el Webhook funciona (incluye nickname real o '(sin nickname)')
+window.GhostAnalytics.test()
+// → Bloqueado en localhost y si Anti-Bot detecta UA no humano
+```
+
+---
+
+### Resumen de cambios por archivo (Ghost Analytics v11.0)
+
+| Archivo | Tipo | Cambios |
+|---|---|---|
+| `js/analytics.js` | **Modificado** | Nueva versión v11.0. Funciones añadidas: `_isLocalhost()`, `_isBot()` + `_BOT_UA_PATTERNS`, `_getNickname()`, `_unlockHumanGate()`, `_flushPendingQueue()`, `_startNicknamePoller()`, `_humanGateInit()` IIFE. Variables añadidas: `_humanGateUnlocked`, `_pendingQueue`, `_nicknamePoller`, `_STATE_KEY`. Funciones modificadas: `track()` (Doble Candado + inyección de nickname), `test()` (bloqueo en localhost/bot + nickname en payload), `status()` (muestra estado completo del Doble Candado), `_send()` (footer actualizado a v11.0). Mensaje de carga actualizado para indicar estado del Human Gate. |
+| `js/app.js` | **Modificado** | Header actualizado: título con referencia a Ghost Analytics v11.0, nueva sección de compatibilidad en §NOVEDADES v9.9 documentando el contrato de integración con `track()` v11.0 (no pasar 'usuario', no disparar en carga automática). Sin cambios funcionales. |
+| `DOCUMENTACION.md` | **Modificado** | Sección §2z añadida (este documento). ToC actualizado. Header de versión actualizado. |
+
+---
+
+*Love Arcade · Documentación técnica v11.5 + Ghost Analytics v11.0 (Doble Candado)*
 *Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*
