@@ -1,6 +1,7 @@
 /**
  * Game Center Core v11.0 — Meta-Gameplay & Event Engine
  * Compatible con gamecenter_v6_promos — migración silenciosa incluida.
+ * Compatible con Ghost Analytics v11.0 — Doble Candado (Anti-Bot + Human Gate).
  *
  * NOVEDADES v11.0 (Meta-Gameplay & Event Engine):
  *  - addCoins(amount): nuevo método público de GameCenter que permite a
@@ -71,6 +72,22 @@
  *    mediante window.addEventListener('error') y 'unhandledrejection'.
  *  - Todas las llamadas usan optional chaining (?.) para ser no-operativas
  *    si analytics.js no está cargado (degradación elegante).
+ *
+ * COMPATIBILIDAD CON analytics.js v11.0 (Doble Candado):
+ *  - Todas las llamadas a GhostAnalytics.track() en este módulo son seguras
+ *    con el nuevo sistema de "Doble Candado":
+ *    · Son disparadas por acciones de usuario reales (click en btn-daily,
+ *      btn-moon-blessing, links de juegos, compras). Ninguna se dispara en
+ *      onload o DOMContentLoaded de forma automática.
+ *    · El campo 'usuario' (nickname) NO debe incluirse en las llamadas de
+ *      este módulo — analytics.js v11.0 lo inyecta automáticamente en track()
+ *      tras leerlo de localStorage['gamecenter_v6_promos'].
+ *    · Si el Human Gate está cerrado o el nickname no está disponible en el
+ *      momento del disparo, analytics.js encola el evento y lo envía cuando
+ *      las condiciones se cumplan. Ningún evento se pierde.
+ *  - No se requieren cambios funcionales en app.js para la compatibilidad
+ *    con analytics.js v11.0; la integración es transparente gracias al
+ *    optional chaining (?.) y a la inyección automática del nickname.
  *
  * NOVEDADES v9.4 (Identity Update):
  *  - store.nickname (string, max 15 chars): nombre personalizado del usuario.

@@ -1,8 +1,42 @@
 /**
- * analytics.js — Love Arcade v10.0
+ * analytics.js — Love Arcade v11.0
  * ─────────────────────────────────────────────────────────────────────────────
  * Sistema de Analíticas "Ghost" — Captura eventos de interacción y los envía
  * en tiempo real a un canal privado de Discord mediante Webhooks HTTP.
+ *
+ * CAMBIOS v11.0 (Doble Candado — Anti-Bot + Human Gate):
+ *
+ *  ── Candado 1: Filtrado de Entorno (La Criba) ─────────────────────────────
+ *  - Anti-Localhost: _isLocalhost() detecta hostname === 'localhost',
+ *    '127.0.0.1', '' o sufijo '.local'. Si true, track() aborta silenciosamente
+ *    y el módulo muestra un aviso en consola al cargar.
+ *  - Anti-Bot: _isBot() verifica navigator.userAgent contra una blacklist de
+ *    patrones conocidos (Vercel, Googlebot, Bingbot, Lighthouse, HeadlessChrome,
+ *    Puppeteer, UptimeRobot, Pingdom, curl, wget, etc.). Si true, track() aborta.
+ *  - Ambas verificaciones son evaluadas en cada llamada a track() y a test(),
+ *    garantizando que ningún código externo pueda bypassearlas al llamar _send()
+ *    directamente (la función privada no es accesible desde fuera del módulo).
+ *
+ *  ── Candado 2: Validación de Actividad Humana (Human Gate) ────────────────
+ *  - Eliminado el disparo automático en onload / DOMContentLoaded.
+ *  - Al cargar el módulo, _humanGateInit() comprueba si el usuario ya tiene
+ *    un nickname configurado en localStorage (clave 'gamecenter_v6_promos').
+ *    Si existe → _humanGateUnlocked = true inmediatamente.
+ *    Si no existe → se registran listeners de un solo disparo (once:true) en
+ *    'click', 'keydown' y 'scroll' para detectar la primera interacción real.
+ *  - track() verifica el gate en cada llamada. Si está cerrado, el evento se
+ *    encola en _pendingQueue (máx. 50 items) para su envío posterior.
+ *
+ *  ── Nickname obligatorio en todos los payloads ────────────────────────────
+ *  - Todas las peticiones al Webhook incluyen el campo 'usuario' con el nickname
+ *    del jugador, leído por _getNickname() desde localStorage.
+ *  - Si el gate se abre por interacción real pero el nickname aún no está
+ *    disponible (usuario nuevo en Identity Modal), los eventos permanecen en
+ *    _pendingQueue. _startNicknamePoller() lanza un sondeo cada 500 ms hasta
+ *    detectar el nickname, momento en que _flushPendingQueue() envía todos los
+ *    eventos acumulados con el campo 'usuario' ya disponible.
+ *  - El poller se auto-cancela al encontrar el nickname, o tras 10 minutos
+ *    (NICKNAME_POLL_TIMEOUT_MS) para evitar pollers zombi.
  *
  * CAMBIOS v10.0 (Shadow-Gate — Developer Exclusion Filter):
  *  - Nuevo filtro Shadow-Gate: detecta el token ofuscado `?ref=x92_v0id_z1`
@@ -39,6 +73,8 @@
  *  - Nuevo evento user_snapshot: enviado UNA SOLA VEZ por sesión (sessionStorage)
  *    tras la carga del catálogo, con saldo, items comprados / disponibles, racha y
  *    códigos canjeados. No se repite en navigations SPA ni retries del catálogo.
+ *    ⚠️ v11.0: este evento queda retenido en _pendingQueue hasta que el Human Gate
+ *    esté abierto y el nickname esté disponible.
  *
  * CÓMO DIAGNOSTICAR DESDE DEVTOOLS:
  *
@@ -53,7 +89,7 @@
  *      → También resetea el rate limiter para poder re-disparar eventos
  *         sin esperar los 3 s.
  *
- *   4. Ver el estado interno actual (rate limiter, modo debug, Shadow-Gate, etc.):
+ *   4. Ver el estado interno actual (rate limiter, Human Gate, Anti-Bot, etc.):
  *      window.GhostAnalytics.status()
  *
  * ACTIVAR SHADOW-GATE (exclusión de analíticas para el desarrollador):
@@ -74,11 +110,14 @@
  *  - Sin feedback loop: las peticiones de analytics no disparan el handler
  *    de errores mediante WeakSet de promesas en vuelo.
  *  - Rate limiting: máximo 1 evento idéntico cada 3 s.
- *  - Sin datos personales: sin IPs, IDs de usuario ni cookies.
+ *  - Sin datos personales: sin IPs, IDs de usuario ni cookies. El campo
+ *    'usuario' contiene únicamente el nickname elegido por el propio jugador.
  *  - Silencioso en producción: ningún console.log salvo errores reales y
  *    el mensaje de carga inicial.
  *  - Degradación elegante: si el módulo no carga, las llamadas con ?.track()
  *    en app.js y shop-logic.js son no-operativas.
+ *  - Human-only: ningún evento se envía sin confirmación de actividad humana
+ *    real o presencia de un nickname ya configurado en el store local.
  *
  * ORDEN DE CARGA REQUERIDO EN index.html:
  *   <script src="js/analytics.js"></script>   ← primero
@@ -133,6 +172,283 @@
             return false;
         }
     }
+
+    // ── Candado 1A — Anti-Localhost (v11.0) ───────────────────────────────────
+    //
+    // Aborta cualquier envío si el script se ejecuta en un entorno de desarrollo
+    // local. Cubre los casos más comunes: localhost, IPv4 loopback, dominio
+    // .local (mDNS) y el caso extremo de hostname vacío (file:// protocol).
+    //
+    // Esta verificación se realiza en cada llamada a track() —no solo al cargar
+    // el módulo— para cubrir el caso de un router SPA que cambie el hash/path
+    // sin recargar el script pero que se estuviera probando en local.
+    //
+
+    /**
+     * Devuelve true si el script se ejecuta en localhost o en un entorno local.
+     * @returns {boolean}
+     */
+    function _isLocalhost() {
+        const h = window.location.hostname;
+        return (
+            h === 'localhost'    ||
+            h === '127.0.0.1'   ||
+            h === ''             ||   // protocolo file://
+            h.endsWith('.local')
+        );
+    }
+
+    // ── Candado 1B — Anti-Bot / User-Agent Blacklist (v11.0) ─────────────────
+    //
+    // Lista de patrones que coinciden con user-agents de:
+    //   · Rastreadores de motores de búsqueda (Google, Bing, Yahoo, Baidu, etc.)
+    //   · Herramientas de auditoría de rendimiento (Lighthouse, Chrome-Lighthouse)
+    //   · Plataformas de despliegue que realizan health-checks (Vercel)
+    //   · Monitores de uptime (UptimeRobot, Pingdom, StatusCake)
+    //   · Bots de redes sociales / previews (Slack, Twitter, Facebook, LinkedIn)
+    //   · Browsers headless y herramientas de automatización (HeadlessChrome,
+    //     PhantomJS, Puppeteer, Selenium, WebDriver)
+    //   · Clientes HTTP no-browser (node-fetch, axios, python-requests, curl, wget)
+    //
+    // Los patrones son case-insensitive (/i) para mayor robustez.
+    //
+    const _BOT_UA_PATTERNS = [
+        // ── Motores de búsqueda ──────────────────────────────────────────────
+        /Googlebot/i,
+        /Bingbot/i,
+        /Slurp/i,           // Yahoo
+        /DuckDuckBot/i,
+        /Baiduspider/i,
+        /YandexBot/i,
+        /Sogou/i,
+        /Exabot/i,
+        /facebot/i,
+        /ia_archiver/i,     // Alexa / Internet Archive
+        // ── Crawlers genéricos ───────────────────────────────────────────────
+        /[_\s]bot[_\s/;)]/i,    // patron "bot" delimitado (evita falsos positivos en "Robot")
+        /crawler/i,
+        /spider/i,
+        /scraper/i,
+        /fetch/i,
+        // ── Auditorías de rendimiento ────────────────────────────────────────
+        /Lighthouse/i,
+        /Chrome-Lighthouse/i,
+        /PTST/i,            // PageSpeed Insights
+        /PageSpeed/i,
+        // ── Despliegue / CI ──────────────────────────────────────────────────
+        /vercel/i,
+        /Vercel-Screenshot/i,
+        // ── Monitores de uptime ──────────────────────────────────────────────
+        /UptimeRobot/i,
+        /Pingdom/i,
+        /StatusCake/i,
+        /Site24x7/i,
+        /GTmetrix/i,
+        // ── Previews de redes sociales ───────────────────────────────────────
+        /facebookexternalhit/i,
+        /Twitterbot/i,
+        /Slackbot/i,
+        /linkedinbot/i,
+        /rogerbot/i,        // Moz
+        /embedly/i,
+        /quora link preview/i,
+        /showyoubot/i,
+        /outbrain/i,
+        /pinterest/i,
+        /vkShare/i,
+        /W3C_Validator/i,
+        // ── Browsers headless y automatización ──────────────────────────────
+        /HeadlessChrome/i,
+        /PhantomJS/i,
+        /Puppeteer/i,
+        /selenium/i,
+        /webdriver/i,
+        /SlimerJS/i,
+        /CasperJS/i,
+        // ── Clientes HTTP no-browser ─────────────────────────────────────────
+        /node-fetch/i,
+        /node-http/i,
+        /axios/i,
+        /python-requests/i,
+        /python-urllib/i,
+        /Java\//i,
+        /curl\//i,
+        /Wget\//i,
+        /Go-http-client/i,
+        /okhttp/i,
+    ];
+
+    /**
+     * Devuelve true si el user-agent actual coincide con algún patrón de bot
+     * conocido. Se evalúa una sola vez por llamada; no se cachea para no
+     * interferir con user-agents dinámicos (aunque en la práctica son estáticos).
+     *
+     * @returns {boolean}
+     */
+    function _isBot() {
+        const ua = navigator.userAgent || '';
+        return _BOT_UA_PATTERNS.some(pattern => pattern.test(ua));
+    }
+
+    // ── Candado 2 — Human Gate (v11.0) ───────────────────────────────────────
+    //
+    // Impide el envío de cualquier evento analítico hasta que se confirme
+    // actividad humana real. La confirmación ocurre por dos vías:
+    //
+    //   A) Nickname existente: si el store en localStorage ya tiene un nickname
+    //      configurado al cargar el módulo, el gate se abre inmediatamente. Esto
+    //      cubre a usuarios recurrentes que ya completaron el Identity Modal.
+    //
+    //   B) Primera interacción: si no hay nickname, se registran listeners de
+    //      un solo disparo (once:true) en 'click', 'keydown' y 'scroll'. En el
+    //      primer evento de cualquiera de los tres, el gate se abre.
+    //      Si en ese momento todavía no hay nickname (usuario nuevo en el
+    //      Identity Modal), los eventos quedan encolados en _pendingQueue y
+    //      _startNicknamePoller() espera hasta que se confirme el nickname.
+    //
+    // Clave del store — debe coincidir con CONFIG.stateKey en app.js.
+    const _STATE_KEY = 'gamecenter_v6_promos';
+
+    /**
+     * Lee el nickname del usuario desde el store en localStorage.
+     * Devuelve el string del nickname si existe y no está vacío, o null.
+     *
+     * No lanza nunca: envuelto en try/catch para no romper el módulo si
+     * localStorage está bloqueado (modo privado estricto, iframe sandbox).
+     *
+     * @returns {string|null}
+     */
+    function _getNickname() {
+        try {
+            const raw = localStorage.getItem(_STATE_KEY);
+            if (!raw) return null;
+            const { nickname } = JSON.parse(raw);
+            return (typeof nickname === 'string' && nickname.trim())
+                ? nickname.trim()
+                : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    /** true cuando se ha confirmado actividad humana real o nickname existente. */
+    let _humanGateUnlocked = false;
+
+    /**
+     * Cola de eventos pendientes de envío, retenidos mientras el Human Gate
+     * está cerrado o mientras el nickname no está disponible.
+     * Limitada a _PENDING_QUEUE_MAX para evitar acumulación en sesiones largas.
+     * @type {Array<{ event: string, meta: object }>}
+     */
+    const _pendingQueue = [];
+
+    /** Capacidad máxima de la cola de eventos pendientes. */
+    const _PENDING_QUEUE_MAX = 50;
+
+    /** Referencia al intervalo del nickname poller (null si no está activo). */
+    let _nicknamePoller = null;
+
+    /** Tiempo máximo de espera del nickname poller antes de cancelarse (10 min). */
+    const _NICKNAME_POLL_TIMEOUT_MS = 10 * 60 * 1_000;
+
+    /** Timestamp de inicio del poller (para calcular el timeout). */
+    let _nicknamePollerStart = 0;
+
+    /**
+     * Intenta enviar todos los eventos en _pendingQueue.
+     * Si el nickname aún no está disponible, inicia el poller en lugar de enviar.
+     * Vacía la cola solo cuando el nickname está confirmado.
+     */
+    function _flushPendingQueue() {
+        const nickname = _getNickname();
+
+        if (!nickname) {
+            // No hay nickname todavía — iniciar el poller si no está corriendo
+            _startNicknamePoller();
+            return;
+        }
+
+        // Nickname disponible — vaciar y enviar toda la cola acumulada
+        const items = _pendingQueue.splice(0);
+        if (items.length === 0) return;
+
+        _log(`📤 Enviando ${items.length} evento(s) desde la cola pendiente (usuario: ${nickname})…`);
+        items.forEach(({ event, meta }) => {
+            // Aplicar rate limiting normal al enviar desde la cola
+            const key = `${event}:${JSON.stringify(meta)}`;
+            if (_isRateLimited(key)) return;
+            _send(event, { usuario: nickname, ...meta });
+        });
+    }
+
+    /**
+     * Inicia el sondeo periódico de nickname (cada 500 ms).
+     * Al detectar el nickname, cancela el poller y vacía la cola.
+     * Se auto-cancela tras _NICKNAME_POLL_TIMEOUT_MS para evitar pollers zombi.
+     */
+    function _startNicknamePoller() {
+        if (_nicknamePoller) return; // Ya está corriendo
+
+        _nicknamePollerStart = Date.now();
+        _log('⏳ Nickname poller iniciado — esperando al Identity Modal…');
+
+        _nicknamePoller = setInterval(() => {
+            // Timeout de seguridad: cancelar si lleva más de 10 minutos
+            if (Date.now() - _nicknamePollerStart > _NICKNAME_POLL_TIMEOUT_MS) {
+                clearInterval(_nicknamePoller);
+                _nicknamePoller = null;
+                _pendingQueue.length = 0; // Descartar cola obsoleta
+                _log('⌛ Nickname poller cancelado por timeout (10 min). Cola descartada.');
+                return;
+            }
+
+            const nickname = _getNickname();
+            if (nickname) {
+                clearInterval(_nicknamePoller);
+                _nicknamePoller = null;
+                _log(`👤 Nickname detectado ("${nickname}") — vaciando cola…`);
+                _flushPendingQueue();
+            }
+        }, 500);
+    }
+
+    /**
+     * Abre el Human Gate y notifica la cola de eventos pendientes.
+     * Idempotente: llamadas adicionales después del primer unlock son no-operativas.
+     */
+    function _unlockHumanGate() {
+        if (_humanGateUnlocked) return;
+        _humanGateUnlocked = true;
+        _log('🔓 Human Gate desbloqueado por interacción real del usuario.');
+        _flushPendingQueue();
+    }
+
+    /**
+     * Inicializa el Human Gate al cargar el módulo.
+     * Ruta A: nickname existente → unlock inmediato.
+     * Ruta B: sin nickname → registrar listeners de interacción (once:true).
+     *
+     * Se ejecuta de forma inmediata al definirse (IIFE interno).
+     */
+    (function _humanGateInit() {
+        // ── Ruta A: usuario recurrente con nickname ──────────────────────────
+        if (_getNickname()) {
+            _humanGateUnlocked = true;
+            // El log se emite después, cuando _debugMode puede estar activo.
+            // Se omite aquí para no spammear la consola en carga normal.
+            return;
+        }
+
+        // ── Ruta B: primer acceso — esperar interacción real ─────────────────
+        // Listeners de un solo disparo (once:true). El primero que se dispare
+        // llama a _unlockHumanGate() y los demás quedan automáticamente
+        // sin efecto (ya fueron removidos por la bandera `once`).
+        const _onFirstInteraction = () => _unlockHumanGate();
+
+        document.addEventListener('click',   _onFirstInteraction, { once: true, passive: true });
+        document.addEventListener('keydown',  _onFirstInteraction, { once: true, passive: true });
+        window .addEventListener('scroll',   _onFirstInteraction, { once: true, passive: true });
+    })();
 
     // ── Endpoint — ofuscación XOR (clave: 42) ────────────────────────────────
     //
@@ -233,6 +549,10 @@
      * Fire-and-forget: el caller nunca espera. Los errores de red se loguean
      * en consola pero nunca se propagan.
      *
+     * El campo 'usuario' DEBE estar presente en meta antes de llamar a _send().
+     * track() se encarga de inyectarlo; _send() no lo añade por sí mismo para
+     * mantener el principio de responsabilidad única.
+     *
      * @param {string}      event
      * @param {object|null} meta
      * @param {boolean}     [isTest=false]  Omite el rate limiter.
@@ -249,7 +569,7 @@
                 title:       `${emoji} ${event.replace(/_/g, ' ').toUpperCase()}`,
                 description,
                 color,
-                footer:    { text: `Love Arcade · Ghost Analytics v10.0${isTest ? ' · TEST' : ''}` },
+                footer:    { text: `Love Arcade · Ghost Analytics v11.0${isTest ? ' · TEST' : ''}` },
                 timestamp: new Date().toISOString()
             }]
         };
@@ -300,6 +620,15 @@
     /**
      * Registra un evento analítico y lo envía al canal de Discord.
      *
+     * Flujo de validación (en orden):
+     *   1. Shadow-Gate activo → descarte silencioso.
+     *   2. Localhost detectado → descarte silencioso + log en debug.
+     *   3. Bot user-agent detectado → descarte silencioso + log en debug.
+     *   4. Human Gate cerrado → encolar en _pendingQueue (máx. 50 items).
+     *   5. Nickname no disponible → encolar e iniciar nickname poller.
+     *   6. Rate limit activo → descarte silencioso.
+     *   7. OK → _send() con { usuario: nickname, ...meta }.
+     *
      * Uso:
      *   window.GhostAnalytics.track('view_preview',   { wallpaper: 'Cyber Neon' });
      *   window.GhostAnalytics.track('click_download', { wallpaper: 'Cyber Neon', fuente: 'biblioteca' });
@@ -308,21 +637,60 @@
      *   window.GhostAnalytics.track('open_game',      { juego: 'dodge' });
      *   window.GhostAnalytics.track('detected_error', { mensaje: '...', tipo: '...' });
      *
-     * Si Shadow-Gate está activo (_isShadowGated() === true), el evento se
-     * descarta silenciosamente sin enviar ninguna petición HTTP.
+     * Nota: 'usuario' NO debe pasarse en meta — se inyecta automáticamente.
      *
      * @param {string} event   Nombre del evento.
-     * @param {object} [meta]  Metadatos opcionales.
+     * @param {object} [meta]  Metadatos opcionales (sin 'usuario').
      */
     function track(event, meta) {
         try {
-            // ── Shadow-Gate: salida temprana si la sesión está excluida ──────
+            // ── 1. Shadow-Gate ────────────────────────────────────────────────
             if (_isShadowGated()) return;
 
+            // ── 2. Anti-Localhost ─────────────────────────────────────────────
+            if (_isLocalhost()) {
+                _log('🏠 Localhost detectado — evento descartado:', event);
+                return;
+            }
+
+            // ── 3. Anti-Bot ───────────────────────────────────────────────────
+            if (_isBot()) {
+                _log('🤖 Bot user-agent detectado — evento descartado:', event);
+                return;
+            }
+
             if (!event || typeof event !== 'string') return;
+
+            // ── 4. Human Gate ─────────────────────────────────────────────────
+            if (!_humanGateUnlocked) {
+                if (_pendingQueue.length < _PENDING_QUEUE_MAX) {
+                    _pendingQueue.push({ event, meta: meta || {} });
+                    _log('⏳ Human Gate cerrado — evento encolado:', event,
+                         `(${_pendingQueue.length}/${_PENDING_QUEUE_MAX})`);
+                } else {
+                    _log('⚠️ Cola pendiente llena — evento descartado:', event);
+                }
+                return;
+            }
+
+            // ── 5. Nickname obligatorio ───────────────────────────────────────
+            const nickname = _getNickname();
+            if (!nickname) {
+                if (_pendingQueue.length < _PENDING_QUEUE_MAX) {
+                    _pendingQueue.push({ event, meta: meta || {} });
+                    _log('👤 Sin nickname — evento encolado (poller activo):', event);
+                    _startNicknamePoller();
+                }
+                return;
+            }
+
+            // ── 6. Rate limiting ──────────────────────────────────────────────
             const key = `${event}:${JSON.stringify(meta || {})}`;
             if (_isRateLimited(key)) return;
-            _send(event, meta || null);
+
+            // ── 7. Envío — nickname inyectado como primer campo ───────────────
+            _send(event, { usuario: nickname, ...(meta || {}) });
+
         } catch (err) {
             // Error interno inesperado — nunca debe romper la UI
             console.error('[GhostAnalytics] Error interno en track():', err);
@@ -333,8 +701,8 @@
      * Envía un evento de prueba a Discord, saltando el rate limiter.
      * Confirma que el Webhook está activo y que el módulo está funcionando.
      *
-     * Nota: test() respeta Shadow-Gate. Si la sesión está excluida, se
-     * muestra un aviso en consola en lugar de enviar la petición.
+     * Respeta Shadow-Gate, Anti-Localhost y Anti-Bot.
+     * El campo 'usuario' se incluye con el nickname real o '(sin nickname)'.
      *
      * Ejecutar desde DevTools:  window.GhostAnalytics.test()
      */
@@ -348,9 +716,32 @@
             );
             return;
         }
+
+        if (_isLocalhost()) {
+            console.warn(
+                '%c[GhostAnalytics] 🏠 Localhost detectado',
+                'color:#f97316;font-weight:bold',
+                '— test() bloqueado. El Webhook no se activa en entornos locales.',
+                '\n  Despliega en producción y abre con el token de Shadow-Gate para probar.'
+            );
+            return;
+        }
+
+        if (_isBot()) {
+            console.warn(
+                '%c[GhostAnalytics] 🤖 Bot user-agent detectado',
+                'color:#f97316;font-weight:bold',
+                '— test() bloqueado.',
+                '\n  UA:', navigator.userAgent
+            );
+            return;
+        }
+
+        const nickname = _getNickname() || '(sin nickname)';
         console.log('[GhostAnalytics] Enviando evento de prueba…');
         _send('open_game', {
-            juego: '✅ TEST — Webhook activo y módulo cargado correctamente'
+            usuario: nickname,
+            juego:   '✅ TEST — Webhook activo y módulo cargado correctamente'
         }, /* isTest= */ true);
         console.log('[GhostAnalytics] Petición enviada. Revisa el canal de Discord.');
     }
@@ -375,7 +766,11 @@
                 '%c[GhostAnalytics] 🔍 Modo debug ACTIVADO',
                 'color:#9b59ff;font-weight:bold',
                 '\n  → Rate limiter reseteado. Todos los eventos se loguearán.',
-                '\n  → Dispara cualquier acción en la UI para ver los eventos.',
+                '\n  → Human Gate:', _humanGateUnlocked ? 'ABIERTO ✅' : 'CERRADO 🔒',
+                '\n  → Eventos en cola:', _pendingQueue.length,
+                '\n  → Nickname detectado:', _getNickname() || '(ninguno)',
+                '\n  → Localhost:', _isLocalhost(),
+                '\n  → Bot UA:', _isBot(),
                 '\n  → Desactivar con: window.GhostAnalytics.debug(false)'
             );
         } else {
@@ -385,7 +780,7 @@
 
     /**
      * Muestra el estado interno del módulo en consola.
-     * Incluye el estado de Shadow-Gate, modo debug y rate limiter.
+     * Incluye Shadow-Gate, Anti-Bot, Human Gate, cola pendiente, nickname y rate limiter.
      *
      * Ejecutar desde DevTools:  window.GhostAnalytics.status()
      */
@@ -393,18 +788,44 @@
         const now      = Date.now();
         const keys     = Object.keys(_lastSent);
         const gated    = _isShadowGated();
+        const isLocal  = _isLocalhost();
+        const isRobot  = _isBot();
+        const nickname = _getNickname();
         const rl       = keys.map(k => {
             const remainingMs = RATE_LIMIT_MS - (now - _lastSent[k]);
             return `  · ${k}  →  ${remainingMs > 0 ? `rate-limited (${Math.ceil(remainingMs / 1000)}s)` : 'libre'}`;
         });
+
         console.log(
-            '%c[GhostAnalytics] Estado actual',
+            '%c[GhostAnalytics] Estado actual (v11.0)',
             'color:#9b59ff;font-weight:bold',
-            `\n  Shadow-Gate: ${gated
-                ? '🔕 ACTIVO — esta sesión está excluida de las analíticas'
-                : '✅ inactivo — analíticas operativas'}`,
-            `\n  Debug mode: ${_debugMode}`,
-            `\n  Rate limiter (${keys.length} clave${keys.length !== 1 ? 's' : ''}):\n${rl.join('\n') || '  (vacío)'}`
+            // ── Candado 0: Shadow-Gate ──
+            `\n\n  🔕 Shadow-Gate: ${gated
+                ? 'ACTIVO — esta sesión está excluida de las analíticas'
+                : 'inactivo'}`,
+            // ── Candado 1A: Localhost ──
+            `\n  🏠 Anti-Localhost: ${isLocal
+                ? '⛔ ACTIVO — entorno local detectado, envíos bloqueados'
+                : '✅ OK — dominio de producción'}`,
+            // ── Candado 1B: Bot ──
+            `\n  🤖 Anti-Bot: ${isRobot
+                ? '⛔ BOT DETECTADO — user-agent en blacklist'
+                : '✅ OK — user-agent humano'}`,
+            // ── Candado 2: Human Gate ──
+            `\n  🔓 Human Gate: ${_humanGateUnlocked
+                ? 'ABIERTO — actividad humana confirmada'
+                : '🔒 CERRADO — esperando primera interacción (click / tecla / scroll)'}`,
+            // ── Nickname ──
+            `\n  👤 Nickname: ${nickname
+                ? `"${nickname}" — se incluirá en todos los payloads`
+                : '(no disponible) — eventos en cola hasta que el usuario configure su identidad'}`,
+            // ── Cola pendiente ──
+            `\n  📥 Cola pendiente: ${_pendingQueue.length} evento(s)` +
+                (_nicknamePoller ? ' · Nickname poller ACTIVO ⏳' : ''),
+            // ── Debug ──
+            `\n  🔍 Debug mode: ${_debugMode}`,
+            // ── Rate limiter ──
+            `\n  ⏱ Rate limiter (${keys.length} clave${keys.length !== 1 ? 's' : ''}):\n${rl.join('\n') || '  (vacío)'}`
         );
     }
 
@@ -508,6 +929,13 @@
     }
 
     // ── Handler: errores síncronos (window.onerror) ───────────────────────────
+    //
+    // Los errores globales también pasan por track(), que aplicará el Doble
+    // Candado completo. Esto significa que los errores generados por bots,
+    // en localhost, o antes de que haya actividad humana, quedan retenidos
+    // o descartados según las reglas de la criba. El comportamiento es correcto:
+    // los errores de entornos controlados no deben saturar el canal de Discord.
+    //
     window.addEventListener('error', (e) => {
         try {
             // Shadow-Gate: silenciar también los handlers de error globales
@@ -592,23 +1020,40 @@
     // ── Confirmación de carga ─────────────────────────────────────────────────
     // Este log es el primer punto de diagnóstico: si no aparece, el <script>
     // no está incluido en index.html o hay un error de sintaxis en el módulo.
-    // Si Shadow-Gate está activo, se indica explícitamente para que el
-    // desarrollador sepa que la sesión está en modo silencioso.
-    if (_isShadowGated()) {
-        console.log(
-            '%c[GhostAnalytics] 🔕 Módulo cargado en modo silencioso (v10.0) — Shadow-Gate activo.',
-            'color:#f97316;font-weight:bold',
-            '| Esta sesión está excluida de las analíticas.',
-            '| status(): ver estado | debug(true): activar logs'
-        );
-    } else {
-        console.log(
-            '[GhostAnalytics] ✅ Módulo listo (v10.0).',
-            '| test(): probar Webhook',
-            '| debug(true): activar logs',
-            '| status(): ver estado interno'
-        );
-    }
+    (function _printLoadMessage() {
+        const isLocal = _isLocalhost();
+        const isRobot = _isBot();
+        const gated   = _isShadowGated();
+        const hasNick = Boolean(_getNickname());
+
+        if (gated) {
+            console.log(
+                '%c[GhostAnalytics] 🔕 Módulo cargado en modo silencioso (v11.0) — Shadow-Gate activo.',
+                'color:#f97316;font-weight:bold',
+                '| Esta sesión está excluida de las analíticas.',
+                '| status(): ver estado | debug(true): activar logs'
+            );
+        } else if (isLocal) {
+            console.log(
+                '%c[GhostAnalytics] 🏠 Módulo cargado (v11.0) — LOCALHOST detectado.',
+                'color:#f97316;font-weight:bold',
+                '| Todos los envíos están bloqueados en entorno local.',
+                '| status(): ver estado | debug(true): activar logs'
+            );
+        } else if (isRobot) {
+            console.log(
+                '[GhostAnalytics] 🤖 Módulo cargado (v11.0) — Bot UA detectado. Envíos bloqueados.'
+            );
+        } else {
+            console.log(
+                '[GhostAnalytics] ✅ Módulo listo (v11.0).',
+                '| Human Gate:', hasNick ? 'ABIERTO (nickname existente) 🔓' : 'EN ESPERA (primera interacción) 🔒',
+                '| test(): probar Webhook',
+                '| debug(true): activar logs',
+                '| status(): ver estado interno'
+            );
+        }
+    })();
 
     // ── Exposición global ─────────────────────────────────────────────────────
     window.GhostAnalytics = Object.freeze({ track, test, debug, status });
