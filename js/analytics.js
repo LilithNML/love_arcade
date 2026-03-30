@@ -505,7 +505,9 @@
         wishlist_add:        0xec4899,   // Rosa — ítem añadido a la lista de deseos
         daily_bonus:         0x4ade80,   // Verde lima — bono diario reclamado
         user_snapshot:       0x38bdf8,   // Celeste — instantánea de estado por sesión
-        sync_export:         0xa78bfa    // Violeta suave — exportación de partida
+        sync_export:         0xa78bfa,   // Violeta suave — exportación de partida
+        // ── v11.1 — Word Hunt ───────────────────────────────────────────────
+        wordsearch_content_alert: 0xff9500  // Ámbar — alerta de agotamiento de contenido
     };
 
     const EVENT_EMOJIS = {
@@ -521,7 +523,9 @@
         wishlist_add:        '💜',
         daily_bonus:         '🌟',
         user_snapshot:       '📊',
-        sync_export:         '💾'
+        sync_export:         '💾',
+        // ── v11.1 — Word Hunt ───────────────────────────────────────────────
+        wordsearch_content_alert: '📉'
     };
 
     // ── Logging condicional ───────────────────────────────────────────────────
@@ -569,7 +573,7 @@
                 title:       `${emoji} ${event.replace(/_/g, ' ').toUpperCase()}`,
                 description,
                 color,
-                footer:    { text: `Love Arcade · Ghost Analytics v11.0${isTest ? ' · TEST' : ''}` },
+                footer:    { text: `Love Arcade · Ghost Analytics v11.1${isTest ? ' · TEST' : ''}` },
                 timestamp: new Date().toISOString()
             }]
         };
@@ -1028,25 +1032,25 @@
 
         if (gated) {
             console.log(
-                '%c[GhostAnalytics] 🔕 Módulo cargado en modo silencioso (v11.0) — Shadow-Gate activo.',
+                '%c[GhostAnalytics] 🔕 Módulo cargado en modo silencioso (v11.1) — Shadow-Gate activo.',
                 'color:#f97316;font-weight:bold',
                 '| Esta sesión está excluida de las analíticas.',
                 '| status(): ver estado | debug(true): activar logs'
             );
         } else if (isLocal) {
             console.log(
-                '%c[GhostAnalytics] 🏠 Módulo cargado (v11.0) — LOCALHOST detectado.',
+                '%c[GhostAnalytics] 🏠 Módulo cargado (v11.1) — LOCALHOST detectado.',
                 'color:#f97316;font-weight:bold',
                 '| Todos los envíos están bloqueados en entorno local.',
                 '| status(): ver estado | debug(true): activar logs'
             );
         } else if (isRobot) {
             console.log(
-                '[GhostAnalytics] 🤖 Módulo cargado (v11.0) — Bot UA detectado. Envíos bloqueados.'
+                '[GhostAnalytics] 🤖 Módulo cargado (v11.1) — Bot UA detectado. Envíos bloqueados.'
             );
         } else {
             console.log(
-                '[GhostAnalytics] ✅ Módulo listo (v11.0).',
+                '[GhostAnalytics] ✅ Módulo listo (v11.1).',
                 '| Human Gate:', hasNick ? 'ABIERTO (nickname existente) 🔓' : 'EN ESPERA (primera interacción) 🔒',
                 '| test(): probar Webhook',
                 '| debug(true): activar logs',

@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v11.0 · Mobile Performance Pass · CDN Offline Resilience
+### Plataforma de Recompensas · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v11.1 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
 
 ---
 
@@ -31,6 +31,7 @@
 2x. [Novedades en v11.0 — Meta-Gameplay & Event Engine](#2x-novedades-en-v110--meta-gameplay--event-engine)
 2y. [Novedades en v11.5 — Performance & Accessibility Audit](#2y-novedades-en-v115--performance--accessibility-audit)
 2z. [Novedades en Ghost Analytics v11.0 — Doble Candado (Anti-Bot + Human Gate)](#2z-novedades-en-ghost-analytics-v110--doble-candado-anti-bot--human-gate)
+2aa. [Novedades en v11.1 — Word Hunt: Métricas de Progresión](#2aa-novedades-en-v111--word-hunt-métricas-de-progresión)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -4269,5 +4270,140 @@ window.GhostAnalytics.test()
 
 ---
 
-*Love Arcade · Documentación técnica v11.5 + Ghost Analytics v11.0 (Doble Candado)*
+## 2aa. Novedades en v11.1 — Word Hunt: Métricas de Progresión
+
+**Objetivo:** Detectar automáticamente cuando un usuario se aproxima al límite de contenido disponible en el juego Word Hunt (Sopa de Letras) y enviar una alerta al canal de Discord para que el equipo pueda añadir nuevos niveles antes de que el jugador se quede sin partidas.
+
+---
+
+### Contexto del problema
+
+Word Hunt cuenta actualmente con **150 niveles** definidos en `games/word-hunt/config_levels.js`. Un usuario que juegue con frecuencia puede agotar ese contenido. Sin un sistema de monitoreo, el equipo no sabría que un jugador está próximo al límite hasta que el juego simplemente no ofrezca más niveles.
+
+---
+
+### Fuentes de datos
+
+| Variable | Descripción |
+|---|---|
+| `window.LA_WS_LEVELS` | Array global con todos los niveles cargados. `.length` = total disponible. |
+| `la_ws_state.currentLevelIndex` | Índice (base 0) del nivel activo. `-1` si no hay ninguno en curso. |
+| `la_ws_state.completedLevels` | `Set` con los IDs de niveles completados. Usado como fallback en la carga inicial. |
+| `localStorage['la_ws_completedLevels']` | Fuente persistente del progreso del usuario (leída en `la_ws_loadProgress()`). |
+
+---
+
+### Lógica de alerta
+
+```javascript
+// Umbral: 90 % de niveles completados activa la alerta
+const LA_WS_ALERT_THRESHOLD = 0.9;
+
+// nivelReal = índice base-0 + 1
+const nivelReal        = indiceActual + 1;
+const nivelesRestantes = totalNiveles - nivelReal;
+
+if (nivelReal >= totalNiveles * LA_WS_ALERT_THRESHOLD) {
+    // → Disparar wordsearch_content_alert
+}
+```
+
+**Clasificación de severidad:**
+
+| Niveles restantes | `status` |
+|---|---|
+| ≤ 5 | `critical_low_content` |
+| 6 – 15 | `warning_low_content` |
+| 16+ (pero ≥ 90 %) | `approaching_limit` |
+
+---
+
+### Anti-spam: sessionStorage
+
+Para no saturar el canal de Discord, `la_ws_checkProgressAlert()` solo re-dispara el evento cuando el número de niveles restantes **desciende** respecto al último valor reportado en la sesión.
+
+```
+sessionStorage['la_ws_alert_last_remaining'] = nivelesRestantes
+```
+
+- Si el usuario completa niveles 136, 137, 138 en la misma sesión → se envían **3 alertas** separadas (136 restantes=14, 137 restantes=13, 138 restantes=12).
+- Si el usuario recarga la página sin completar nuevos niveles → **no se re-envía** (el valor en sessionStorage ya registra el mínimo).
+- Al cerrar la pestaña, sessionStorage se limpia → la próxima sesión iniciará el conteo desde cero si el usuario sigue en zona de alerta.
+
+---
+
+### Payload del evento Discord
+
+```json
+{
+  "event": "wordsearch_content_alert",
+  "usuario": "NombreJugador",
+  "nivel_actual_id": "lvl_136",
+  "indice_actual": 135,
+  "total_niveles": 150,
+  "niveles_restantes": 14,
+  "porcentaje_completado": "90.7%",
+  "status": "warning_low_content"
+}
+```
+
+El campo `usuario` es inyectado automáticamente por `GhostAnalytics.track()`, igual que en todos los demás eventos del HUB.
+
+---
+
+### Puntos de intercepción (Hooks)
+
+| Hook | Ubicación en `game.js` | Momento |
+|---|---|---|
+| **Hook 1** | `la_ws_loadProgress()` | Al iniciar el juego — lee `completedLevels.size` como estimación del progreso cuando `currentLevelIndex` aún es `-1`. |
+| **Hook 2** | `la_ws_completeLevel()` | Justo después de mostrar el modal de victoria — usa `currentLevelIndex` del nivel recién terminado. |
+| **Hook 3** | `la_ws_showScreen('game')` | Al activar la pantalla de juego — captura también navigaciones directas a un nivel (p. ej. desde el botón Continuar). |
+
+Los tres hooks llaman a la misma función `la_ws_checkProgressAlert()`. La deduplicación via sessionStorage garantiza que si los tres se disparan en secuencia corta (como ocurre al iniciar un nivel), solo se envíe **un aviso** mientras los restantes no cambien.
+
+---
+
+### Integración con Ghost Analytics
+
+El evento `wordsearch_content_alert` pasa por el **Doble Candado** de GhostAnalytics igual que cualquier otro evento:
+
+1. Shadow-Gate activo → descartado silenciosamente.
+2. Localhost → descartado silenciosamente.
+3. Bot UA → descartado.
+4. Human Gate cerrado → encolado en `_pendingQueue`.
+5. Sin nickname → encolado hasta que el poller lo detecte.
+6. Rate limit (3 s) → descartado si se dispara el mismo payload dos veces seguidas.
+7. ✅ Enviado a Discord con `usuario` inyectado.
+
+El evento aparece registrado en `EVENT_COLORS` (ámbar `0xff9500`) y `EVENT_EMOJIS` (`📉`) para una identificación visual inmediata en el canal.
+
+---
+
+### Diagnóstico desde DevTools
+
+```javascript
+// Simular que el jugador está en el nivel 140 de 150 y comprobar la alerta:
+window.GhostAnalytics.debug(true);   // activar logs detallados
+
+// Ver si el evento se enviaría en el estado actual:
+// (la función es interna al IIFE del juego, pero el efecto es visible en consola
+//  bajo la etiqueta "[WordSearch] 📉 Alerta de progresión disparada")
+
+// Limpiar el flag de sesión para re-probar sin recargar:
+sessionStorage.removeItem('la_ws_alert_last_remaining');
+```
+
+---
+
+### Resumen de cambios por archivo (v11.1)
+
+| Archivo | Tipo | Cambios |
+|---|---|---|
+| `games/word-hunt/game.js` | **Modificado** | Versión bumped a v2.1. Nuevas constantes: `LA_WS_ALERT_THRESHOLD`, `LA_WS_ALERT_SESSION_KEY`. Nueva función: `la_ws_checkProgressAlert()`. Hooks añadidos en `la_ws_loadProgress()`, `la_ws_completeLevel()` y `la_ws_showScreen()`. |
+| `js/analytics.js` | **Modificado** | Versión bumped a v11.1. Nuevo evento `wordsearch_content_alert` añadido a `EVENT_COLORS` (ámbar `0xff9500`) y `EVENT_EMOJIS` (`📉`). Footer del embed actualizado a v11.1. Mensajes de consola de carga actualizados. |
+| `DOCUMENTACION.md` | **Modificado** | Sección §2aa añadida (este bloque). ToC actualizado. Header de versión actualizado a v11.1. |
+
+---
+
+*Love Arcade · Documentación técnica v11.1 + Ghost Analytics v11.1 (Doble Candado + Word Hunt Progression Metrics)*
 *Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*

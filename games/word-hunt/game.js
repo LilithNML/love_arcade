@@ -3,6 +3,16 @@
  * LoveArcade Integration
  * Prefijo: la_ws_
  *
+ * CORRECCIONES v2.1 (Métricas de Progresión):
+ *  - Nuevo sistema de alerta de agotamiento de contenido.
+ *  - la_ws_checkProgressAlert(): evalúa si el usuario supera el umbral del 90 %
+ *    de niveles completados y envía el evento 'wordsearch_content_alert' a Discord
+ *    vía window.GhostAnalytics.track(). Usa sessionStorage para evitar spam.
+ *  - Constantes LA_WS_ALERT_THRESHOLD (0.9) y LA_WS_ALERT_SESSION_KEY.
+ *  - Hook 1 — la_ws_loadProgress(): comprueba al iniciar el juego.
+ *  - Hook 2 — la_ws_completeLevel(): comprueba al completar cada nivel.
+ *  - Hook 3 — la_ws_showScreen('game'): comprueba al entrar en la pantalla de juego.
+ *
  * CORRECCIONES v2:
  *  - Canvas: orden correcto de capas (highlights ANTES de letras, todo source-over).
  *            El uso de destination-over anterior era incorrecto porque alpha:false
@@ -17,6 +27,18 @@
 
     const STORAGE_KEY = 'la_ws_completedLevels';
     const GAME_ID     = 'wordsearch';
+
+    // ── Métricas de Progresión (v2.1) ─────────────────────────────────────────
+    //
+    // Umbral a partir del cual se considera que el usuario se acerca al límite
+    // de contenido disponible (90 % de niveles completados).
+    //
+    // La clave de sessionStorage evita saturar el canal de Discord: solo se
+    // dispara un nuevo aviso cuando el número de niveles restantes disminuye
+    // respecto al último aviso emitido en esta sesión.
+    //
+    const LA_WS_ALERT_THRESHOLD   = 0.9;
+    const LA_WS_ALERT_SESSION_KEY = 'la_ws_alert_last_remaining';
 
     /*
      * Paleta del canvas. Alineada con design tokens de styles.css.
@@ -193,6 +215,9 @@
                 console.log(`[WordSearch] ${la_ws_state.completedLevels.size} niveles completados`);
             }
         } catch (e) { console.error('[WordSearch] Error cargando progreso:', e); }
+
+        // Hook 1 — Métrica de progresión: evaluar estado al cargar el juego
+        la_ws_checkProgressAlert();
     }
 
     function la_ws_saveProgress() {
@@ -244,6 +269,9 @@
 
         if (name === 'levels')  la_ws_renderLevelsList();
         if (name === 'main')    la_ws_updateStats();
+
+        // Hook 3 — Métrica de progresión: evaluar estado al entrar en la pantalla de juego
+        if (name === 'game') la_ws_checkProgressAlert();
 
         la_ws_toggleParticles(name !== 'game');
     }
@@ -779,6 +807,88 @@
     }
 
     // ============================================================
+    // MÉTRICAS DE PROGRESIÓN — Word Hunt (v2.1)
+    //
+    // Evalúa si el usuario ha superado el umbral de alerta (LA_WS_ALERT_THRESHOLD)
+    // y, de ser así, envía un evento 'wordsearch_content_alert' a Discord vía
+    // GhostAnalytics. Para evitar spam, el aviso solo se re-dispara cuando el
+    // número de niveles restantes desciende por debajo del valor registrado en
+    // la sesión anterior (sessionStorage).
+    //
+    // Puntos de invocación:
+    //   1. la_ws_loadProgress()  — carga inicial (usa completedLevels.size)
+    //   2. la_ws_completeLevel() — justo antes de mostrar el modal de victoria
+    //   3. la_ws_showScreen()    — al activar la pantalla 'game'
+    // ============================================================
+    function la_ws_checkProgressAlert() {
+        try {
+            const levels = window.LA_WS_LEVELS;
+            if (!levels || levels.length === 0) return;
+
+            const totalNiveles = levels.length;
+
+            // Determinar el índice más avanzado alcanzado:
+            // · Si hay un nivel activo, se usa su índice.
+            // · En carga inicial (currentLevelIndex = -1) se estima por el
+            //   número de niveles completados guardados en localStorage.
+            const indiceActual = (la_ws_state.currentLevelIndex >= 0)
+                ? la_ws_state.currentLevelIndex
+                : la_ws_state.completedLevels.size - 1;
+
+            if (indiceActual < 0) return; // Sin ningún progreso, nada que evaluar
+
+            const nivelReal        = indiceActual + 1;
+            const nivelesRestantes = totalNiveles - nivelReal;
+            const porcentaje       = (nivelReal / totalNiveles) * 100;
+
+            // Solo actuar si el usuario ha cruzado el umbral de alerta
+            if (nivelReal < totalNiveles * LA_WS_ALERT_THRESHOLD) return;
+
+            // Leer el último valor de restantes que ya fue reportado esta sesión
+            let ultimoRestanteReportado = null;
+            try {
+                const raw = sessionStorage.getItem(LA_WS_ALERT_SESSION_KEY);
+                if (raw !== null) ultimoRestanteReportado = parseInt(raw, 10);
+            } catch (_) { /* sessionStorage puede estar bloqueado en algunos iframes */ }
+
+            // Si los restantes no han bajado desde el último reporte, no reenviar
+            if (ultimoRestanteReportado !== null && nivelesRestantes >= ultimoRestanteReportado) return;
+
+            // Persistir el nuevo mínimo para el resto de la sesión
+            try {
+                sessionStorage.setItem(LA_WS_ALERT_SESSION_KEY, String(nivelesRestantes));
+            } catch (_) { /* silencioso */ }
+
+            // Clasificar severidad del estado
+            let status;
+            if (nivelesRestantes <= 5)  status = 'critical_low_content';
+            else if (nivelesRestantes <= 15) status = 'warning_low_content';
+            else status = 'approaching_limit';
+
+            // ID del nivel actual: usar el objeto de estado si está disponible,
+            // o reconstruirlo desde el índice como fallback
+            const levelId = la_ws_state.currentLevel?.id
+                ?? `lvl_${String(nivelReal).padStart(2, '0')}`;
+
+            window.GhostAnalytics?.track('wordsearch_content_alert', {
+                nivel_actual_id:       levelId,
+                indice_actual:         indiceActual,
+                total_niveles:         totalNiveles,
+                niveles_restantes:     nivelesRestantes,
+                porcentaje_completado: porcentaje.toFixed(1) + '%',
+                status
+            });
+
+            console.log(
+                `[WordSearch] 📉 Alerta de progresión disparada — ` +
+                `Nivel ${nivelReal}/${totalNiveles} · Restantes: ${nivelesRestantes} · Estado: ${status}`
+            );
+        } catch (e) {
+            console.warn('[WordSearch] Error en la_ws_checkProgressAlert:', e);
+        }
+    }
+
+    // ============================================================
     // COMPLETAR NIVEL
     // ============================================================
     function la_ws_completeLevel() {
@@ -803,6 +913,9 @@
         }
 
         la_ws_showVictoryModal(was);
+
+        // Hook 2 — Métrica de progresión: evaluar estado tras completar el nivel
+        la_ws_checkProgressAlert();
     }
 
     function la_ws_showVictoryModal(wasCompleted) {
