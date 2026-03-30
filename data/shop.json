@@ -22,7 +22,7 @@
   {
     "id": 3,
     "name": "Shadow the Hedgehog",
-    "price": 250,
+    "price": 0,
     "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/shadow_the_hedgehog_6ff623c4",
     "file": "shadow_the_hedgehog_6ff623c4.webp",
     "tags": [
@@ -32,7 +32,7 @@
   {
     "id": 4,
     "name": "Shadow the Hedgehog",
-    "price": 250,
+    "price": 0,
     "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/shadow_the_hedgehog_2_18b617f7",
     "file": "shadow_the_hedgehog_2_18b617f7.webp",
     "tags": [
@@ -72,7 +72,7 @@
   {
     "id": 8,
     "name": "Blaze the Cat",
-    "price": 530,
+    "price": 0,
     "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/blaze_the_cat_3ca68b7d",
     "file": "blaze_the_cat_3ca68b7d.webp",
     "tags": [
@@ -92,7 +92,7 @@
   {
     "id": 10,
     "name": "Metal Sonic",
-    "price": 530,
+    "price": 0,
     "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/metal_sonic_f76ecb8c",
     "file": "metal_sonic_f76ecb8c.webp",
     "tags": [
@@ -202,7 +202,7 @@
   {
     "id": 21,
     "name": "Astra Yao",
-    "price": 2000,
+    "price": 0,
     "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/astra_yao_ec9bcd48",
     "file": "astra_yao_ec9bcd48.webp",
     "tags": [

@@ -1,8 +1,9 @@
 # Documentación Técnica — Rompecabezas Arcade
-**Proyecto:** Rompecabezas Arcade (Neural Puzzle)  
-**Plataforma:** Love Arcade  
-**Versión del motor:** `PuzzleEngine v15.0` · `main.js v6.0` · `UIController v4.0` · `LevelManager v2.2`  
-**Última revisión:** Marzo 2026
+
+**Proyecto:** Rompecabezas Arcade (Neural Puzzle)
+**Plataforma:** Love Arcade
+**Versión del motor:** `PuzzleEngine v19.1` · `main.js v9.0` · `UIController v6.0` · `LevelManager v7.0` · `Storage v3.0`
+**Última revisión:** Marzo 2026 (v19.1 / v7.0 / v9.0)
 
 ---
 
@@ -11,24 +12,30 @@
 1. [Visión General](#1-visión-general)
 2. [Estructura del Proyecto](#2-estructura-del-proyecto)
 3. [Arquitectura y Flujo de la Aplicación](#3-arquitectura-y-flujo-de-la-aplicación)
-4. [Módulos del Sistema](#4-módulos-del-sistema)
-   - 4.1 [main.js — Orquestador](#41-mainjs--orquestador)
-   - 4.2 [PuzzleEngine.js — Motor de Juego](#42-puzzleenginejs--motor-de-juego)
-   - 4.3 [LevelManager.js — Gestor de Niveles](#43-levelmanagerjs--gestor-de-niveles)
-   - 4.4 [UIController.js — Controlador de Interfaz](#44-uicontrollerjs--controlador-de-interfaz)
-   - 4.5 [Storage.js — Almacenamiento](#45-storagejs--almacenamiento)
-   - 4.6 [Economy.js — Sistema de Economía](#46-economyjs--sistema-de-economía)
-   - 4.7 [AudioSynth.js — Síntesis de Audio](#47-audiosynthjs--síntesis-de-audio)
-5. [Arquitectura de Activos — Cloudinary](#5-arquitectura-de-activos--cloudinary)
-6. [Pantallas y Navegación](#6-pantallas-y-navegación)
-7. [Sistema de Progresión del Jugador](#7-sistema-de-progresión-del-jugador)
-8. [Motor Visual — PuzzleEngine en Detalle](#8-motor-visual--puzzleengine-en-detalle)
-9. [Sistema Háptico](#9-sistema-háptico)
-10. [Sistema de Audio Procedural](#10-sistema-de-audio-procedural)
-11. [Características PWA](#11-características-pwa)
-12. [Herramientas de Desarrollo (Dev Tools)](#12-herramientas-de-desarrollo-dev-tools)
-13. [Accesibilidad (WCAG 2.2)](#13-accesibilidad-wcag-22)
-14. [Guía de Mantenimiento y Expansión](#14-guía-de-mantenimiento-y-expansión)
+4. [Sistema de Diseño Visual](#4-sistema-de-diseño-visual)
+   - 4.1 [Paleta de Colores — Flat 2.0](#41-paleta-de-colores--flat-20)
+   - 4.2 [Tipografía](#42-tipografía)
+   - 4.3 [Componentes y Botones](#43-componentes-y-botones)
+   - 4.4 [Iconografía y Animaciones](#44-iconografía-y-animaciones)
+   - 4.5 [Micro-interacciones del Motor de Piezas](#45-micro-interacciones-del-motor-de-piezas)
+5. [Módulos del Sistema](#5-módulos-del-sistema)
+   - 5.1 [main.js — Orquestador](#51-mainjs--orquestador)
+   - 5.2 [PuzzleEngine.js — Motor de Juego](#52-puzzleenginejs--motor-de-juego)
+   - 5.3 [LevelManager.js — Gestor de Niveles](#53-levelmanagerjs--gestor-de-niveles)
+   - 5.4 [UIController.js — Controlador de Interfaz](#54-uicontrollerjs--controlador-de-interfaz)
+   - 5.5 [Storage.js — Almacenamiento](#55-storagejs--almacenamiento)
+   - 5.6 [Economy.js — Sistema de Economía](#56-economyjs--sistema-de-economía)
+   - 5.7 [AudioSynth.js — Síntesis de Audio](#57-audiosynthjs--síntesis-de-audio)
+6. [Arquitectura de Activos — Cloudinary](#6-arquitectura-de-activos--cloudinary)
+7. [Pantallas y Navegación](#7-pantallas-y-navegación)
+8. [Sistema de Progresión del Jugador](#8-sistema-de-progresión-del-jugador)
+9. [Motor Visual — PuzzleEngine en Detalle](#9-motor-visual--puzzleengine-en-detalle)
+10. [Sistema Háptico](#10-sistema-háptico)
+11. [Sistema de Audio Procedural](#11-sistema-de-audio-procedural)
+12. [Características PWA](#12-características-pwa)
+13. [Herramientas de Desarrollo (Dev Tools)](#13-herramientas-de-desarrollo-dev-tools)
+14. [Accesibilidad (WCAG 2.2)](#14-accesibilidad-wcag-22)
+15. [Guía de Mantenimiento y Expansión](#15-guía-de-mantenimiento-y-expansión)
 
 ---
 
@@ -38,16 +45,25 @@
 
 ### Características principales
 
-- **64 niveles** generados algorítmicamente desde una constante única (`TOTAL_LEVELS`). No se requiere editar JSON para agregar niveles.
-- Activos visuales servidos desde **Cloudinary** con optimización automática de formato (WebP/AVIF).
-- Carga de thumbnails con **IntersectionObserver** real: solo se descargan las imágenes visibles en pantalla, eliminando el retraso de ~3 segundos al entrar a la pantalla de niveles.
-- Motor de renderizado en canvas con soporte para mouse y pantalla táctil.
+- **150 niveles** generados algorítmicamente desde una constante única (`TOTAL_LEVELS`). No se requiere editar JSON para agregar niveles.
+- Activos visuales de **1600×1600 px** servidos desde **Cloudinary** en formato **WebP calidad máxima** (`f_webp,q_100`). A q_100, el codificador WebP de Cloudinary activa automáticamente el modo sin pérdida (VP8L), equivalente a `fl_lossless` pero compatible con todos los planes de Cloudinary (evita el error HTTP 400). A partir de v6.1 se elimina `fl_lossless` que causaba fallos de red en cuentas sin transformaciones activas habilitadas.
+- Escalado de alta fidelidad en cliente mediante **step-down scaling** (v19.0): la textura 1600×1600 se reduce escalonadamente, nunca más del 50% por paso, neutralizando el blur bilineal y el ruido de mosquito que producía el downsampling en un solo paso.
+- **Protección de VRAM (v19.1):** el `sourceCanvas` se limita a un máximo de 1600 px por dimensión, redondeado al múltiplo inferior de `gridSize`. Previene el desbordamiento en dispositivos DPR 3× con tableros grandes sin perder nitidez, ya que la imagen fuente tiene exactamente 1600 px nativos.
+- **Prefetching Predictivo de ImageBitmap (v7.0 / v9.0):** mientras el usuario juega el nivel N, el sistema descarga y decodifica en background la imagen del nivel N+1 mediante `fetch({ priority: 'low' })` + `createImageBitmap()`. La decodificación ocurre completamente fuera del Event Loop (worker interno del navegador). Al iniciar el siguiente nivel, la textura está lista en VRAM y la transición es imperceptible. Si la precarga falla o no termina a tiempo, el flujo de carga estándar actúa como fallback transparente.
+- Carga progresiva de thumbnails con **IntersectionObserver**: las miniaturas se descargan únicamente cuando están a punto de entrar al área visible de la pantalla, eliminando sobrecarga de red al navegar una lista de 150 niveles.
+- Decodificación de imagen fuera del hilo principal con **`createImageBitmap`**: la textura 1600×1600 se transfiere al motor sin bloquear la UI. Liberación determinista con `ImageBitmap.close()` al destruir el motor.
+- Gestión estricta de VRAM: en `destroy()` todos los buffers offscreen se invalidan con `width/height = 0`, liberando la memoria de GPU de forma síncrona antes de que actúe el GC.
+- **Pixel-perfect alignment (v18.0):** el tablero se trunca al múltiplo exacto de `gridSize`, garantizando que `pieceWidth`, `pieceHeight`, `correctX` y `correctY` sean enteros. El `sourceCanvas` se alinea en el espacio físico del mismo modo, eliminando el muestreo sub-píxel en todo el pipeline de renderizado. Esta propiedad se preserva íntegramente en v19.0.
+- Calidad de imagen premium: `imageSmoothingQuality = 'high'` (bicúbico) en todos los contextos canvas; desactivado puntualmente en renders estáticos para un blit 1:1 sin dispersión de color.
+- Soporte nativo para **DPR 3×**: el tope del ratio de píxeles del dispositivo cubre iPhone 14/15 Pro, Galaxy S-series y Pixel 6/7.
+- Diseño **Flat 2.0** de alta fidelidad: paleta de colores sólidos con contraste elevado, tipografía premium (Outfit + JetBrains Mono) y micro-interacciones táctiles satisfactorias.
+- Motor de renderizado en canvas con soporte completo para mouse y pantalla táctil.
 - Sistema de recompensas en monedas integrado con **Love Arcade** via `window.GameCenter`.
-- Efectos visuales avanzados: rejilla reactiva con parallax, pulsos radiales, destellos de encaje y partículas.
+- Efectos visuales optimizados: pulsos radiales, destellos de encaje y partículas.
 - Retroalimentación háptica por vibración (`navigator.vibrate`) para pickup, snap y victoria.
-- Audio procedural sintetizado con la Web Audio API.
+- Audio procedural sintetizado con la Web Audio API, sin archivos externos.
 - Persistencia de progreso en `localStorage` con sistema de versionado de esquema.
-- Accesibilidad WCAG 2.2: roles ARIA, navegación por teclado, etiquetas descriptivas.
+- Accesibilidad WCAG 2.2: roles ARIA, navegación por teclado, áreas táctiles mínimas de 44×44px.
 - Objeto global `window.dev` con utilidades de depuración accesibles desde la consola del navegador.
 
 ---
@@ -56,19 +72,20 @@
 
 ```
 /
-├── index.html                  # Shell HTML — preconnect Cloudinary, ARIA completo
+├── index.html                  # Shell HTML — preconnect Cloudinary, ARIA completo,
+│                               # modales personalizados (modal-alert, modal-confirm)
 ├── manifest.json               # Manifiesto PWA
 ├── service-worker.js           # Service Worker (modo purge activo)
 └── src/
-    ├── main.js                 # Punto de entrada y orquestador (v6.0)
-    ├── style.css               # Estilos globales — incluye .sr-only y contain optimizations
+    ├── main.js                 # Punto de entrada y orquestador (v9.0)
+    ├── style.css               # Estilos globales — Flat 2.0, variables CSS, .sr-only
     ├── core/
-    │   ├── PuzzleEngine.js     # Motor de renderizado y lógica de piezas (v15.0)
-    │   └── LevelManager.js     # Generación algorítmica de niveles (v2.2)
+    │   ├── PuzzleEngine.js     # Motor de renderizado y lógica de piezas (v19.1)
+    │   └── LevelManager.js     # Generación algorítmica de niveles + prefetch (v7.0)
     ├── ui/
-    │   └── UIController.js     # Gestión de pantallas y DOM (v4.0)
+    │   └── UIController.js     # Gestión de pantallas y DOM (v6.0)
     └── systems/
-        ├── Storage.js          # Persistencia en localStorage (v2.0)
+        ├── Storage.js          # Persistencia en localStorage (v3.0)
         ├── Economy.js          # Integración con GameCenter (monedas)
         └── AudioSynth.js       # Síntesis de efectos de sonido
 ```
@@ -79,8 +96,9 @@
 
 ```
 main.js
- ├── LevelManager   → [genera en memoria] 64 objetos de nivel + URLs Cloudinary
- ├── UI             → [manipula] DOM / pantallas / IntersectionObserver
+ ├── LevelManager   → [genera en memoria] 150 objetos de nivel + URLs Cloudinary
+ │                    [prefetch] descarga/decodifica nivel N+1 en background
+ ├── UI             → [manipula] DOM / pantallas / IntersectionObserver (lazy thumbnails)
  ├── Storage        → [lee/escribe] localStorage
  ├── PuzzleEngine   → [renderiza] <canvas>
  │     └── callbacks: onSound, onWin, onSnap, onStateChange
@@ -93,305 +111,420 @@ main.js
 ```
 DOMContentLoaded
   └─ init()
-       ├─ LevelManager.loadLevels()         // genera 64 niveles en memoria (síncrono)
-       ├─ Storage.validateUnlockedLevels()  // repara desbloqueados huérfanos
-       ├─ UI.initGlobalInteractions()       // botones: release bounce
-       ├─ setupNavigation()                 // bind de todos los botones de nav
-       ├─ setupSettings()                   // ajustes de sonido y reset
-       ├─ setupDevTools()                   // registra window.dev
-       └─ UI.showScreen('menu')             // muestra pantalla inicial
+       ├─ await LevelManager.loadLevels()      // genera 150 niveles en memoria
+       ├─ Storage.validateUnlockedLevels()     // repara desbloqueados huérfanos
+       ├─ UI.initGlobalInteractions()          // botones: release bounce
+       ├─ setupNavigation()                    // bind de todos los botones de nav
+       ├─ setupSettings()                      // ajustes de sonido
+       ├─ setupDevTools()                      // registra window.dev
+       └─ UI.showScreen('menu')               // muestra pantalla inicial
+```
+
+### Flujo de carga de imagen (v9.0)
+
+```
+startGame(levelId)
+  │
+  ├─ [CAMINO RÁPIDO — bitmap precargado disponible]
+  │   levelManager.getAndClearPrefetchedBitmap(levelId) → ImageBitmap
+  │   └─ sin red, sin decodificación → loader oculto inmediatamente
+  │
+  └─ [CAMINO NORMAL — sin bitmap precargado]
+      ├─ new Image() + img.decode()               // decodificación DOM (hilo principal)
+      ├─ createImageBitmap(img)                   // transfiere textura al worker de GPU
+      │   └─ fallback a HTMLImageElement si no disponible
+      └─ loader visible hasta resolución
+
+  → new PuzzleEngine(canvas, { image: imageSource })
+      └─ resizeCanvas()
+          └─ _buildSourceCanvasHQ(img, srcW, srcH)  // step-down scaling (v19.0)
+              ├─ Si NW ≤ srcW×2: drawImage directo (bicúbico)
+              └─ Si NW > srcW×2: halvening iterativo hasta ≤2× → paso final
+
+  → [2 s después, en requestIdleCallback o setTimeout]
+      levelManager.prefetchNextLevel(levelId)
+          ├─ fetch(url, { priority: 'low' })        // no compite con nivel activo
+          ├─ response.blob()                        // bytes fuera del heap JS
+          └─ createImageBitmap(blob)                // decodificación off-thread
+
+  → al destruir: imageBitmap.close()               // liberación determinista de VRAM
+```
+
+### Ciclo de vida del ImageBitmap precargado
+
+```
+prefetchNextLevel()
+  └─ #prefetchedData = { id: 'lvl_N+1', bitmap: ImageBitmap }
+                              │
+           ┌──────────────────┴──────────────────┐
+           │                                     │
+  [usuario llega al nivel N+1]          [usuario va al menú /
+           │                             cambia nivel / error]
+           ▼                                     ▼
+  getAndClearPrefetchedBitmap()          clearPrefetch()
+  devuelve bitmap → PuzzleEngine         bitmap.close()
+  #prefetchedData = null                 #prefetchedData = null
+           │
+           ▼
+  PuzzleEngine.destroy()
+  bitmap.close()  ← liberación determinista
 ```
 
 ---
 
-## 4. Módulos del Sistema
+## 4. Sistema de Diseño Visual
 
-### 4.1 `main.js` — Orquestador
+### 4.1 Paleta de Colores — Flat 2.0
 
-**Ruta:** `src/main.js` | **Versión:** v6.0
+| Token CSS          | Valor       | Uso                                   |
+|--------------------|-------------|---------------------------------------|
+| `--bg-dark`        | `#0B0F19`   | Fondo de pantalla                     |
+| `--bg-panel`       | `#151C2C`   | Paneles, top-bar                      |
+| `--bg-card`        | `#1E293B`   | Tarjetas, botones secundarios         |
+| `--primary`        | `#6366F1`   | Botón principal, borde de tablero     |
+| `--primary-dark`   | `#4F46E5`   | Sombra 3D del botón primario          |
+| `--accent`         | `#38BDF8`   | Subtítulos, highlights                |
+| `--text-main`      | `#F8FAFC`   | Texto principal                       |
+| `--text-muted`     | `#94A3B8`   | Texto secundario, iconos desactivados |
+| `--success`        | `#10B981`   | Nivel completado, flash de snap       |
+| `--warning`        | `#F59E0B`   | Monedas                               |
+| `--danger`         | `#F43F5E`   | Acciones destructivas                 |
 
-Variables de estado globales:
+### 4.2 Tipografía
 
-| Variable        | Tipo           | Descripción                                       |
-|-----------------|----------------|---------------------------------------------------|
-| `levelManager`  | `LevelManager` | Instancia global del gestor de niveles            |
-| `activeGame`    | `PuzzleEngine` | Instancia activa del motor (null si no hay juego) |
-| `currentLevelId`| `string`       | ID del nivel en juego (ej: `"lvl_5"`)            |
-| `startTime`     | `number`       | Timestamp `Date.now()` al arrancar el nivel       |
-| `GameState`     | `object`       | Estado centralizado: `isPaused`, `isInGame`, `timeLeft`, `timerId` |
+- **Outfit** (Google Fonts): fuente principal. Pesos 600, 700, 800. Cargada con `display=swap`.
+- **JetBrains Mono** (Google Fonts): contadores HUD, display de monedas.
 
-**`startGame(levelId, loadSaved)`** — Carga imagen desde Cloudinary con `crossOrigin: 'Anonymous'`, espera `img.decode()`, instancia `PuzzleEngine`. Si `timeLimit === 0`, muestra `"∞"` en lugar de iniciar el contador.
+### 4.3 Componentes y Botones
 
-**`handleVictory(levelConfig)`** — Calcula estrellas, guarda progreso, desbloquea siguiente nivel, llama a `Economy.payout()`.
+- `.btn-primary`: fondo `--primary`, sombra `0 4px 0 var(--primary-dark)`, efecto "presionar" en `:active`.
+- `.btn-secondary`: fondo `--bg-card`, sombra oscura.
+- `.btn-danger`: fondo `--danger`.
+- `.btn-icon` / `.btn-hud-action`: 44×44px, sin texto.
+- Todos los botones tienen `touch-action: manipulation` para eliminar el delay de 300ms en móvil.
 
-**`setupDevTools()`** — Registra `window.dev`. Ver [Sección 12](#12-herramientas-de-desarrollo-dev-tools).
+### 4.4 Iconografía y Animaciones
 
----
+- Iconos SVG inline en HTML para cero peticiones de red adicionales.
+- Shimmer skeleton en `.skeleton::after` para thumbnails en carga.
+- Toggle switch CSS puro para ajustes.
 
-### 4.2 `PuzzleEngine.js` — Motor de Juego
+### 4.5 Micro-interacciones del Motor de Piezas
 
-**Ruta:** `src/core/PuzzleEngine.js` | **Versión:** v15.0
-
-Motor canvas con cuatro buffers de dibujo: `canvas` (principal), `staticCanvas` (tablero + piezas encajadas), `sourceCanvas` (imagen escalada), `gridCanvas` (rejilla offscreen).
-
-El loop `requestAnimationFrame` se **detiene automáticamente** cuando no hay nada que animar (sin drag, sin partículas, sin efectos activos), reduciendo el consumo de batería en reposo.
-
-API pública: `exportState()`, `importState(state)`, `togglePreview(bool)`, `autoPlacePiece()`, `handleResize()`, `destroy()`.
-
----
-
-### 4.3 `LevelManager.js` — Gestor de Niveles
-
-**Ruta:** `src/core/LevelManager.js` | **Versión:** v2.2
-
-Genera 64 niveles en memoria. Sin fetch de red. `async loadLevels()` es síncrono internamente.
-
-#### Constantes
-
-| Constante         | Valor                                                | Descripción                              |
-|-------------------|------------------------------------------------------|------------------------------------------|
-| `TOTAL_LEVELS`    | `64`                                                 | Única variable que controla el total     |
-| `CLOUDINARY_BASE` | `https://res.cloudinary.com/dyspgn0sw/image/upload` | URL base del CDN                         |
-
-#### Progresión algorítmica
-
-| Campo         | Fórmula                                         | Ejemplo n=1   | Ejemplo n=64  |
-|---------------|-------------------------------------------------|---------------|---------------|
-| `id`          | `"lvl_${n}"`                                    | `"lvl_1"`     | `"lvl_64"`    |
-| `publicId`    | `` `Nivel${String(n).padStart(2,'0')}` ``        | `"Nivel01"`   | `"Nivel64"`   |
-| `pieces`      | `n ≤ 10 ? 16 : 25`                              | `16`          | `25`          |
-| `rewardCoins` | `150 + (n × 2)`                                 | `152`         | `278`         |
-| `timeLimit`   | `0` (constante)                                 | Sin límite ("∞" en HUD)                 |
-
-#### Cambio v2.2 — Thumbnail w_400 → w_240
-
-Las tarjetas se muestran a 112px CSS mínimo. Con DPR 2× se necesitan 224px físicos. `w_240` cubre ese requerimiento con 7% de margen y reduce el peso por imagen **~64%** respecto al anterior `w_400`, acelerando la carga inicial de la pantalla de niveles.
+- **Pickup**: escala 105% + vibración 10ms.
+- **Ghost de snap**: cuando la pieza está a < 40% del destino, se dibuja el contorno del hueco.
+- **Snap flash**: borde verde (`--success`) animado 200ms.
+- **Edge pulse**: 2 anillos concéntricos (verde + indigo) que se expanden 600ms.
+- **Confetti**: 30 partículas cuadradas en los colores del sistema al completar.
 
 ---
 
-### 4.4 `UIController.js` — Controlador de Interfaz
+## 5. Módulos del Sistema
 
-**Ruta:** `src/ui/UIController.js` | **Versión:** v4.0
+### 5.1 main.js — Orquestador
 
-#### Lazy loading con IntersectionObserver (nuevo en v4.0)
+**Versión actual: v9.0**
 
-**Problema resuelto:** En v3.0, `renderLevelsGrid()` asignaba `img.src` inmediatamente para las 64 tarjetas, disparando 64 peticiones HTTP simultáneas. En HTTP/1.1 (el límite es 6 conexiones por dominio), las primeras 6 imágenes bloqueaban el resto, causando un retraso visible de ~3 segundos antes de que las tarjetas aparecieran con contenido.
+Punto de entrada. Responsabilidades:
 
-**Solución implementada:**
+- Inicializar todos los módulos y registrar `window.dev`.
+- Gestionar el ciclo de vida de `PuzzleEngine` (crear, destruir, pausar).
+- Cargar imagen: primero intenta consumir el bitmap de `levelManager.getAndClearPrefetchedBitmap()`; si no existe, ejecuta el flujo estándar `img.decode()` + `createImageBitmap()`.
+- Disparar `levelManager.prefetchNextLevel()` tras 2 s de juego activo, usando `requestIdleCallback` (con fallback a `setTimeout`) para no interferir con los primeros frames.
+- Llamar `levelManager.clearPrefetch()` en todas las salidas del nivel que no sean la transición natural al nivel siguiente (menú, quit, btn-back), para liberar VRAM del bitmap no consumido.
+- Manejar victoria: marcar completado, desbloquear siguiente, pagar recompensa.
+- Guardar/restaurar estado de partida en curso.
+- Auto-pausa en `visibilitychange` y `blur`.
 
-```js
-// En lugar de img.src = url (descarga inmediata):
-img.dataset.src = url;   // almacenado, sin descarga
+**Cambios en v9.0 respecto a v8.0:**
+- `startGame()` comprueba primero `levelManager.getAndClearPrefetchedBitmap(levelId)` antes de abrir el loader y arrancar la descarga. Si el bitmap está disponible, la transición es instantánea.
+- `startGame()` llama `levelManager.clearPrefetch()` cuando no existe bitmap para el nivel pedido, descartando posibles residuos de navegación no lineal.
+- Se añade el bloque `schedulePrefetch()` al final de `startGame()`, que dispara `levelManager.prefetchNextLevel()` 2 s después de que `GameState.isInGame = true`, con una guardia `currentLevelId === levelId` para cancelar prefetches huérfanos.
+- `handleVictory()`: el callback de "Volver al menú" llama `levelManager.clearPrefetch()` antes de destruir el motor.
+- Los callbacks de `btn-back` y `btn-quit-level` llaman `levelManager.clearPrefetch()` antes de cambiar de pantalla.
 
-// Solo al entrar al viewport:
-observer.observe(card);  // IntersectionObserver asigna img.src cuando es visible
+### 5.2 PuzzleEngine.js — Motor de Juego
+
+**Versión actual: v19.1**
+
+Motor canvas 2D de renderizado de piezas de rompecabezas. Maneja geometría, física de arrastrar, detección de snap, partículas, parallax y audio.
+
+**Cambios en v19.1:**
+- Se añade la constante `MAX_SRC_PX = 1600` en `resizeCanvas()`.
+- Los valores `srcW` / `srcH` del `sourceCanvas` se calculan primero de forma natural (`boardWidth × dpr` alineado a `gridSize`) y luego se limitan a `MAX_SRC_PX` si lo exceden, usando `Math.floor` para que el resultado sea el múltiplo de `gridSize` más cercano sin superarlo. Esto preserva la propiedad pixel-perfect de v18.0 sin blur.
+- Efecto práctico: en DPR 3× con tablero de 600 px CSS, `srcW` pasa de 1800 a `Math.floor(1600/gridSize) × gridSize`, ahorrando ~35% de VRAM sin pérdida de calidad, ya que la imagen fuente tiene exactamente 1600 px nativos.
+- `_buildSourceCanvasHQ()` recibe `srcW`/`srcH` ya capados; su lógica interna no cambia.
+
+**Cambios en v19.0 (sin modificación en v19.1):**
+- Se añade el método privado `_buildSourceCanvasHQ(img, srcW, srcH)` que sustituye el `drawImage` directo en `resizeCanvas()`.
+- El método implementa step-down scaling: reduce la imagen nativa iterativamente al 50% en cada paso hasta que la ratio fuente/destino sea ≤ 2:1, luego realiza el paso final bicúbico al tamaño exacto del sourceCanvas.
+- Cada buffer intermedio se invalida con `width=0/height=0` inmediatamente tras ser copiado.
+- La matemática pixel-perfect de v18.0 (dimensiones múltiplos de gridSize, coordenadas enteras) se preserva íntegramente: el algoritmo no modifica `srcW`/`srcH`.
+
+### 5.3 LevelManager.js — Gestor de Niveles
+
+**Versión actual: v7.0**
+
+Genera algorítmicamente 150 objetos de configuración de nivel, construye las URLs de Cloudinary y gestiona el sistema de prefetching predictivo de ImageBitmap.
+
+**Cambios en v7.0:**
+
+- Se añade el campo privado `#prefetchedData` (`{ id, bitmap } | null`) que almacena el único bitmap precargado vigente.
+- Se añade `async prefetchNextLevel(currentId)`:
+  - Resuelve el nivel N+1 con `getNextLevelId()`.
+  - Salida temprana si el bitmap correcto ya existe (idempotente).
+  - Limpia cualquier bitmap previo no consumido (`clearPrefetch()`) antes de sobreescribir.
+  - Ejecuta el pipeline off-thread: `fetch({ priority: 'low' })` → `response.blob()` → `createImageBitmap(blob)`.
+  - Errores capturados silenciosamente; `#prefetchedData` queda en `null` para que `startGame()` use el flujo normal.
+- Se añade `getAndClearPrefetchedBitmap(id)`:
+  - Devuelve el `ImageBitmap` si el ID coincide y limpia `#prefetchedData` en el mismo acto.
+  - Devuelve `null` si no coincide, sin efecto secundario.
+- Se añade `clearPrefetch()`:
+  - Llama `bitmap.close()` si existe un bitmap pendiente, liberando VRAM de forma determinista.
+  - Idempotente: no hace nada si `#prefetchedData` es `null`.
+
+**Cambios en v6.1 (heredados, sin modificación en v7.0):**
+- `buildImageUrl()` sustituye `fl_lossless` por `q_100`. Compatible con todos los planes de Cloudinary.
+
+**Cambios en v6.0 (heredados, sin modificación en v7.0):**
+- Eliminados `_fullW` / `getFullImageWidth()`. Resolución nativa 1600×1600 siempre.
+- `buildThumbnailUrl()` sin cambios: thumbnails usan `f_auto,q_auto`.
+
+### 5.4 UIController.js — Controlador de Interfaz
+
+Gestiona las transiciones entre pantallas, el grid de niveles con IntersectionObserver para lazy thumbnails, y los modales (`alert`, `confirm`, `victory`, `pause`, `resume`). Sin cambios en v6.0/v19.0.
+
+### 5.5 Storage.js — Almacenamiento
+
+Abstracción sobre `localStorage` con:
+- Versionado de esquema automático.
+- `validateUnlockedLevels()`: repara estados huérfanos.
+- `isUnlocked()`, `isCompleted()`, `unlockLevel()`, `markCompleted()`.
+
+### 5.6 Economy.js — Sistema de Economía
+
+Puente hacia `window.GameCenter`. Si `GameCenter` no está disponible (modo standalone), simula la operación con un log de consola. Método principal: `Economy.payout(levelId, coins)`.
+
+### 5.7 AudioSynth.js — Síntesis de Audio
+
+Síntesis procedural mediante Web Audio API. Eventos: `click`, `snap`, `win`. El `AudioContext` se reanuda automáticamente en el primer toque del usuario (restricción de autoplay iOS/Android).
+
+---
+
+## 6. Arquitectura de Activos — Cloudinary
+
+### Imagen de juego — v6.1
+
+| Parámetro       | Valor         | Efecto                                                                 |
+|-----------------|---------------|------------------------------------------------------------------------|
+| `f_webp`        | WebP          | Formato WebP soportado universalmente. Sin conversión en cliente.      |
+| `q_100`         | Calidad 100   | Activa automáticamente el modo VP8L (sin pérdida): sin submuestreo de croma, sin artefactos DCT, perfil ICC preservado. Compatible con todos los planes de Cloudinary. |
+| *(sin `w_`)*    | 1600×1600     | Resolución nativa, sin reescalado en servidor. El cliente escala via step-down. |
+
+**URL ejemplo:**
+```
+https://res.cloudinary.com/dyspgn0sw/image/upload/f_webp,q_100/v1/Nivel05
 ```
 
-El observer usa `rootMargin: '100px 0px'`, lo que inicia la descarga 100px antes de que la tarjeta sea visible, eliminando el efecto pop-in al hacer scroll.
+**Por qué se usa `q_100` en lugar de `fl_lossless`:**
+`fl_lossless` es un flag del pipeline de transformación activa de Cloudinary que no está disponible en todos los planes. Cuando la cuenta no tiene ese permiso, Cloudinary retorna HTTP 400, bloqueando la carga. `q_100` en combinación con `f_webp` produce exactamente el mismo resultado (WebP VP8L sin pérdida) a través de la API estándar de calidad numérica, válida en todos los planes.
 
-#### DocumentFragment para inserción en lote (nuevo en v4.0)
+**Por qué se elimina `w_` para la imagen de juego:**
+En v5.0 los parámetros `w_700`/`w_900`/`w_1200` reducían la imagen en el servidor con un filtro Lanczos de Cloudinary. Aunque Lanczos es de calidad alta, la imagen resultante llegaba al cliente ya degradada: el `drawImage` del sourceCanvas partía de una fuente de menor resolución, y el PuzzleEngine no podía recuperar la información perdida. Con WebP `q_100` a 1600 px, el motor dispone de la textura completa y aplica su propio pipeline de reducción de alta fidelidad.
 
-Las 64 tarjetas se construyen en un `DocumentFragment` (nodo fuera del árbol DOM) y se insertan con un único `container.appendChild(fragment)`. Esto reemplaza los 64 `appendChild` individuales anteriores, que forzaban un reflow del layout por cada tarjeta.
+**Impacto en ancho de banda:**
+Un WebP Lossless 1600×1600 de ilustración/anime típico ocupa entre 800 KB y 2 MB. El WebP lossy q_auto equivalente oscilaba entre 150–400 KB. La diferencia se justifica porque:
+1. El archivo se descarga una sola vez y el navegador lo cachea con URL única.
+2. La URL única (sin parámetro `w_`) maximiza los aciertos del CDN y del Service Worker caché.
+3. La ganancia visual es perceptible y permanente en todo el ciclo de vida de la partida.
 
-#### Gestión de ciclo de vida del observer
+### Thumbnail — sin cambios
 
-```js
-// Al inicio de renderLevelsGrid():
-if (UI._thumbObserver) {
-    UI._thumbObserver.disconnect();  // evita callbacks fantasma de tarjetas eliminadas
-    UI._thumbObserver = null;
-}
-```
+| Parámetro   | Valor              | Efecto                           |
+|-------------|--------------------|----------------------------------|
+| `c_thumb`   | Crop centrado      | Encuadre centrado de la imagen.  |
+| `w_N`       | 160–320px          | Ancho dinámico según DPR.        |
+| `g_center`  | Gravedad central   | Mantiene el sujeto visible.      |
+| `f_auto`    | WebP/AVIF/JPEG     | Mejor formato soportado.         |
+| `q_auto`    | Calidad automática | Balance calidad/tamaño óptimo.   |
 
-#### Accesibilidad (nuevo en v4.0)
+### Nomenclatura de assets
 
-- Tarjetas desbloqueadas: `role="button"`, `tabindex="0"`, `aria-label` descriptivo.
-- Tarjetas bloqueadas: `role="img"`, `aria-disabled="true"`.
-- Navegación por teclado: Enter y Space activan la tarjeta seleccionada.
-- Overlay de estado: `aria-hidden="true"` (la información ya está en `aria-label`).
-
----
-
-### 4.5 `Storage.js` — Almacenamiento
-
-**Ruta:** `src/systems/Storage.js` | **Versión:** v2.0
-
-Capa sobre `localStorage` con versionado de esquema. Prefijo `puz_arcade_`.
-
-| Clave              | Tipo     | Contenido                                        |
-|--------------------|----------|--------------------------------------------------|
-| `progress`         | `object` | `{ "lvl_1": 3, "lvl_2": 2, … }` (estrellas)   |
-| `unlocked`         | `array`  | `["lvl_1", "lvl_2", …]` (IDs desbloqueados)   |
-| `save_{levelId}`   | `array`  | Estado serializado de `PuzzleEngine.exportState()` |
-| `settings`         | `object` | `{ sound: true/false }`                          |
+| Rango de nivel | Nombre en Cloudinary | Ejemplo        |
+|----------------|----------------------|----------------|
+| 1–9            | `NivelNN` (2 dígitos)| `Nivel01`      |
+| 10–99          | `NivelNN`            | `Nivel42`      |
+| 100–150        | `NivelNNN`           | `Nivel100`     |
 
 ---
 
-### 4.6 `Economy.js` — Sistema de Economía
-
-**Ruta:** `src/systems/Economy.js`
-
-Implementa el contrato con `window.GameCenter.completeLevel('rompecabezas', levelId, rewardCoins)`. Si `GameCenter` no existe, registra un `console.warn` y la partida continúa.
-
----
-
-### 4.7 `AudioSynth.js` — Síntesis de Audio
-
-**Ruta:** `src/systems/AudioSynth.js`
-
-Grafo: `Osciladores → GainNode (ADSR) → DynamicsCompressor (-24dB, 6:1) → MasterGain (0.7) → destination`.
-
-| Tipo      | Descripción                                                    |
-|-----------|----------------------------------------------------------------|
-| `'click'` | Triangle 1200Hz + Sine 500Hz                                  |
-| `'snap'`  | Square 220Hz (lowpass 1200Hz) + Triangle 900Hz                |
-| `'win'`   | Acorde C-E-G (523/659/784Hz) escalonado + brillo 1568Hz       |
-
----
-
-## 5. Arquitectura de Activos — Cloudinary
-
-### Cloud Name y nomenclatura
-
-- **Cloud name:** `dyspgn0sw`
-- **Convención de nombres:** `NivelNN` con cero a la izquierda para n < 10 (ej: `Nivel01`, `Nivel09`, `Nivel10`).
-
-> **CRÍTICO:** Usar `Nivel1` en lugar de `Nivel01` causará pantalla de carga infinita en los niveles 1–9.
-
-### URLs generadas
+## 7. Pantallas y Navegación
 
 ```
-Base:      https://res.cloudinary.com/dyspgn0sw/image/upload
+[Menu]
+  ├─ [Play] → último nivel desbloqueado/no completado
+  ├─ [Levels] → cuadrícula de 150 niveles
+  ├─ [Settings]
+  └─ [Exit] → window.location.href = '../../index.html'
 
-Imagen:    .../f_auto,q_auto/v1/NivelNN
-Thumbnail: .../c_thumb,w_240,g_center,f_auto,q_auto/v1/NivelNN
+[Game]
+  ├─ HUD: nivel, piezas restantes, tiempo, acciones
+  ├─ [Pause] → modal-pause
+  │     ├─ [Resume]
+  │     └─ [Quit] → clearPrefetch() + guarda progreso → [Menu]
+  ├─ [Preview] (hold): muestra imagen completa translúcida
+  └─ [Magnet]: auto-coloca una pieza suelta (cuesta monedas)
+
+[Victory] → modal-victory
+  ├─ [Next Level] → startGame(nextLvlId)  ← consume bitmap precargado
+  └─ [Menu]       → clearPrefetch() + destroy()
 ```
 
-| Nivel | publicId   | Thumbnail (actual v2.2)                            |
-|-------|------------|----------------------------------------------------|
-| 1     | `Nivel01`  | `.../c_thumb,w_240,g_center,f_auto,q_auto/v1/Nivel01` |
-| 9     | `Nivel09`  | `.../c_thumb,w_240,g_center,f_auto,q_auto/v1/Nivel09` |
-| 64    | `Nivel64`  | `.../c_thumb,w_240,g_center,f_auto,q_auto/v1/Nivel64` |
+Los modales de confirmación y alerta (`modal-alert`, `modal-confirm`) son genéricos y se invocan desde `UI.showAlert()` / `UI.showConfirm()`.
 
-### Preconnect (index.html)
+---
 
-```html
-<link rel="preconnect" href="https://res.cloudinary.com" crossorigin>
-<link rel="dns-prefetch" href="https://res.cloudinary.com">
+## 8. Sistema de Progresión del Jugador
+
+- **Nivel 1** desbloqueado por defecto (`Storage.validateUnlockedLevels` garantiza que siempre exista al menos un nivel desbloqueado).
+- Al completar el nivel `N`, se desbloquea el nivel `N+1`.
+- Recompensa en monedas: `150 + (n × 2)`. El nivel 150 da 450 monedas.
+- Las piezas por nivel escalan: niveles 1–10 tienen 16 piezas (cuadrícula 4×4); niveles 11–150 tienen 25 piezas (cuadrícula 5×5).
+- El progreso se guarda automáticamente en `localStorage` en cada snap y al pausar/salir.
+
+---
+
+## 9. Motor Visual — PuzzleEngine en Detalle
+
+### Buffers offscreen
+
+| Buffer          | Propósito                                                         | Dimensiones                                          |
+|-----------------|-------------------------------------------------------------------|------------------------------------------------------|
+| `sourceCanvas`  | Textura de la imagen completa, reducida al tamaño del tablero×DPR | `srcW × srcH` (múltiplos de gridSize, **máx. 1600 px** por v19.1) |
+| `staticCanvas`  | Tablero + todas las piezas encajadas (se actualiza por evento)    | Igual que el canvas principal                        |
+| `gridCanvas`    | Rejilla de fondo con paralax (precalculada)                       | Ligeramente mayor que la pantalla                    |
+
+### Step-down scaling — `_buildSourceCanvasHQ()` (v19.0, sin cambios en v19.1)
+
+**Problema resuelto:** el anterior `drawImage(img, 0, 0, srcW, srcH)` realizaba una reducción de hasta 2.67:1 en un solo paso (1600→600 en una pantalla de 300px CSS con DPR 2×). La interpolación bilineal a esa ratio descarta ciclos de frecuencia enteros, produciendo:
+
+- Aliasing en líneas diagonales y bordes de alto contraste.
+- Desaturación: el promediado de 4 píxeles diluye los valores de color.
+- "Ruido de mosquito": rebote de alta frecuencia no filtrado.
+- Blur generalizado: pérdida de energía en frecuencias medias-altas.
+
+**Solución:** reducción escalonada al 50% máximo por paso, con bicúbico (`imageSmoothingQuality = 'high'`) en cada iteración.
+
+```
+Ejemplo: imagen 1600×1600 → sourceCanvas 560×560 (DPR 2×, tablero 280px CSS)
+
+  Paso 0: fuente = 1600×1600  (ratio destino: 1600/560 = 2.86:1 → supera 2:1)
+  Paso 1: intermedio = 800×800  (ratio: 800/560 = 1.43:1 → OK)
+  Paso 2 (final): sourceCanvas ← drawImage(800×800 → 560×560) [bicúbico]
 ```
 
-Estas etiquetas establecen la conexión TCP + TLS con Cloudinary durante el parse del HTML, antes de que el JS solicite la primera imagen. En redes móviles esto ahorra 200–400ms del tiempo de carga percibido.
+```
+Ejemplo: imagen 1600×1600 → sourceCanvas 840×840 (DPR 3×, tablero 280px CSS)
+         [sin cap: rawSrcW = 840 ≤ 1600 → srcW = 840]
+
+  Paso 0: fuente = 1600×1600  (ratio: 1600/840 = 1.90:1 → ≤2:1)
+  Paso 1 (final): sourceCanvas ← drawImage(1600×1600 → 840×840) [bicúbico, directo]
+```
+
+```
+Ejemplo con cap de VRAM (v19.1): DPR 3×, tablero 600px CSS, gridSize 5
+  rawSrcW = round(600 × 3 / 5) × 5 = 1800  →  supera MAX_SRC_PX=1600
+  srcW    = floor(1600 / 5) × 5 = 1600  (múltiplo de gridSize más cercano ≤ 1600)
+
+  Paso 0: fuente = 1600×1600  (ratio: 1600/1600 = 1.0:1 → camino directo)
+  Paso 1 (final): sourceCanvas ← drawImage(1600×1600 → 1600×1600) [blit 1:1]
+  Ahorro: 1800² × 4 bytes = 12.4 MB  →  1600² × 4 bytes = 9.8 MB  (−21% VRAM)
+```
+
+**Preservación pixel-perfect:** los canvases intermedios usan `Math.ceil(N/2)` para sus dimensiones; el tamaño final `srcW × srcH` (múltiplo de `gridSize`, capado a ≤ 1600 px) llega sin modificar desde `resizeCanvas()`. La matemática de coordenadas en `renderPieceToContext()` no cambia.
+
+**VRAM:** cada intermedio se invalida (`width=0/height=0`) inmediatamente después de copiarse al siguiente. Sólo existe un intermedio en memoria en cada momento. El cap de 1600 px de v19.1 garantiza que el `sourceCanvas` nunca supera la resolución nativa de la imagen fuente.
+
+### Pipeline de renderizado por frame
+
+Capa | Fuente | Frecuencia de actualización
+-----|--------|-----------------------------
+1. Fondo sólido | `ctx.clearRect` | Cada frame
+2. Rejilla paralax | `gridCanvas` | Cada frame (interpolación lerp)
+3. Puntos parpadeantes | Cálculo en CPU | Cada frame
+4. Tablero + encajadas | `staticCanvas` | Solo en `needsStaticUpdate`
+5. Preview (hold) | `sourceCanvas` | Solo con `showPreview = true`
+6. Piezas sueltas | `sourceCanvas` → `ctx` | Cada frame
+7. Ghost de snap | Geométrico | Solo pieza seleccionada
+8. Pieza seleccionada | `sourceCanvas` → `ctx` | Cada frame (escala 105%)
+9. Partículas | CPU | Hasta agotarse
+10. Snap flash | Borde animado | 200ms post-snap
+11. Edge pulses | 2 anillos concéntricos | 600ms post-snap
+
+### Idle loop
+
+El loop de animación se detiene automáticamente cuando no hay eventos pendientes (sin drag, sin partículas, sin flashes, sin preview). Se reactiva ante cualquier interacción o por un timer de 5s para refrescar los puntos parpadeantes.
 
 ---
 
-## 6. Pantallas y Navegación
+## 10. Sistema Háptico
 
-| Pantalla         | ID                 | `aria-label`                |
-|------------------|--------------------|-----------------------------|
-| Menú             | `screen-menu`      | "Menú principal"            |
-| Niveles          | `screen-levels`    | "Selección de misiones"     |
-| Juego            | `screen-game`      | "Partida activa"            |
-| Ajustes          | `screen-settings`  | "Ajustes del juego"         |
+| Evento         | Patrón                    | Sensación percibida  |
+|----------------|---------------------------|----------------------|
+| Levantar pieza | `10`                      | Pulso suave          |
+| Encajar pieza  | `[30, 20, 10]`            | Doble pulso          |
+| Victoria       | `[100, 50, 80, 50, 200]`  | Celebración intensa  |
 
-Transiciones: opacidad + `translate3d(16px → 0)` a 250ms.
-
-### Modales
-
-| ID                 | Título             | `aria-modal` | `aria-labelledby`        |
-|--------------------|--------------------|--------------|--------------------------|
-| `modal-resume`     | PARTIDA GUARDADA   | ✅           | `modal-resume-title`     |
-| `modal-pause`      | PAUSA              | ✅           | `modal-pause-title`      |
-| `modal-gameover`   | TIEMPO AGOTADO     | ✅           | `modal-gameover-title`   |
-| `modal-victory`    | ¡MISIÓN CUMPLIDA!  | ✅           | `modal-victory-title`    |
+Implementado mediante `navigator.vibrate()`. En dispositivos o navegadores que no soporten la API, la llamada falla silenciosamente.
 
 ---
 
-## 7. Sistema de Progresión del Jugador
+## 11. Sistema de Audio Procedural
 
-### Cálculo de estrellas
-
-| Estrellas | Condición              | 16 piezas      | 25 piezas       |
-|-----------|------------------------|----------------|-----------------|
-| ⭐⭐⭐     | `duration ≤ pieces×5s` | ≤ 80 segundos  | ≤ 125 segundos  |
-| ⭐⭐       | `duration ≤ pieces×10s`| ≤ 160 segundos | ≤ 250 segundos  |
-| ⭐         | Cualquier otro caso    | > 160 segundos | > 250 segundos  |
+Sin archivos de audio externos. Todo el audio se sintetiza en tiempo real mediante la **Web Audio API** a través de la clase `AudioSynth`. El `AudioContext` se reanuda automáticamente en el primer toque del usuario, respetando las restricciones de autoplay de iOS y Android.
 
 ---
 
-## 8. Motor Visual — PuzzleEngine en Detalle
+## 12. Características PWA
 
-### Orden de render por frame
-
-1. Rejilla offscreen con parallax
-2. Micro-dots parpadeantes
-3. Capa estática (tablero + piezas encajadas)
-4. Vista previa (28% opacidad, si activa)
-5. Piezas sueltas no seleccionadas
-6. Ghost de snap (< 40% distancia al destino)
-7. Pieza seleccionada (105% escala, stroke blanco 2px)
-8. Partículas (ripples y confetti)
-9. Snap flash (esmeralda, 150ms)
-10. Edge pulses (2 anillos concéntricos, 700ms)
-
----
-
-## 9. Sistema Háptico
-
-| Evento         | Patrón                   | Sensación            |
-|----------------|--------------------------|----------------------|
-| Levantar pieza | `10`                     | Pulso suave          |
-| Encajar pieza  | `[30, 20, 10]`           | Doble pulso          |
-| Victoria       | `[100, 50, 80, 50, 200]` | Celebración intensa  |
-
----
-
-## 10. Sistema de Audio Procedural
-
-Sin archivos de audio externos. Todo sintetizado con Web Audio API. Se reanuda automáticamente en el primer toque (política de autoplay iOS/Android).
-
----
-
-## 11. Características PWA
-
-- `manifest.json`: nombre, ícono, color de tema `#0f172a`, modo standalone.
-- `service-worker.js`: en modo purge activo. Se auto-instala para desregistrarse y limpiar cualquier caché anterior. Todas las peticiones van directamente a la red.
+- `manifest.json`: nombre del juego, ícono, color de tema `#0f172a`, modo standalone.
+- `service-worker.js`: en modo **purge activo**. Se auto-instala para desregistrarse y limpiar cualquier caché anterior. Todas las peticiones van directamente a la red.
 - Viewport: `user-scalable=no`, `viewport-fit=cover`.
 
 ---
 
-## 12. Herramientas de Desarrollo (Dev Tools)
+## 13. Herramientas de Desarrollo (Dev Tools)
 
-`window.dev` disponible en consola del navegador tras el arranque de la app.
+`window.dev` está disponible en la consola del navegador tras el arranque de la aplicación.
 
 | Comando              | Descripción                                                      |
 |----------------------|------------------------------------------------------------------|
-| `dev.unlockAll()`    | Desbloquea los 64 niveles en localStorage.                       |
-| `dev.addCoins(n)`    | Suma `n` monedas via `GameCenter`. Avisa en modo standalone.     |
-| `dev.skipLevel()`    | Fuerza victoria del nivel activo con 3 estrellas.                |
+| `dev.unlockAll()`    | Desbloquea los 150 niveles en localStorage                       |
+| `dev.addCoins(n)`    | Suma `n` monedas via `GameCenter`. Avisa si está en modo standalone |
+| `dev.skipLevel()`    | Fuerza la victoria del nivel activo                              |
 
 ```js
 // Ejemplos:
-dev.unlockAll()       // → [Dev] ✅ 64 niveles desbloqueados.
+dev.unlockAll()       // → [Dev] ✅ 150 niveles desbloqueados.
 dev.addCoins(1000)    // → [Dev] ✅ +1000 monedas añadidas via GameCenter.
-dev.skipLevel()       // → [Dev] ✅ Saltando nivel lvl_5 con 3 estrellas.
+dev.skipLevel()       // → [Dev] ✅ Saltando nivel lvl_5.
 ```
 
 ---
 
-## 13. Accesibilidad (WCAG 2.2)
+## 14. Accesibilidad (WCAG 2.2)
 
 ### Atributos implementados
 
-| Elemento                        | Atributo                  | Valor / propósito                                   |
-|---------------------------------|---------------------------|-----------------------------------------------------|
-| Capas decorativas (bg, grid…)   | `aria-hidden="true"`      | Oculta al lector de pantalla                        |
-| Botones de solo-icono           | `aria-label`              | Descripción textual de la acción                    |
-| Tarjetas de nivel desbloqueadas | `role="button"`, `tabindex="0"`, `aria-label` | Navegables por teclado |
-| Tarjetas de nivel bloqueadas    | `role="img"`, `aria-disabled="true"` | Anunciadas como imagen bloqueada       |
-| Modales                         | `role="dialog"`, `aria-modal="true"`, `aria-labelledby` | Anunciados correctamente |
-| HUD coins display               | `aria-live="polite"`      | Anuncia cambio de monedas sin interrumpir           |
-| SVGs decorativos                | `aria-hidden="true"`      | Evita lectura de nombres de elemento SVG            |
-| Texto solo para AT              | `.sr-only`                | Visible a lectores, invisible visualmente           |
+| Elemento                         | Atributo                                                  | Propósito                                        |
+|----------------------------------|-----------------------------------------------------------|--------------------------------------------------|
+| Capas decorativas (bg, grid…)    | `aria-hidden="true"`                                      | Ocultas a lectores de pantalla                   |
+| Botones de solo-icono            | `aria-label`                                              | Descripción textual de la acción                 |
+| Tarjetas de nivel desbloqueadas  | `role="button"`, `tabindex="0"`, `aria-label`             | Navegables por teclado                           |
+| Tarjetas de nivel bloqueadas     | `role="img"`, `aria-disabled="true"`                      | Anunciadas como imagen bloqueada                 |
+| Modales                          | `role="dialog"`, `aria-modal="true"`, `aria-labelledby`   | Anunciados correctamente por AT                  |
+| SVGs decorativos                 | `aria-hidden="true"`                                      | Evita lectura del nombre del elemento SVG        |
+| Texto solo para AT               | `.sr-only`                                                | Visible a lectores, invisible visualmente        |
 
 ### Foco visible (WCAG 2.4.11)
 
@@ -399,37 +532,82 @@ Todos los elementos interactivos tienen `:focus-visible` con `outline: 2px solid
 
 ### Tamaños táctiles (WCAG 2.5.5)
 
-Todos los botones tienen `min-height: 48px` o `height: 48px`. Las tarjetas de nivel tienen `min-height: 112px`.
+Todos los botones e iconos del HUD tienen un tamaño mínimo de **44×44px**. Las tarjetas de nivel tienen `min-height: 100px`.
 
 ---
 
-## 14. Guía de Mantenimiento y Expansión
+## 15. Guía de Mantenimiento y Expansión
 
-### Agregar un nivel nuevo (dos pasos)
+### Agregar niveles nuevos (dos pasos)
 
-1. Subir imagen a Cloudinary: nombre `NivelNN` con cero a la izquierda si n < 10 (ej: `Nivel65`).
-2. En `LevelManager.js`: `const TOTAL_LEVELS = 65;`
+1. Subir la imagen 1600×1600 a Cloudinary con el nombre `NivelNN`:
+   - n < 10: `Nivel01`…`Nivel09`
+   - 10 ≤ n < 100: `Nivel10`…`Nivel99`
+   - n ≥ 100: `Nivel100`…`Nivel150` (sin cero adicional)
+2. En `LevelManager.js`: incrementar `const TOTAL_LEVELS = N;`
+
+No se requiere ningún otro cambio.
+
+---
 
 ### Cambiar el tamaño de thumbnail
 
-Modificar `buildThumbnailUrl()` en `LevelManager.js`. Regla: `anchoCSSMinimo × DPRmax × 1.07`.
+Modificar la función `getThumbnailWidth()` en `LevelManager.js`. La fórmula base es:
 
-Con tarjetas de 112px y DPR 2×: `112 × 2 × 1.07 ≈ 240px`. El valor actual `w_240` es el mínimo recomendado.
+```
+anchoCSSMinimo × min(DPR, 2) × 1.07 → redondeado al múltiplo de 80 más cercano
+```
 
-### Reactivar el límite de tiempo
+Con tarjetas de 100px y DPR 2×: `100 × 2 × 1.07 ≈ 214` → snapped a `240px`. El valor resultante se limita entre 160 y 320px.
+
+---
+
+### Revertir a imagen lossy (si se requiere reducir ancho de banda)
+
+Editar `buildImageUrl()` en `LevelManager.js`:
 
 ```js
-// LevelManager.js, dentro de loadLevels():
-timeLimit: 350   // segundos; 0 = sin límite
+// WebP calidad máxima / sin pérdida efectiva (v6.1, actual — máxima fidelidad, compatible con todos los planes)
+return `${CLOUDINARY_BASE}/f_webp,q_100/v1/${publicId}`;
+
+// WebP lossy con ancho adaptativo (v5.0 legacy — menor tamaño de archivo)
+const wTransform = _fullW === 1600 ? '' : `,w_${_fullW}`;
+return `${CLOUDINARY_BASE}/f_auto,q_auto${wTransform}/v1/${publicId}`;
 ```
+
+Si se revierte a lossy, restaurar también `getFullImageWidth()` y `_fullW` del archivo v5.0. El step-down scaling de PuzzleEngine v19.1 es compatible con cualquier fuente; la diferencia es únicamente la calidad colorimétrica de partida.
+
+---
+
+### Deshabilitar el prefetching predictivo
+
+El sistema de prefetch es transparente; si `createImageBitmap` no está disponible o el fetch falla, `startGame()` carga el nivel normalmente. Para desactivarlo completamente, eliminar el bloque `schedulePrefetch()` del final de `startGame()` en `main.js` y los tres métodos de `LevelManager` (`prefetchNextLevel`, `getAndClearPrefetchedBitmap`, `clearPrefetch`). Eliminar también las llamadas a `clearPrefetch()` en los callbacks de navegación.
+
+---
 
 ### Diagnóstico de errores comunes
 
-| Síntoma                                      | Causa probable                               | Solución                                             |
-|----------------------------------------------|----------------------------------------------|------------------------------------------------------|
-| Imagen de nivel no carga (pantalla infinita) | `publicId` incorrecto o asset no en Cloudinary | Verificar `Nivel${NN}` en cloud `dyspgn0sw`         |
-| Error CORS en canvas                         | Falta `crossOrigin = 'Anonymous'`            | Ya corregido en `startGame()`; no revertir           |
-| Thumbnails no aparecen (pantalla de niveles) | Observer desconectado o `data-src` no asignado | Verificar que `renderLevelsGrid` se llama correctamente |
-| Tarjeta no responde al teclado              | `tabindex` o `role` faltante                  | Verificar UIController v4.0 o superior              |
-| `dev.skipLevel()` no hace nada               | No hay nivel activo                          | Iniciar una partida antes de llamar al comando       |
-| El audio no suena en iOS                     | Política de autoplay                         | Normal; el AudioContext se reanuda en el primer toque |
+| Síntoma                                               | Causa probable                                                      | Solución                                                                                   |
+|-------------------------------------------------------|---------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| Imagen de nivel no carga (pantalla infinita)          | `publicId` incorrecto o asset no subido a Cloudinary                | Verificar que el nombre sea `Nivel${NN}` en el cloud `dyspgn0sw`                           |
+| **HTTP 400 / Network Error al cargar imagen**         | **`fl_lossless` en la URL (flag no disponible en el plan)**         | **Verificado en v6.1: `buildImageUrl()` usa `f_webp,q_100` en lugar de `fl_lossless`**    |
+| Error CORS al iniciar partida                         | Falta `crossOrigin = 'Anonymous'`                                   | Ya corregido en `startGame()`; no revertir                                                 |
+| Thumbnails no aparecen al abrir pantalla niveles      | Observer desconectado o `data-src` no asignado                      | Verificar que `renderLevelsGrid()` se llame después de `loadLevels()`                     |
+| Tarjeta de nivel no responde al teclado               | `tabindex` o `role` faltante en el elemento                         | Verificar UIController v6.0 o superior                                                     |
+| `dev.skipLevel()` no hace nada                        | No hay nivel activo en ese momento                                  | Iniciar una partida antes de llamar al comando                                             |
+| El audio no suena en iOS al inicio                    | Restricción de autoplay del sistema operativo                       | Normal; el AudioContext se activa automáticamente en el primer toque                       |
+| Imagen borrosa al escalar en canvas                   | `imageSmoothingQuality` reseteado por cambio de dim.                | Verificar que `_applySmoothing()` se llame tras cambios de `width`/`height`                |
+| Bordes de pieza con antialiasing visible              | `imageSmoothingEnabled = true` en renders estáticos                 | Verificado en v18.0: se deshabilita puntualmente en `renderPieceToContext(isStaticRender=true)` |
+| Piezas encajadas con grietas sub-píxel                | `overlapFix` fraccionario (0.6) en drawImage                        | Verificado en v18.0: `overlapFix = 1` (entero)                                            |
+| Nitidez degradada en iPhone 14 Pro / Galaxy S         | DPR 3× escalado por software por cap en `dpr = 2`                  | Verificado en v18.0: `dpr = Math.min(devicePixelRatio, 3)`                                |
+| **Desbordamiento de VRAM / OOM en DPR 3× tablero grande** | **`sourceCanvas` supera la resolución nativa 1600px**           | **Verificado en v19.1: `MAX_SRC_PX = 1600` limita `srcW`/`srcH` con `Math.floor` a gridSize** |
+| Alto consumo de RAM al cambiar niveles                | Buffers offscreen no liberados en `destroy()`                       | Verificar que `destroy()` asigne `width=0`/`height=0` y llame a `bitmap.close()`          |
+| Thumbnails cargados dos veces en la grid              | Observer huérfano del render anterior                               | Verificar que `UI._thumbObserver.disconnect()` se llame al inicio de `renderLevelsGrid()` |
+| Pieza queda "flotando" al pausar                      | `cancelDrag()` no invocado antes de `togglePause()`                 | Verificar que `togglePause()` en main.js llame a `activeGame.cancelDrag()`                |
+| Colores lavados / desaturados en las piezas           | URL de Cloudinary con `q_auto` (compresión lossy)                   | Verificado en v6.1: `buildImageUrl()` usa `f_webp,q_100`                                  |
+| "Ruido de mosquito" en líneas de alto contraste       | Artefactos DCT del JPEG/WebP lossy                                  | Verificado en v6.1: `q_100` activa VP8L, eliminando el codificador DCT                    |
+| Blur generalizado en el tablero                       | `drawImage` único 1600→target (bilineal en un paso)                 | Verificado en v19.0: `_buildSourceCanvasHQ()` implementa step-down ≤2:1 por paso          |
+| Canvas intermedio no liberado (posible OOM)           | Referencia a canvas intermedio sobrevive el scope                   | `_buildSourceCanvasHQ()` invalida `width=0/height=0` en cada iteración                    |
+| **Fuga de VRAM entre niveles (bitmap precargado)**    | **`clearPrefetch()` no invocado en salida del nivel**               | **Verificado en v9.0: todos los puntos de salida del nivel llaman `levelManager.clearPrefetch()`** |
+| **Petición de red huérfana tras cambio rápido de nivel** | **Prefetch disparado para nivel que ya no es el activo**         | **Verificado en v9.0: guardia `currentLevelId === levelId` en `schedulePrefetch()`**      |
+| **Nivel N+2 descargado al repasar la grid**           | **`prefetchNextLevel()` llamado desde la pantalla de niveles**      | **El prefetch solo se dispara dentro de `startGame()` con `isInGame = true`; no aplica a la grid** |

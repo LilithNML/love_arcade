@@ -1,20 +1,12 @@
-/**
- * AudioSynth.js
- * Generador de efectos de sonido procedimentales
- * (mobile / web games)
- */
-
 export class AudioSynthesizer {
     constructor() {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this.enabled = true;
 
-        // Bus maestro
         this.master = this.ctx.createGain();
         this.master.gain.value = 0.7;
         this.master.connect(this.ctx.destination);
 
-        // Compresión ligera (cola más limpia)
         this.compressor = this.ctx.createDynamicsCompressor();
         this.compressor.threshold.value = -24;
         this.compressor.knee.value = 30;
@@ -48,14 +40,9 @@ export class AudioSynthesizer {
         }
     }
 
-    // ------------------------
-    // Sonidos
-    // ------------------------
-
     uiClick() {
         const now = this.ctx.currentTime;
 
-        // Transiente
         this.tone({
             freq: 1200,
             type: 'triangle',
@@ -65,7 +52,6 @@ export class AudioSynthesizer {
             time: now
         });
 
-        // Cuerpo suave
         this.tone({
             freq: 500,
             type: 'sine',
@@ -79,7 +65,6 @@ export class AudioSynthesizer {
     pieceSnap() {
         const now = this.ctx.currentTime;
 
-        // Golpe inicial
         this.tone({
             freq: 220,
             type: 'square',
@@ -90,7 +75,6 @@ export class AudioSynthesizer {
             lowpass: 1200
         });
 
-        // Click metálico corto
         this.tone({
             freq: 900,
             type: 'triangle',
@@ -103,7 +87,7 @@ export class AudioSynthesizer {
 
     winChord() {
         const now = this.ctx.currentTime;
-        const notes = [523.25, 659.25, 783.99]; // C - E - G
+        const notes = [523.25, 659.25, 783.99];
 
         notes.forEach((freq, i) => {
             this.tone({
@@ -116,7 +100,6 @@ export class AudioSynthesizer {
             });
         });
 
-        // Brillo final
         this.tone({
             freq: 1567.98,
             type: 'triangle',
@@ -127,10 +110,6 @@ export class AudioSynthesizer {
             highpass: 800
         });
     }
-
-    // ------------------------
-    //  Motor de síntesis base
-    // ------------------------
 
     tone({
         freq,
@@ -154,7 +133,6 @@ export class AudioSynthesizer {
 
         let node = osc;
 
-        // Filtros opcionales
         if (lowpass || highpass) {
             const filter = this.ctx.createBiquadFilter();
             filter.type = lowpass ? 'lowpass' : 'highpass';
