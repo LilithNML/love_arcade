@@ -1,0 +1,215 @@
+/**
+ * api/report.js — Love Arcade v12.0
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Proxy Serverless para Telemetría Segura — Vercel Edge Function
+ *
+ * RESPONSABILIDADES:
+ *  1. Validar que la petición sea POST y provenga del dominio de producción.
+ *  2. Sanitizar el nickname del jugador para evitar inyecciones HTML.
+ *  3. Clasificar el evento en el hilo (Topic) de Telegram correspondiente.
+ *  4. Construir el mensaje en modo HTML con emojis identificadores y
+ *     timestamp de servidor para contrastar con el del cliente.
+ *  5. Entregar el mensaje a la API de Telegram y devolver un estado 500
+ *     silencioso al frontend si la API upstream falla, sin interrumpir el juego.
+ *
+ * VARIABLES DE ENTORNO REQUERIDAS (Vercel → Settings → Environment Variables):
+ *   TELEGRAM_BOT_TOKEN   Token del bot obtenido vía @BotFather.
+ *   TELEGRAM_CHAT_ID     ID del grupo/canal destino (negativo para grupos).
+ *   PRODUCTION_DOMAIN    Dominio de producción (ej: love-arcade.vercel.app).
+ *                        Puede ser parcial — se usa `.includes()` sobre el origen.
+ *
+ * MAPEO DE HILOS (message_thread_id):
+ *   analytics   → Topic ID 2  — 📈 Analíticas
+ *   achievement → Topic ID 3  — 🏆 Logros
+ *   bug         → Topic ID 4  — 🚨 Bugs
+ *
+ * CONTRATO DE ENTRADA (payload JSON vía POST /api/report):
+ *   {
+ *     "type":  "analytics" | "bug" | "achievement",
+ *     "user":  "nickname_desde_storage",
+ *     "event": "nombre_del_evento",
+ *     "data":  { "clave": "valor", ... }   ← detalles técnicos opcionales
+ *   }
+ *
+ * SEGURIDAD:
+ *   - El TELEGRAM_BOT_TOKEN nunca abandona el servidor.
+ *   - Los caracteres HTML especiales del nickname y los datos son escapados
+ *     antes de inyectarse en el mensaje, eliminando el riesgo de inyección.
+ *   - Errores upstream de Telegram (rate limit, ban, etc.) se loguean en
+ *     el servidor y se devuelve HTTP 500 sin cuerpo descriptivo al cliente.
+ *
+ * COMPATIBILIDAD:
+ *   - Runtime: Node.js 18+ (Vercel Serverless Functions).
+ *   - `fetch` nativo disponible a partir de Node 18; no requiere dependencias.
+ */
+
+export default async function handler(req, res) {
+  
+  // ── 1. Validación de método HTTP ──────────────────────────────────────────
+  //
+  // Solo se aceptan peticiones POST. Cualquier otro método (GET, HEAD, OPTIONS…)
+  // recibe un 405 para evitar que crawlers o scrapers consuman el endpoint.
+  //
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+  
+  // ── 2. Seguridad de origen ────────────────────────────────────────────────
+  //
+  // Valida que la petición provenga del dominio de producción registrado en
+  // la variable de entorno PRODUCTION_DOMAIN. La validación se hace sobre el
+  // header `origin` (enviado por navegadores en peticiones cross-origin) o
+  // `referer` como fallback. Si PRODUCTION_DOMAIN no está configurado, la
+  // validación se omite para no bloquear entornos de preview de Vercel.
+  //
+  const PRODUCTION_DOMAIN = process.env.PRODUCTION_DOMAIN || '';
+  
+  if (PRODUCTION_DOMAIN) {
+    const origin = req.headers['origin'] || req.headers['referer'] || '';
+    if (!origin.includes(PRODUCTION_DOMAIN)) {
+      console.warn('[report.js] Origen no autorizado:', origin);
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  }
+  
+  // ── 3. Mapeo de hilos (Topics) de Telegram ────────────────────────────────
+  //
+  // Los IDs deben coincidir con los obtenidos al crear los Topics en el grupo.
+  // Para obtenerlos: envía un mensaje en el Topic y usa getUpdates() en la API.
+  //
+  const THREAD_IDS = {
+    analytics: 2, // 📈 Analíticas — métricas de uso y sesión
+    achievement: 3, // 🏆 Logros     — compras, códigos, bonos diarios
+    bug: 4, // 🚨 Bugs       — errores capturados y códigos inválidos
+  };
+  
+  // ── 4. Emojis identificadores por tipo ────────────────────────────────────
+  //
+  // Facilitan la lectura rápida en el panel de Telegram desde móvil.
+  //
+  const TYPE_EMOJIS = {
+    analytics: '📈',
+    achievement: '🏆',
+    bug: '🚨',
+  };
+  
+  // ── 5. Parseo del payload y validación de tipos ───────────────────────────
+  const {
+    type = 'analytics',
+      user = 'desconocido',
+      event = 'unknown',
+      data = {},
+  } = req.body || {};
+  
+  // Normalizar el tipo: si no es un valor conocido, caer en 'analytics'
+  const safeType = Object.prototype.hasOwnProperty.call(THREAD_IDS, type) ?
+    type :
+    'analytics';
+  
+  const threadId = THREAD_IDS[safeType];
+  const emoji = TYPE_EMOJIS[safeType];
+  
+  // ── 6. Sanitización contra inyecciones HTML ───────────────────────────────
+  //
+  // Telegram parsea el mensaje en modo HTML. Sin esta sanitización, un nickname
+  // malicioso como "<b>hacked</b>" podría alterar el formato del mensaje.
+  // Se escapan los cinco caracteres especiales del estándar HTML5.
+  //
+  function sanitize(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+  
+  const safeUser = sanitize(user).slice(0, 50);
+  const safeEvent = sanitize(event).slice(0, 80);
+  
+  // ── 7. Timestamp del servidor ─────────────────────────────────────────────
+  //
+  // Permite contrastar la hora del servidor con el `timestamp` del cliente
+  // incluido en `data`, útil para detectar relojes desincronizados o eventos
+  // retardados por la cola del Human Gate.
+  //
+  const serverTimestamp = new Date().toISOString();
+  
+  // ── 8. Construcción del mensaje en modo HTML ──────────────────────────────
+  //
+  // Formato Telegram HTML soportado: <b>, <i>, <code>, <pre>, <a>.
+  // Se evita <u> y <s> por compatibilidad con clientes Telegram más antiguos.
+  //
+  const dataEntries = Object.entries(data || {})
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `  <code>${sanitize(k)}:</code> ${sanitize(String(v))}`)
+    .join('\n');
+  
+  const eventLabel = safeEvent.replace(/_/g, ' ').toUpperCase();
+  
+  const text = [
+    `${emoji} <b>${eventLabel}</b>`,
+    '',
+    `👤 <b>Usuario:</b> <code>${safeUser}</code>`,
+    `📌 <b>Tipo:</b>    <i>${safeType}</i>`,
+    '',
+    dataEntries ?
+    `📋 <b>Datos:</b>\n${dataEntries}` :
+    '<i>Sin metadatos adicionales.</i>',
+    '',
+    `🕐 <b>Servidor:</b> <code>${serverTimestamp}</code>`,
+    `<i>Love Arcade · Ghost Analytics v12.0</i>`,
+  ].join('\n');
+  
+  // ── 9. Lectura de credenciales y envío a Telegram ─────────────────────────
+  //
+  // Las credenciales se leen en tiempo de ejecución desde process.env para
+  // garantizar que nunca sean expuestas al cliente ni aparezcan en el bundle.
+  //
+  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+  
+  if (!BOT_TOKEN || !CHAT_ID) {
+    console.error(
+      '[report.js] ❌ Variables de entorno no configuradas.',
+      'Asegúrate de definir TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en Vercel.'
+    );
+    // 500 silencioso: el frontend no debe saber la causa interna
+    return res.status(500).json({ error: 'Server misconfiguration' });
+  }
+  
+  const telegramApiUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+  
+  try {
+    const tgResponse = await fetch(telegramApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        message_thread_id: threadId,
+        text,
+        parse_mode: 'HTML',
+      }),
+    });
+    
+    if (!tgResponse.ok) {
+      // Rate limit (429), bot bloqueado (403), Topic eliminado (400)…
+      // Se loguea en el servidor para diagnóstico pero el juego no se interrumpe.
+      const errBody = await tgResponse.json().catch(() => ({}));
+      console.warn(
+        `[report.js] ⚠️  Telegram API respondió HTTP ${tgResponse.status}`,
+        '— Evento:', event,
+        '— Respuesta:', JSON.stringify(errBody)
+      );
+      return res.status(500).json({ error: 'Upstream error' });
+    }
+    
+    // ✅ Entregado con éxito
+    return res.status(200).json({ ok: true });
+    
+  } catch (networkErr) {
+    // Error de red entre Vercel y Telegram (timeout, DNS, etc.)
+    console.error('[report.js] ❌ Error de red al contactar Telegram:', networkErr.message);
+    return res.status(500).json({ error: 'Network error' });
+  }
+}

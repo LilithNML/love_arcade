@@ -1,8 +1,36 @@
 /**
- * analytics.js — Love Arcade v11.0
+ * analytics.js — Love Arcade v12.0
  * ─────────────────────────────────────────────────────────────────────────────
  * Sistema de Analíticas "Ghost" — Captura eventos de interacción y los envía
- * en tiempo real a un canal privado de Discord mediante Webhooks HTTP.
+ * en tiempo real al canal privado de Telegram a través del Proxy Serverless
+ * `/api/report` desplegado en Vercel.
+ *
+ * CAMBIOS v12.0 (Migración a Telegram Proxy — Infraestructura de Telemetría Segura):
+ *
+ *  ── Migración de transporte ───────────────────────────────────────────────
+ *  - ELIMINADO el Webhook de Discord y el array XOR de ofuscación (_r).
+ *  - NUEVO endpoint: ruta relativa `/api/report` (Vercel Serverless Function).
+ *    Vercel resuelve automáticamente la función sin configuración adicional.
+ *  - El TELEGRAM_BOT_TOKEN y el TELEGRAM_CHAT_ID nunca abandonan el servidor.
+ *    El frontend solo conoce la ruta interna del proxy.
+ *
+ *  ── Nuevo contrato de datos (Payload ligero) ───────────────────────────────
+ *  - El frontend envía un objeto mínimo al proxy:
+ *      { type, user, event, data }
+ *  - El proxy se encarga del formateo en HTML, la inyección del timestamp
+ *    de servidor y la clasificación en el Topic (hilo) correcto de Telegram.
+ *  - El frontend ya no construye ni embeds ni mensajes: principio de
+ *    responsabilidad única.
+ *
+ *  ── Clasificación automática de eventos por tipo ──────────────────────────
+ *  - _EVENT_TYPE_MAP asigna cada nombre de evento a uno de los tres tipos:
+ *      "analytics"   → Topic 2 (📈) — métricas de uso y sesión
+ *      "achievement" → Topic 3 (🏆) — compras, códigos, bonos diarios
+ *      "bug"         → Topic 4 (🚨) — errores capturados y códigos inválidos
+ *
+ *  ── Sin cambios en la lógica de seguridad ─────────────────────────────────
+ *  - El Doble Candado (Anti-Bot + Anti-Localhost) y el Human Gate se mantienen
+ *    intactos. Solo la capa de transporte ha sido refactorizada.
  *
  * CAMBIOS v11.0 (Doble Candado — Anti-Bot + Human Gate):
  *
@@ -28,13 +56,13 @@
  *    encola en _pendingQueue (máx. 50 items) para su envío posterior.
  *
  *  ── Nickname obligatorio en todos los payloads ────────────────────────────
- *  - Todas las peticiones al Webhook incluyen el campo 'usuario' con el nickname
+ *  - Todas las peticiones al Proxy incluyen el campo 'user' con el nickname
  *    del jugador, leído por _getNickname() desde localStorage.
  *  - Si el gate se abre por interacción real pero el nickname aún no está
  *    disponible (usuario nuevo en Identity Modal), los eventos permanecen en
  *    _pendingQueue. _startNicknamePoller() lanza un sondeo cada 500 ms hasta
  *    detectar el nickname, momento en que _flushPendingQueue() envía todos los
- *    eventos acumulados con el campo 'usuario' ya disponible.
+ *    eventos acumulados con el campo 'user' ya disponible.
  *  - El poller se auto-cancela al encontrar el nickname, o tras 10 minutos
  *    (NICKNAME_POLL_TIMEOUT_MS) para evitar pollers zombi.
  *
@@ -81,7 +109,7 @@
  *   1. Verificar que el módulo cargó:
  *      Busca en consola → "[GhostAnalytics] ✅ Módulo listo"
  *
- *   2. Enviar un evento de prueba a Discord:
+ *   2. Enviar un evento de prueba al Proxy:
  *      window.GhostAnalytics.test()
  *
  *   3. Activar logs detallados (muestra cada evento antes de enviarse):
@@ -111,13 +139,15 @@
  *    de errores mediante WeakSet de promesas en vuelo.
  *  - Rate limiting: máximo 1 evento idéntico cada 3 s.
  *  - Sin datos personales: sin IPs, IDs de usuario ni cookies. El campo
- *    'usuario' contiene únicamente el nickname elegido por el propio jugador.
+ *    'user' contiene únicamente el nickname elegido por el propio jugador.
  *  - Silencioso en producción: ningún console.log salvo errores reales y
  *    el mensaje de carga inicial.
  *  - Degradación elegante: si el módulo no carga, las llamadas con ?.track()
  *    en app.js y shop-logic.js son no-operativas.
  *  - Human-only: ningún evento se envía sin confirmación de actividad humana
  *    real o presencia de un nickname ya configurado en el store local.
+ *  - Token seguro: el bot token de Telegram nunca abandona el servidor.
+ *    El frontend solo conoce la ruta relativa del proxy (/api/report).
  *
  * ORDEN DE CARGA REQUERIDO EN index.html:
  *   <script src="js/analytics.js"></script>   ← primero
@@ -368,37 +398,36 @@
             return;
         }
 
-        // Nickname disponible — vaciar y enviar toda la cola acumulada
-        const items = _pendingQueue.splice(0);
-        if (items.length === 0) return;
-
-        _log(`📤 Enviando ${items.length} evento(s) desde la cola pendiente (usuario: ${nickname})…`);
-        items.forEach(({ event, meta }) => {
-            // Aplicar rate limiting normal al enviar desde la cola
+        // Vaciar la cola enviando cada evento con el nickname ya disponible
+        while (_pendingQueue.length > 0) {
+            const { event, meta } = _pendingQueue.shift();
             const key = `${event}:${JSON.stringify(meta)}`;
-            if (_isRateLimited(key)) return;
-            _send(event, { usuario: nickname, ...meta });
-        });
+            if (_isRateLimited(key)) continue;
+            _send(event, { ...meta }, nickname);
+        }
+        _log(`📤 Cola vaciada. ${_pendingQueue.length} eventos pendientes restantes.`);
     }
 
     /**
-     * Inicia el sondeo periódico de nickname (cada 500 ms).
-     * Al detectar el nickname, cancela el poller y vacía la cola.
-     * Se auto-cancela tras _NICKNAME_POLL_TIMEOUT_MS para evitar pollers zombi.
+     * Inicia el sondeo periódico del nickname (cada 500 ms).
+     * Al detectar el nickname, cancela el intervalo y vacía la cola.
+     * Se cancela automáticamente tras NICKNAME_POLL_TIMEOUT_MS para
+     * evitar pollers zombi en sesiones donde el usuario nunca configura su nick.
      */
     function _startNicknamePoller() {
-        if (_nicknamePoller) return; // Ya está corriendo
+        // No iniciar un segundo poller si ya hay uno activo
+        if (_nicknamePoller) return;
 
         _nicknamePollerStart = Date.now();
-        _log('⏳ Nickname poller iniciado — esperando al Identity Modal…');
+        _log('⏳ Nickname poller iniciado (sondeo cada 500 ms, máx 10 min)…');
 
         _nicknamePoller = setInterval(() => {
-            // Timeout de seguridad: cancelar si lleva más de 10 minutos
-            if (Date.now() - _nicknamePollerStart > _NICKNAME_POLL_TIMEOUT_MS) {
+            // Timeout de seguridad — evitar pollers zombi
+            if (Date.now() - _nicknamePollerStart >= _NICKNAME_POLL_TIMEOUT_MS) {
                 clearInterval(_nicknamePoller);
                 _nicknamePoller = null;
-                _pendingQueue.length = 0; // Descartar cola obsoleta
-                _log('⌛ Nickname poller cancelado por timeout (10 min). Cola descartada.');
+                _log('⚠️ Nickname poller cancelado por timeout (10 min). Cola descartada.');
+                _pendingQueue.length = 0;
                 return;
             }
 
@@ -434,8 +463,6 @@
         // ── Ruta A: usuario recurrente con nickname ──────────────────────────
         if (_getNickname()) {
             _humanGateUnlocked = true;
-            // El log se emite después, cuando _debugMode puede estar activo.
-            // Se omite aquí para no spammear la consola en carga normal.
             return;
         }
 
@@ -450,31 +477,44 @@
         window .addEventListener('scroll',   _onFirstInteraction, { once: true, passive: true });
     })();
 
-    // ── Endpoint — ofuscación XOR (clave: 42) ────────────────────────────────
+    // ── Endpoint del Proxy (v12.0) ────────────────────────────────────────────
     //
-    // Array generado programáticamente y verificado con round-trip en Python:
-    //   url  = "https://discord.com/api/webhooks/…"
-    //   xored = [ord(c) ^ 42 for c in url]
-    //   assert ''.join(chr(v ^ 42) for v in xored) == url  # True
+    // Ruta relativa a la Vercel Serverless Function. Al ser relativa, Vercel
+    // la resuelve automáticamente al mismo dominio de producción sin configuración
+    // adicional. No se ofusca porque no contiene credenciales sensibles.
     //
-    // Reconstrucción en runtime:
-    //   String.fromCharCode(..._r.map(c => c ^ 42))
-    //
-    // No protege contra DevTools; sí evita scrapers de texto plano y grep.
-    const _r = [
-         66, 94, 94, 90, 89, 16,  5,  5, 78, 67, 89, 73, 69, 88,
-         78,  4, 73, 69, 71,  5, 75, 90, 67,  5, 93, 79, 72, 66,
-         69, 69, 65, 89,  5, 27, 30, 18, 31, 24, 28, 31, 19, 19,
-         19, 30, 18, 26, 30, 19, 24, 26, 30, 24,  5, 69,115, 95,
-        122,103, 75, 27,115, 92,122, 99,109,112, 66, 76,124,109,
-         83, 72, 27,103,108,102,103,115, 19, 64,109, 68, 97,101,
-         69,104, 97,100, 78,122,105,110,115,109, 28, 69, 82,102,
-        125,108,124, 83,121, 88, 91, 73,101, 83, 69, 92,120, 66,
-        120,104,100, 94,125, 97, 26, 77, 83
-    ];
+    const _PROXY_ENDPOINT = '/api/report';
 
-    function _endpoint() {
-        return String.fromCharCode(..._r.map(c => c ^ 42));
+    // ── Clasificación de eventos por tipo (v12.0) ─────────────────────────────
+    //
+    // El proxy usa este tipo para enrutar cada mensaje al Topic correcto de Telegram:
+    //   "analytics"   → Topic 2 (📈) — métricas de uso general
+    //   "achievement" → Topic 3 (🏆) — logros del jugador
+    //   "bug"         → Topic 4 (🚨) — errores y comportamientos anómalos
+    //
+    // Los eventos no listados aquí caen en "analytics" por defecto.
+    //
+    const _EVENT_TYPE_MAP = {
+        // ── Bugs / Errores ────────────────────────────────────────────────────
+        detected_error:           'bug',
+        invalid_promo_code:       'bug',
+        wordsearch_content_alert: 'bug',    // Alerta de agotamiento de contenido
+        // ── Logros del jugador ────────────────────────────────────────────────
+        buy_item:                 'achievement',
+        redeem_code:              'achievement',
+        daily_bonus:              'achievement',
+        // ── Analíticas (default) — no necesitan entrada explícita ─────────────
+        // view_preview, click_download, open_game, insufficient_funds,
+        // wishlist_add, user_snapshot, sync_export → 'analytics'
+    };
+
+    /**
+     * Resuelve el tipo de evento para el campo `type` del payload del proxy.
+     * @param {string} event
+     * @returns {"analytics"|"achievement"|"bug"}
+     */
+    function _resolveEventType(event) {
+        return _EVENT_TYPE_MAP[event] || 'analytics';
     }
 
     // ── Estado interno ────────────────────────────────────────────────────────
@@ -490,42 +530,24 @@
     /** Intervalo mínimo entre eventos con la misma clave (ms). */
     const RATE_LIMIT_MS = 3000;
 
-    // ── Metadatos visuales por tipo de evento ─────────────────────────────────
-
-    const EVENT_COLORS = {
-        view_preview:        0x9b59ff,   // Violeta
-        click_download:      0x22d07a,   // Verde esmeralda
-        buy_item:            0xfbbf24,   // Dorado
-        redeem_code:         0xff59b4,   // Rosa neón
-        open_game:           0x00d4ff,   // Cyan Arcade
-        detected_error:      0xe11d48,   // Carmesí
-        // ── v9.9.2 ──────────────────────────────────────────────────────────
-        invalid_promo_code:  0xf97316,   // Naranja — intento de código incorrecto
-        insufficient_funds:  0xef4444,   // Rojo — intento de compra sin saldo
-        wishlist_add:        0xec4899,   // Rosa — ítem añadido a la lista de deseos
-        daily_bonus:         0x4ade80,   // Verde lima — bono diario reclamado
-        user_snapshot:       0x38bdf8,   // Celeste — instantánea de estado por sesión
-        sync_export:         0xa78bfa,   // Violeta suave — exportación de partida
-        // ── v11.1 — Word Hunt ───────────────────────────────────────────────
-        wordsearch_content_alert: 0xff9500  // Ámbar — alerta de agotamiento de contenido
-    };
+    // ── Emojis identificadores por evento (para logs de consola) ──────────────
 
     const EVENT_EMOJIS = {
-        view_preview:        '👁️',
-        click_download:      '⬇️',
-        buy_item:            '🛒',
-        redeem_code:         '🎁',
-        open_game:           '🎮',
-        detected_error:      '🚨',
+        view_preview:             '👁️',
+        click_download:           '⬇️',
+        buy_item:                 '🛒',
+        redeem_code:              '🎁',
+        open_game:                '🎮',
+        detected_error:           '🚨',
         // ── v9.9.2 ──────────────────────────────────────────────────────────
-        invalid_promo_code:  '🔑',
-        insufficient_funds:  '💸',
-        wishlist_add:        '💜',
-        daily_bonus:         '🌟',
-        user_snapshot:       '📊',
-        sync_export:         '💾',
+        invalid_promo_code:       '🔑',
+        insufficient_funds:       '💸',
+        wishlist_add:             '💜',
+        daily_bonus:              '🌟',
+        user_snapshot:            '📊',
+        sync_export:              '💾',
         // ── v11.1 — Word Hunt ───────────────────────────────────────────────
-        wordsearch_content_alert: '📉'
+        wordsearch_content_alert: '📉',
     };
 
     // ── Logging condicional ───────────────────────────────────────────────────
@@ -546,46 +568,41 @@
         return false;
     }
 
-    // ── Envío ─────────────────────────────────────────────────────────────────
+    // ── Envío al Proxy (v12.0) ────────────────────────────────────────────────
 
     /**
-     * Construye el embed de Discord y lo envía.
+     * Construye el payload ligero y lo envía al Proxy Serverless /api/report.
      * Fire-and-forget: el caller nunca espera. Los errores de red se loguean
      * en consola pero nunca se propagan.
      *
-     * El campo 'usuario' DEBE estar presente en meta antes de llamar a _send().
-     * track() se encarga de inyectarlo; _send() no lo añade por sí mismo para
-     * mantener el principio de responsabilidad única.
+     * El proxy se encarga de:
+     *   - Clasificar el mensaje en el Topic correcto de Telegram.
+     *   - Formatear el HTML del mensaje con emojis y timestamp de servidor.
+     *   - Proteger el bot token de Telegram (nunca se expone al cliente).
      *
-     * @param {string}      event
-     * @param {object|null} meta
-     * @param {boolean}     [isTest=false]  Omite el rate limiter.
+     * @param {string}      event     Nombre del evento.
+     * @param {object|null} meta      Metadatos técnicos del evento.
+     * @param {string}      nickname  Nickname resuelto del jugador.
+     * @param {boolean}     [isTest=false]  Omite el rate limiter en test().
      */
-    function _send(event, meta, isTest) {
-        const emoji       = EVENT_EMOJIS[event] || '📊';
-        const color       = EVENT_COLORS[event]  || 0x9b59ff;
-        const description = (meta && Object.keys(meta).length)
-            ? Object.entries(meta).map(([k, v]) => `**${k}:** ${v}`).join('\n')
-            : '*sin metadatos*';
+    function _send(event, meta, nickname, isTest) {
+        const emoji = EVENT_EMOJIS[event] || '📊';
+        _log('→ Enviando al Proxy:', emoji, event, meta || '');
 
+        // Payload ligero — el proxy gestiona el formateo final
         const payload = {
-            embeds: [{
-                title:       `${emoji} ${event.replace(/_/g, ' ').toUpperCase()}`,
-                description,
-                color,
-                footer:    { text: `Love Arcade · Ghost Analytics v11.1${isTest ? ' · TEST' : ''}` },
-                timestamp: new Date().toISOString()
-            }]
+            type:  _resolveEventType(event),
+            user:  nickname,
+            event: isTest ? `${event} [TEST]` : event,
+            data:  meta && Object.keys(meta).length ? meta : {},
         };
 
-        _log('→ Enviando:', event, meta || '');
-
-        // keepalive:true — el request sobrevive a navegaciones de página.
-        const promise = fetch(_endpoint(), {
+        // keepalive: true — el request sobrevive a navegaciones de página
+        const promise = fetch(_PROXY_ENDPOINT, {
             method:    'POST',
             headers:   { 'Content-Type': 'application/json' },
             body:      JSON.stringify(payload),
-            keepalive: true
+            keepalive: true,
         });
 
         // Registrar en WeakSet ANTES de encadenar then/catch para que el
@@ -594,14 +611,15 @@
 
         promise
             .then(res => {
-                // Discord responde 204 No Content en éxito; cualquier 2xx es válido.
-                if (res.ok || res.status === 204) {
-                    _log('✅ Entregado:', event, `(HTTP ${res.status})`);
+                if (res.ok) {
+                    _log('✅ Entregado al Proxy:', event, `(HTTP ${res.status})`);
                 } else {
-                    // Errores 4xx/5xx del Webhook (URL revocada, canal eliminado…)
-                    console.warn('[GhostAnalytics] Webhook respondió HTTP', res.status,
+                    // El proxy devuelve 4xx/5xx — puede ser un error de Telegram upstream
+                    console.warn(
+                        '[GhostAnalytics] Proxy respondió HTTP', res.status,
                         '— Evento:', event,
-                        '| Posibles causas: URL revocada, canal eliminado, Webhook desactivado.');
+                        '| Revisa los logs de la función serverless en Vercel.'
+                    );
                 }
             })
             .catch(err => {
@@ -612,8 +630,8 @@
                     err.message,
                     '\n  Posibles causas:',
                     '\n  · Sin conexión a internet',
-                    '\n  · CSP del servidor bloquea peticiones a discord.com',
-                    '\n  · URL del Webhook inválida o caducada',
+                    '\n  · La función serverless /api/report no está desplegada',
+                    '\n  · CSP del servidor bloquea peticiones internas',
                     '\n  → Ejecuta window.GhostAnalytics.test() para diagnosticar.'
                 );
             });
@@ -622,7 +640,7 @@
     // ── API pública ───────────────────────────────────────────────────────────
 
     /**
-     * Registra un evento analítico y lo envía al canal de Discord.
+     * Registra un evento analítico y lo envía al Proxy /api/report.
      *
      * Flujo de validación (en orden):
      *   1. Shadow-Gate activo → descarte silencioso.
@@ -631,7 +649,7 @@
      *   4. Human Gate cerrado → encolar en _pendingQueue (máx. 50 items).
      *   5. Nickname no disponible → encolar e iniciar nickname poller.
      *   6. Rate limit activo → descarte silencioso.
-     *   7. OK → _send() con { usuario: nickname, ...meta }.
+     *   7. OK → _send() con el payload { type, user, event, data }.
      *
      * Uso:
      *   window.GhostAnalytics.track('view_preview',   { wallpaper: 'Cyber Neon' });
@@ -641,10 +659,10 @@
      *   window.GhostAnalytics.track('open_game',      { juego: 'dodge' });
      *   window.GhostAnalytics.track('detected_error', { mensaje: '...', tipo: '...' });
      *
-     * Nota: 'usuario' NO debe pasarse en meta — se inyecta automáticamente.
+     * Nota: 'user' NO debe pasarse en meta — se inyecta automáticamente desde localStorage.
      *
      * @param {string} event   Nombre del evento.
-     * @param {object} [meta]  Metadatos opcionales (sin 'usuario').
+     * @param {object} [meta]  Metadatos opcionales (sin 'user').
      */
     function track(event, meta) {
         try {
@@ -692,8 +710,8 @@
             const key = `${event}:${JSON.stringify(meta || {})}`;
             if (_isRateLimited(key)) return;
 
-            // ── 7. Envío — nickname inyectado como primer campo ───────────────
-            _send(event, { usuario: nickname, ...(meta || {}) });
+            // ── 7. Envío al Proxy ─────────────────────────────────────────────
+            _send(event, meta || {}, nickname);
 
         } catch (err) {
             // Error interno inesperado — nunca debe romper la UI
@@ -702,11 +720,11 @@
     }
 
     /**
-     * Envía un evento de prueba a Discord, saltando el rate limiter.
-     * Confirma que el Webhook está activo y que el módulo está funcionando.
+     * Envía un evento de prueba al Proxy /api/report, saltando el rate limiter.
+     * Confirma que la función serverless está activa y que el módulo funciona.
      *
      * Respeta Shadow-Gate, Anti-Localhost y Anti-Bot.
-     * El campo 'usuario' se incluye con el nickname real o '(sin nickname)'.
+     * El campo 'user' se incluye con el nickname real o '(sin nickname)'.
      *
      * Ejecutar desde DevTools:  window.GhostAnalytics.test()
      */
@@ -725,7 +743,7 @@
             console.warn(
                 '%c[GhostAnalytics] 🏠 Localhost detectado',
                 'color:#f97316;font-weight:bold',
-                '— test() bloqueado. El Webhook no se activa en entornos locales.',
+                '— test() bloqueado. El Proxy no se activa en entornos locales.',
                 '\n  Despliega en producción y abre con el token de Shadow-Gate para probar.'
             );
             return;
@@ -742,12 +760,14 @@
         }
 
         const nickname = _getNickname() || '(sin nickname)';
-        console.log('[GhostAnalytics] Enviando evento de prueba…');
-        _send('open_game', {
-            usuario: nickname,
-            juego:   '✅ TEST — Webhook activo y módulo cargado correctamente'
-        }, /* isTest= */ true);
-        console.log('[GhostAnalytics] Petición enviada. Revisa el canal de Discord.');
+        console.log('[GhostAnalytics] Enviando evento de prueba al Proxy…');
+        _send(
+            'open_game',
+            { juego: '✅ TEST — Proxy activo y módulo cargado correctamente' },
+            nickname,
+            /* isTest= */ true
+        );
+        console.log('[GhostAnalytics] Petición enviada. Revisa el Topic de Analíticas en Telegram.');
     }
 
     /**
@@ -775,6 +795,7 @@
                 '\n  → Nickname detectado:', _getNickname() || '(ninguno)',
                 '\n  → Localhost:', _isLocalhost(),
                 '\n  → Bot UA:', _isBot(),
+                '\n  → Proxy endpoint:', _PROXY_ENDPOINT,
                 '\n  → Desactivar con: window.GhostAnalytics.debug(false)'
             );
         } else {
@@ -801,7 +822,7 @@
         });
 
         console.log(
-            '%c[GhostAnalytics] Estado actual (v11.0)',
+            '%c[GhostAnalytics] Estado actual (v12.0)',
             'color:#9b59ff;font-weight:bold',
             // ── Candado 0: Shadow-Gate ──
             `\n\n  🔕 Shadow-Gate: ${gated
@@ -826,6 +847,8 @@
             // ── Cola pendiente ──
             `\n  📥 Cola pendiente: ${_pendingQueue.length} evento(s)` +
                 (_nicknamePoller ? ' · Nickname poller ACTIVO ⏳' : ''),
+            // ── Proxy ──
+            `\n  🔗 Proxy endpoint: ${_PROXY_ENDPOINT}`,
             // ── Debug ──
             `\n  🔍 Debug mode: ${_debugMode}`,
             // ── Rate limiter ──
@@ -836,7 +859,7 @@
     // ── Captura automática de errores globales ────────────────────────────────
 
     /**
-     * Clasifica un error según su constructor para enriquecer el mensaje de Discord.
+     * Clasifica un error según su constructor para enriquecer el mensaje de Telegram.
      * @param {Error|null} err
      * @returns {string}
      */
@@ -938,7 +961,7 @@
     // Candado completo. Esto significa que los errores generados por bots,
     // en localhost, o antes de que haya actividad humana, quedan retenidos
     // o descartados según las reglas de la criba. El comportamiento es correcto:
-    // los errores de entornos controlados no deben saturar el canal de Discord.
+    // los errores de entornos controlados no deben saturar el Topic de Bugs.
     //
     window.addEventListener('error', (e) => {
         try {
@@ -1032,27 +1055,28 @@
 
         if (gated) {
             console.log(
-                '%c[GhostAnalytics] 🔕 Módulo cargado en modo silencioso (v11.1) — Shadow-Gate activo.',
+                '%c[GhostAnalytics] 🔕 Módulo cargado en modo silencioso (v12.0) — Shadow-Gate activo.',
                 'color:#f97316;font-weight:bold',
                 '| Esta sesión está excluida de las analíticas.',
                 '| status(): ver estado | debug(true): activar logs'
             );
         } else if (isLocal) {
             console.log(
-                '%c[GhostAnalytics] 🏠 Módulo cargado (v11.1) — LOCALHOST detectado.',
+                '%c[GhostAnalytics] 🏠 Módulo cargado (v12.0) — LOCALHOST detectado.',
                 'color:#f97316;font-weight:bold',
                 '| Todos los envíos están bloqueados en entorno local.',
                 '| status(): ver estado | debug(true): activar logs'
             );
         } else if (isRobot) {
             console.log(
-                '[GhostAnalytics] 🤖 Módulo cargado (v11.1) — Bot UA detectado. Envíos bloqueados.'
+                '[GhostAnalytics] 🤖 Módulo cargado (v12.0) — Bot UA detectado. Envíos bloqueados.'
             );
         } else {
             console.log(
-                '[GhostAnalytics] ✅ Módulo listo (v11.1).',
+                '[GhostAnalytics] ✅ Módulo listo (v12.0).',
                 '| Human Gate:', hasNick ? 'ABIERTO (nickname existente) 🔓' : 'EN ESPERA (primera interacción) 🔒',
-                '| test(): probar Webhook',
+                '| Proxy:', _PROXY_ENDPOINT,
+                '| test(): probar Proxy',
                 '| debug(true): activar logs',
                 '| status(): ver estado interno'
             );

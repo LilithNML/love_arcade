@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v11.1 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
+### Plataforma de Recompensas · v12.0 Telegram Proxy & Secure Telemetry · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v12.0 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
 
 ---
 
@@ -32,6 +32,7 @@
 2y. [Novedades en v11.5 — Performance & Accessibility Audit](#2y-novedades-en-v115--performance--accessibility-audit)
 2z. [Novedades en Ghost Analytics v11.0 — Doble Candado (Anti-Bot + Human Gate)](#2z-novedades-en-ghost-analytics-v110--doble-candado-anti-bot--human-gate)
 2aa. [Novedades en v11.1 — Word Hunt: Métricas de Progresión](#2aa-novedades-en-v111--word-hunt-métricas-de-progresión)
+2ab. [Novedades en v12.0 — Infraestructura de Telemetría Segura (Telegram Proxy)](#2ab-novedades-en-v120--infraestructura-de-telemetría-segura-telegram-proxy)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -4405,5 +4406,195 @@ sessionStorage.removeItem('la_ws_alert_last_remaining');
 
 ---
 
-*Love Arcade · Documentación técnica v11.1 + Ghost Analytics v11.1 (Doble Candado + Word Hunt Progression Metrics)*
-*Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*
+## 2ab. Novedades en v12.0 — Infraestructura de Telemetría Segura (Telegram Proxy)
+
+### Contexto y motivación
+
+Hasta v11.1, Ghost Analytics enviaba los eventos directamente a un Webhook de Discord desde el navegador. El token del Webhook, aunque ofuscado con XOR en el array `_r`, era recuperable desde DevTools. Adicionalmente, el frontend construía los embeds completos, mezclando la lógica de presentación con la de captura.
+
+v12.0 resuelve ambos problemas mediante una **Función Serverless en Vercel** que actúa como proxy hacia la API de Telegram.
+
+---
+
+### Nuevos archivos
+
+| Archivo | Tipo | Descripción |
+|---|---|---|
+| `api/report.js` | **Nuevo** | Proxy Serverless. Único punto de contacto con la API de Telegram. Gestiona seguridad de origen, sanitización, clasificación en Topics y formateo HTML. |
+| `js/analytics.js` | **Modificado** | Versión bumped a v12.0. Eliminado el array XOR `_r` y `_endpoint()`. Nuevo `_PROXY_ENDPOINT`, `_EVENT_TYPE_MAP` y `_resolveEventType()`. `_send()` refactorizado para el nuevo contrato de datos. |
+| `.env` | **Nuevo** | Variables de entorno para desarrollo local (ignorado en Git). |
+| `DOCUMENTACION.md` | **Modificado** | Sección §2ab añadida. ToC y header actualizados a v12.0. |
+
+---
+
+### Arquitectura del nuevo flujo
+
+```
+Navegador (js/analytics.js)
+        │
+        │  POST /api/report
+        │  { type, user, event, data }
+        ▼
+Vercel Serverless (api/report.js)
+        │  Validación de método + origen
+        │  Sanitización de nickname
+        │  Construcción del mensaje HTML
+        │  Resolución del Topic (thread_id)
+        │
+        │  POST api.telegram.org/bot{TOKEN}/sendMessage
+        ▼
+Telegram (Topic correcto del grupo)
+```
+
+---
+
+### Backend — `api/report.js`
+
+#### Gestión de hilos (Topics)
+
+| Tipo de evento  | `message_thread_id` | Emoji | Topic          |
+|---|---|---|---|
+| `analytics`   | `2` | 📈 | Analíticas |
+| `achievement` | `3` | 🏆 | Logros     |
+| `bug`         | `4` | 🚨 Bugs       |
+
+#### Validación de método
+Cualquier petición que no sea `POST` recibe `HTTP 405 Method Not Allowed`. Esto previene que crawlers indexen el endpoint.
+
+#### Seguridad de origen
+El header `origin` (o `referer` como fallback) debe contener el valor de `process.env.PRODUCTION_DOMAIN`. Las peticiones de orígenes no autorizados reciben `HTTP 403 Forbidden`. Si `PRODUCTION_DOMAIN` no está definido, la validación se omite para compatibilidad con las preview deployments de Vercel.
+
+#### Sanitización contra inyecciones HTML
+El nickname y los valores de `data` pasan por la función interna `sanitize()`, que escapa `& < > " '` antes de insertarlos en el mensaje HTML de Telegram. Esto previene que un nickname malicioso como `<b>hack</b>` altere el formato del mensaje.
+
+#### Construcción del mensaje (modo HTML)
+El mensaje se formatea con etiquetas `<b>`, `<i>` y `<code>` soportadas por la API de Telegram:
+
+```
+📈 OPEN GAME
+
+👤 Usuario: Solecito
+📌 Tipo:    analytics
+
+📋 Datos:
+  juego: puzzle-15
+
+🕐 Servidor: 2025-11-03T14:22:01.004Z
+Love Arcade · Ghost Analytics v12.0
+```
+
+Un **timestamp de servidor** se inyecta automáticamente en cada mensaje, independiente del timestamp del cliente. Permite detectar eventos retardados por la cola del Human Gate.
+
+#### Error handling silencioso
+Si la API de Telegram devuelve un error (rate limit, Topic eliminado, bot baneado…), la función serverless:
+1. Loguea el error en la consola de Vercel (visible en el dashboard de logs).
+2. Devuelve `HTTP 500` al frontend con un cuerpo genérico (`{ error: "Upstream error" }`).
+3. El frontend registra el warning en consola pero **no interrumpe el juego**.
+
+#### Variables de entorno
+
+| Variable              | Descripción |
+|---|---|
+| `TELEGRAM_BOT_TOKEN`  | Token del bot obtenido vía @BotFather. Nunca expuesto al cliente. |
+| `TELEGRAM_CHAT_ID`    | ID del grupo/canal destino (negativo para grupos supergrupo). |
+| `PRODUCTION_DOMAIN`   | Dominio de producción (ej: `love-arcade.vercel.app`). Usado para validar el origen. |
+
+---
+
+### Frontend — `js/analytics.js` (v12.0)
+
+#### Eliminaciones
+- **Array `_r`**: la ofuscación XOR del Webhook de Discord ha sido eliminada por completa. Ya no hay credenciales en el bundle del cliente.
+- **Función `_endpoint()`**: reemplazada por la constante `_PROXY_ENDPOINT = '/api/report'`.
+- **`EVENT_COLORS`**: los colores de embed de Discord ya no son necesarios. El formateo visual es responsabilidad del proxy.
+
+#### Nuevo contrato de datos (Payload ligero)
+
+```json
+{
+  "type":  "analytics | bug | achievement",
+  "user":  "Solecito",
+  "event": "open_game",
+  "data":  { "juego": "puzzle-15" }
+}
+```
+
+El campo `user` es inyectado automáticamente por `_send()` — nunca debe pasarse en el objeto `meta` de `track()`.
+
+#### Clasificación de eventos (`_EVENT_TYPE_MAP`)
+
+| Evento                      | Tipo           | Topic destino |
+|---|---|---|
+| `detected_error`            | `bug`          | 🚨 Bugs       |
+| `invalid_promo_code`        | `bug`          | 🚨 Bugs       |
+| `wordsearch_content_alert`  | `bug`          | 🚨 Bugs       |
+| `buy_item`                  | `achievement`  | 🏆 Logros     |
+| `redeem_code`               | `achievement`  | 🏆 Logros     |
+| `daily_bonus`               | `achievement`  | 🏆 Logros     |
+| `view_preview`              | `analytics`    | 📈 Analíticas |
+| `click_download`            | `analytics`    | 📈 Analíticas |
+| `open_game`                 | `analytics`    | 📈 Analíticas |
+| `insufficient_funds`        | `analytics`    | 📈 Analíticas |
+| `wishlist_add`              | `analytics`    | 📈 Analíticas |
+| `user_snapshot`             | `analytics`    | 📈 Analíticas |
+| `sync_export`               | `analytics`    | 📈 Analíticas |
+
+Los eventos no listados en `_EVENT_TYPE_MAP` caen en `"analytics"` por defecto.
+
+#### Sin cambios en la lógica de seguridad
+El Doble Candado (Shadow-Gate + Anti-Localhost + Anti-Bot + Human Gate), el Nickname Poller y la `_pendingQueue` se mantienen **exactamente igual**. Solo la capa de transporte ha cambiado.
+
+---
+
+### Configuración de Vercel
+
+#### Variables de entorno en producción
+Desde el dashboard de Vercel → **Settings → Environment Variables**:
+
+```
+TELEGRAM_BOT_TOKEN   = 123456789:ABCdef...
+TELEGRAM_CHAT_ID     = -1001234567890
+PRODUCTION_DOMAIN    = love-arcade.vercel.app
+```
+
+#### Archivo `.env` para desarrollo local
+
+```bash
+# .env  (en la raíz del proyecto — añadir a .gitignore)
+TELEGRAM_BOT_TOKEN=123456789:ABCdef...
+TELEGRAM_CHAT_ID=-1001234567890
+PRODUCTION_DOMAIN=love-arcade.vercel.app
+```
+
+> **Importante:** aunque el proxy está desplegado, `js/analytics.js` aborta en localhost por el Anti-Localhost (Candado 1A). Las funciones serverless sí pueden probarse localmente con `vercel dev`, pero el frontend no les enviará eventos.
+
+---
+
+### Diagnóstico desde DevTools
+
+```javascript
+// Verificar estado del módulo (incluye la ruta del Proxy):
+window.GhostAnalytics.status()
+
+// Enviar evento de prueba al Proxy (aparece en el Topic de Analíticas):
+window.GhostAnalytics.test()
+
+// Activar logs detallados:
+window.GhostAnalytics.debug(true)
+// → Cada fetch muestra el payload exacto enviado al proxy
+```
+
+---
+
+### Resumen de cambios por archivo (v12.0)
+
+| Archivo | Tipo | Cambios clave |
+|---|---|---|
+| `api/report.js` | **Nuevo** | Función serverless completa. Validación de método, seguridad de origen, mapeo de Topics, sanitización HTML, construcción del mensaje, envío a Telegram, error handling silencioso. |
+| `js/analytics.js` | **Modificado** | v12.0. Eliminados `_r`, `_endpoint()`, `EVENT_COLORS`. Añadidos `_PROXY_ENDPOINT`, `_EVENT_TYPE_MAP`, `_resolveEventType()`. `_send()` refactorizado para payload `{ type, user, event, data }`. `test()` actualizado. Mensajes de consola actualizados. |
+| `DOCUMENTACION.md` | **Modificado** | Sección §2ab añadida. ToC actualizado. Header actualizado a v12.0. |
+
+---
+
+*Love Arcade · Documentación técnica v12.0 + Ghost Analytics v12.0 (Telegram Proxy · Doble Candado · Word Hunt Progression Metrics)*
+*Arquitectura: vanilla JS + Vercel Serverless + Telegram Bot API · Compatible con GitHub Pages (frontend) + Vercel (proxy)*
