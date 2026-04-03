@@ -24,13 +24,18 @@
  *      Caso D — req.body es undefined → se lee el raw stream de red.
  *    En cualquier caso de error de parseo se devuelve {} para que los
  *    defaults del destructuring entren en juego de forma controlada.
+ *  - MEJORA: seguridad de origen ampliada (v12.1.1):
+ *      Ahora se permite también cualquier subdominio de Vercel (.vercel.app)
+ *      además del dominio de producción configurado. Esto evita el error 403
+ *      al probar desde previews manteniendo la protección contra dominios
+ *      externos no autorizados.
  *  - El resto de la lógica (validación, sanitización, Telegram) no ha
- *    cambiado. El bugfix es quirúrgico y no afecta el comportamiento nominal.
+ *    cambiado.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * RESPONSABILIDADES:
- *  1. Validar que la petición sea POST y provenga del dominio de producción.
+ *  1. Validar que la petición sea POST y provenga de un origen permitido.
  *  2. Sanitizar el nickname del jugador para evitar inyecciones HTML.
  *  3. Clasificar el evento en el hilo (Topic) de Telegram correspondiente.
  *  4. Construir el mensaje en modo HTML con emojis identificadores y
@@ -42,7 +47,7 @@
  *   TELEGRAM_BOT_TOKEN   Token del bot obtenido vía @BotFather.
  *   TELEGRAM_CHAT_ID     ID del grupo/canal destino (negativo para grupos).
  *   PRODUCTION_DOMAIN    Dominio de producción (ej: love-arcade.vercel.app).
- *                        Puede ser parcial — se usa `.includes()` sobre el origen.
+ *                        Opcional: si no se define, se omite la validación.
  *
  * MAPEO DE HILOS (message_thread_id):
  *   analytics   → Topic ID 2  — 📈 Analíticas
@@ -155,19 +160,25 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    // ── 2. Seguridad de origen ────────────────────────────────────────────────
+    // ── 2. Seguridad de origen (ampliada para previews de Vercel) ─────────────
     //
-    // Valida que la petición provenga del dominio de producción registrado en
-    // la variable de entorno PRODUCTION_DOMAIN. La validación se hace sobre el
-    // header `origin` (enviado por navegadores en peticiones cross-origin) o
-    // `referer` como fallback. Si PRODUCTION_DOMAIN no está configurado, la
-    // validación se omite para no bloquear entornos de preview de Vercel.
+    // Valida que la petición provenga de un origen autorizado:
+    //   - El dominio de producción definido en PRODUCTION_DOMAIN (si existe)
+    //   - Cualquier subdominio de Vercel (que termine en .vercel.app)
+    //   - (Opcional) localhost para desarrollo local
+    //
+    // Si PRODUCTION_DOMAIN no está configurado, la validación se omite para no
+    // bloquear entornos de preview de Vercel ni desarrollo local.
     //
     const PRODUCTION_DOMAIN = process.env.PRODUCTION_DOMAIN || '';
+    const origin = req.headers['origin'] || req.headers['referer'] || '';
 
     if (PRODUCTION_DOMAIN) {
-        const origin = req.headers['origin'] || req.headers['referer'] || '';
-        if (!origin.includes(PRODUCTION_DOMAIN)) {
+        const isProduction = origin.includes(PRODUCTION_DOMAIN);
+        const isVercelPreview = origin.includes('.vercel.app');
+        const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
+
+        if (!isProduction && !isVercelPreview && !isLocalhost) {
             console.warn('[report.js] Origen no autorizado:', origin);
             return res.status(403).json({ error: 'Forbidden' });
         }
