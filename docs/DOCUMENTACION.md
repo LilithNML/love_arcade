@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v12.0 Telegram Proxy & Secure Telemetry · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v12.0 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
+### Plataforma de Recompensas · v12.1 Body Parser Hardening · v12.0 Telegram Proxy & Secure Telemetry · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v12.1 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
 
 ---
 
@@ -33,6 +33,7 @@
 2z. [Novedades en Ghost Analytics v11.0 — Doble Candado (Anti-Bot + Human Gate)](#2z-novedades-en-ghost-analytics-v110--doble-candado-anti-bot--human-gate)
 2aa. [Novedades en v11.1 — Word Hunt: Métricas de Progresión](#2aa-novedades-en-v111--word-hunt-métricas-de-progresión)
 2ab. [Novedades en v12.0 — Infraestructura de Telemetría Segura (Telegram Proxy)](#2ab-novedades-en-v120--infraestructura-de-telemetría-segura-telegram-proxy)
+2ac. [Novedades en v12.1 — Body Parser Hardening (Bugfix)](#2ac-novedades-en-v121--body-parser-hardening-bugfix)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -4596,5 +4597,113 @@ window.GhostAnalytics.debug(true)
 
 ---
 
-*Love Arcade · Documentación técnica v12.0 + Ghost Analytics v12.0 (Telegram Proxy · Doble Candado · Word Hunt Progression Metrics)*
+## 2ac. Novedades en v12.1 — Body Parser Hardening (Bugfix)
+
+### Problema
+
+Tras el despliegue de v12.0, los mensajes de Telegram mostraban valores por defecto (`UNKNOWN`, `desconocido`, `Sin metadatos adicionales`) en lugar de los datos reales del evento.
+
+**Causa raíz:** `req.body` llegaba como `undefined` en determinados escenarios del runtime de Vercel. El campo `type`, `user`, `event` y `data` no se podían desestructurar, por lo que caían en sus valores de fallback.
+
+Los escenarios que reproducen el problema son:
+
+| Escenario | Estado de `req.body` |
+|---|---|
+| Función en **cold start** | `undefined` |
+| Request con `keepalive: true` (fetch del frontend) | `undefined` o `Buffer` |
+| `Content-Type` no reconocido por el runtime | `string` crudo |
+| Body parser declarado implícitamente (v12.0) | Comportamiento no garantizado entre entornos |
+
+El frontend (`js/analytics.js`) enviaba el payload correctamente con `Content-Type: application/json`. El error era **exclusivamente del lado del servidor**.
+
+---
+
+### Solución
+
+Dos cambios quirúrgicos en `api/report.js`, sin afectar el resto de la lógica:
+
+#### 1. Declaración explícita del body parser (`export const config`)
+
+```javascript
+export const config = {
+    api: {
+        bodyParser: {
+            sizeLimit: '16kb',
+        },
+    },
+};
+```
+
+Fuerza a Vercel a activar el parser JSON en **todos** los entornos: producción, preview deployments y `vercel dev`. Sin esta declaración, Vercel aplica un valor por defecto que no garantiza el estado de `req.body` en todos los escenarios de runtime.
+
+El límite de `16kb` es suficiente para cualquier payload de analíticas y previene abusos con bodies gigantes.
+
+#### 2. Helper defensivo `_parseBody(req)`
+
+Actúa como red de seguridad independientemente de `export const config`, cubriendo los cuatro estados posibles de `req.body`:
+
+| Caso | Estado de `req.body` | Acción del helper |
+|---|---|---|
+| **A** | Objeto plano (parseado por Vercel) | Se usa directamente — camino nominal |
+| **B** | `string` | `JSON.parse()` directo |
+| **C** | `Buffer` | `.toString('utf8')` + `JSON.parse()` |
+| **D** | `undefined` | Lectura del raw stream con `req.on('data')` |
+
+En cualquier fallo de parseo (JSON malformado, stream vacío) el helper devuelve `{}` para que los defaults del destructuring entren en juego de forma controlada.
+
+```javascript
+// En el handler — sustitución de la línea anterior:
+//   const { type, user, event, data } = req.body || {};
+//
+// Por la nueva llamada defensiva:
+const body = await _parseBody(req);
+const { type = 'analytics', user = 'desconocido', event = 'unknown', data = {} } = body;
+```
+
+---
+
+### Sin cambios en el frontend
+
+`js/analytics.js` no requería modificaciones. La función `_send()` ya enviaba el payload correcto:
+
+```javascript
+fetch(_PROXY_ENDPOINT, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ type, user, event, data }),
+    keepalive: true,
+});
+```
+
+El problema era exclusivamente la recepción del body en el servidor.
+
+---
+
+### Diagnóstico para verificar el fix
+
+Tras el despliegue de v12.1, ejecutar desde DevTools en producción:
+
+```javascript
+window.GhostAnalytics.test()
+```
+
+El mensaje en el Topic de Analíticas debe mostrar:
+- **Usuario:** el nickname real (no `desconocido`)
+- **Evento:** `GHOST TEST [TEST]` (no `UNKNOWN`)
+- **Datos:** `fuente: GhostAnalytics.test()` (no `Sin metadatos adicionales`)
+
+Si los valores siguen siendo los defaults, revisar los logs de la función serverless en Vercel → **Deployments → Functions → report** para confirmar que la nueva versión está desplegada.
+
+---
+
+### Resumen de cambios por archivo (v12.1)
+
+| Archivo | Tipo | Cambios clave |
+|---|---|---|
+| `api/report.js` | **Modificado** | v12.1. Añadido `export const config` con `bodyParser: { sizeLimit: '16kb' }`. Nuevo helper privado `_parseBody(req)` con cobertura de los cuatro estados posibles de `req.body`. Sustitución de `req.body \|\| {}` por `await _parseBody(req)` en el paso 5. Footer del mensaje de Telegram actualizado a v12.1. |
+| `DOCUMENTACION.md` | **Modificado** | Sección §2ac añadida. ToC actualizado. Header actualizado a v12.1. |
+
+---
+
+*Love Arcade · Documentación técnica v12.1 + Ghost Analytics v12.1 (Body Parser Hardening · Telegram Proxy · Doble Candado · Word Hunt Progression Metrics)*
 *Arquitectura: vanilla JS + Vercel Serverless + Telegram Bot API · Compatible con GitHub Pages (frontend) + Vercel (proxy)*
