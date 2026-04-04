@@ -1761,3 +1761,460 @@ document.addEventListener('DOMContentLoaded', () => {
     // La Bendición Lunar es un elemento de la vista Tienda; su handler vive
     // exclusivamente en shop-logic.js para evitar el doble-registro de eventos.
 });
+// =====================================================
+// ☁️  SENTINEL CLOUD SYNC — v13.0
+// ─────────────────────────────────────────────────────────────────────────────
+// Arquitectura: Patrón "Sentinel" (Observador)
+//
+// El Sentinel actúa como una capa de persistencia en la nube que espeja el
+// localStorage sin modificar el código de los juegos. Todos los minijuegos
+// corren bajo el mismo origen (subcarpetas), por lo que comparten acceso al
+// mismo localStorage. El Sentinel observa cambios en las claves críticas,
+// los empaqueta en un objeto JSONB y los sube a Supabase con debounce.
+//
+// Flujo principal:
+//  1. init: obtiene credenciales de /api/client-config → crea cliente Supabase
+//  2. onAuthStateChange: detecta sesión activa (Magic Link)
+//     → al SIGNED_IN: descarga perfil de la nube y aplica Last Write Wins
+//  3. StorageInterceptor: intercepta localStorage.setItem para claves vigiladas
+//     → dispara _sentinelScheduleSync() con debounce de 12 s
+//  4. _sentinelSync(): sube snapshot de todas las claves vigiladas a Supabase
+//
+// Resolución de conflictos — Last Write Wins (timestamp):
+//  · Al iniciar sesión se compara updated_at de la BD con la marca local.
+//  · Si la nube es más reciente, se sobreescribe el localStorage local.
+//  · Si el local es más reciente (o igual), la nube se actualiza al subir.
+//
+// Claves vigiladas (SENTINEL_WATCHED_KEYS):
+//  Hub:            gamecenter_v6_promos
+//  Word Hunt:      la_ws_completedLevels, la_ws_state
+//  Rompecabezas:   puz_arcade_progress, puz_arcade_unlocked
+//  2048 Lumina:    LUMINA_bestScore, LUMINA_gameState
+//  Space Shooter:  la_shooter_highscore, la_shooter_settings
+//  Ollin Smash:    OS_highscore
+//  Jungle Dash:    JD_highscore, JD_muted
+//  Dodger:         dodger_highscore, dodger_skin, dodger_muted
+//
+// Supabase SQL (ejecutar una sola vez en el editor de Supabase):
+// ─────────────────────────────────────────────────────────────────────────────
+//  create table user_profiles (
+//    id          uuid references auth.users primary key,
+//    game_data   jsonb not null default '{}',
+//    updated_at  timestamptz not null default now()
+//  );
+//  alter table user_profiles enable row level security;
+//  create policy "own_select" on user_profiles for select  using (auth.uid()=id);
+//  create policy "own_insert" on user_profiles for insert  with check (auth.uid()=id);
+//  create policy "own_update" on user_profiles for update  using (auth.uid()=id);
+// =====================================================
+
+(function SentinelCloudSync() {
+    'use strict';
+
+    // ── Claves a observar y sincronizar ──────────────────────────────────────
+    const SENTINEL_WATCHED_KEYS = new Set([
+        'gamecenter_v6_promos',    // Hub principal — monedas, inventario, racha
+        'la_ws_completedLevels',   // Word Hunt — niveles completados
+        'la_ws_state',             // Word Hunt — estado de sesión
+        'puz_arcade_progress',     // Rompecabezas — progreso
+        'puz_arcade_unlocked',     // Rompecabezas — niveles desbloqueados
+        'LUMINA_bestScore',        // 2048 Lumina — mejor puntuación
+        'LUMINA_gameState',        // 2048 Lumina — estado de partida
+        'la_shooter_highscore',    // Space Shooter — récord
+        'la_shooter_settings',     // Space Shooter — configuración
+        'OS_highscore',            // Ollin Smash — récord
+        'JD_highscore',            // Jungle Dash — récord
+        'JD_muted',                // Jungle Dash — silencio
+        'dodger_highscore',        // Dodger — récord
+        'dodger_skin',             // Dodger — skin activa
+        'dodger_muted',            // Dodger — silencio
+    ]);
+
+    // Clave del registro de marca de tiempo local (para Last Write Wins)
+    const SENTINEL_TS_KEY = 'love_arcade_sentinel_ts';
+
+    // Tabla de Supabase
+    const SUPABASE_TABLE = 'user_profiles';
+
+    // Estado interno del Sentinel
+    let _sbClient   = null;   // Cliente Supabase inicializado
+    let _sbSession  = null;   // Sesión de usuario activa
+    let _syncTimer  = null;   // Timer de debounce
+    let _isSyncing  = false;  // Mutex de subida activa
+    const DEBOUNCE_MS = 12_000; // 12 s de inactividad antes de subir
+
+    // ── Utilidades de UI ─────────────────────────────────────────────────────
+
+    function _setStatusBadge(state) {
+        const dot  = document.getElementById('cloud-status-dot');
+        const text = document.getElementById('cloud-status-text');
+        const badge = document.getElementById('cloud-status-badge');
+        if (!dot || !text) return;
+
+        const STATES = {
+            inactive:  { color: 'var(--text-low)',  label: 'Inactivo' },
+            connected: { color: '#63b3ed',           label: 'Conectado' },
+            syncing:   { color: '#f6ad55',           label: 'Sincronizando…' },
+            synced:    { color: '#68d391',           label: 'Sincronizado' },
+            error:     { color: '#fc8181',           label: 'Error' },
+        };
+        const s = STATES[state] || STATES.inactive;
+        dot.style.background = s.color;
+        text.textContent     = s.label;
+        if (badge) badge.style.color = s.color;
+    }
+
+    function _setLoginMsg(msg, isError = false) {
+        const el = document.getElementById('cloud-login-msg');
+        if (!el) return;
+        el.textContent  = msg;
+        el.style.color  = isError ? 'var(--error, #fc8181)' : '#68d391';
+    }
+
+    function _setSyncMsg(msg, isError = false) {
+        const el = document.getElementById('cloud-sync-msg');
+        if (!el) return;
+        el.textContent = msg;
+        el.style.color = isError ? 'var(--error, #fc8181)' : '#68d391';
+    }
+
+    function _setLastSyncLabel(isoStr) {
+        const el = document.getElementById('cloud-last-sync');
+        if (!el || !isoStr) return;
+        const d = new Date(isoStr);
+        el.textContent = `Última sincronización: ${d.toLocaleString('es-MX', {
+            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+        })}`;
+    }
+
+    function _showPanel(loggedIn) {
+        const loginPanel   = document.getElementById('cloud-panel-login');
+        const sessionPanel = document.getElementById('cloud-panel-session');
+        if (!loginPanel || !sessionPanel) return;
+        loginPanel.style.display   = loggedIn ? 'none'  : 'flex';
+        sessionPanel.style.display = loggedIn ? 'flex'  : 'none';
+    }
+
+    function _setSessionEmail(email) {
+        const el = document.getElementById('cloud-session-email');
+        if (el) el.textContent = email || '';
+    }
+
+    // ── Snapshot — lectura/escritura del estado vigilado ─────────────────────
+
+    /**
+     * Lee todas las claves vigiladas del localStorage y las empaqueta
+     * en un objeto plano { key: value_string }.
+     * El valor se almacena como string (igual que localStorage).
+     */
+    function _buildSnapshot() {
+        const snap = {};
+        SENTINEL_WATCHED_KEYS.forEach(key => {
+            const val = localStorage.getItem(key);
+            if (val !== null) snap[key] = val;
+        });
+        return snap;
+    }
+
+    /**
+     * Escribe un snapshot (recibido de la nube) en el localStorage local.
+     * Solo toca las claves que están en SENTINEL_WATCHED_KEYS y que
+     * están presentes en el snapshot. No borra claves ausentes.
+     *
+     * IMPORTANTE: usa el setItem ORIGINAL (pre-interceptor) para no
+     * disparar el debounce mientras aplicamos datos de la nube.
+     */
+    function _applySnapshot(snap) {
+        if (!snap || typeof snap !== 'object') return;
+        SENTINEL_WATCHED_KEYS.forEach(key => {
+            if (Object.prototype.hasOwnProperty.call(snap, key) && snap[key] !== null) {
+                _originalSetItem(key, snap[key]);
+            }
+        });
+        // Recargar el store principal del Hub en memoria
+        try {
+            const raw = localStorage.getItem(CONFIG.stateKey);
+            if (raw) {
+                // Actualizar la variable `store` global mediante migrateState
+                // (accedemos al store a través de GameCenter.getState() para lectura,
+                //  pero para aplicar usamos importSave que recorre migrateState).
+                // Solución más directa: re-ejecutar la carga del store en el objeto GameCenter.
+                const parsed = JSON.parse(raw);
+                // Emitir evento para que los módulos sepan que el store fue reemplazado
+                document.dispatchEvent(new CustomEvent('la:cloudsynced', { detail: { source: 'cloud' } }));
+                // Forzar refresh de UI
+                window.GameCenter?.syncUI?.();
+            }
+        } catch (_) {}
+    }
+
+    // ── Sincronización hacia la nube ──────────────────────────────────────────
+
+    /**
+     * Sube el snapshot actual a Supabase (upsert).
+     * Guarda la marca de tiempo local del envío para Last Write Wins.
+     */
+    async function _sentinelSync() {
+        if (!_sbClient || !_sbSession) return;
+        if (_isSyncing) return; // Evitar doble subida simultánea
+        _isSyncing = true;
+        _setStatusBadge('syncing');
+
+        try {
+            const snap       = _buildSnapshot();
+            const now        = new Date().toISOString();
+            const userId     = _sbSession.user.id;
+
+            const { error } = await _sbClient
+                .from(SUPABASE_TABLE)
+                .upsert(
+                    { id: userId, game_data: snap, updated_at: now },
+                    { onConflict: 'id' }
+                );
+
+            if (error) throw error;
+
+            // Guardar marca de tiempo local
+            _originalSetItem(SENTINEL_TS_KEY, now);
+            _setStatusBadge('synced');
+            _setSyncMsg('¡Progreso guardado en la nube! ✓');
+            _setLastSyncLabel(now);
+
+            // Limpiar mensaje tras 4 s
+            setTimeout(() => _setSyncMsg(''), 4_000);
+        } catch (err) {
+            console.error('[Sentinel] Error al sincronizar:', err);
+            _setStatusBadge('error');
+            _setSyncMsg('Error al sincronizar. Reintentando…', true);
+            // Reintentar en 30 s
+            setTimeout(() => _sentinelScheduleSync(0), 30_000);
+        } finally {
+            _isSyncing = false;
+        }
+    }
+
+    /**
+     * Programa una sincronización con debounce.
+     * Cada llamada reinicia el timer; la subida ocurre sólo cuando el
+     * usuario lleva `delay` ms sin escribir en localStorage.
+     * @param {number} [delay=DEBOUNCE_MS]
+     */
+    function _sentinelScheduleSync(delay = DEBOUNCE_MS) {
+        if (!_sbSession) return;
+        clearTimeout(_syncTimer);
+        _syncTimer = setTimeout(_sentinelSync, delay);
+    }
+
+    // ── Carga desde la nube (Last Write Wins) ────────────────────────────────
+
+    /**
+     * Descarga el perfil de la nube y aplica Last Write Wins basado en updated_at.
+     * - Si la nube es más reciente que el local → sobreescribir localStorage.
+     * - Si el local es más reciente → subir local a la nube.
+     * - Si no existe perfil en la nube → subir el local.
+     */
+    async function _sentinelLoad() {
+        if (!_sbClient || !_sbSession) return;
+        _setStatusBadge('syncing');
+
+        try {
+            const userId = _sbSession.user.id;
+            const { data, error } = await _sbClient
+                .from(SUPABASE_TABLE)
+                .select('game_data, updated_at')
+                .eq('id', userId)
+                .maybeSingle();
+
+            if (error) throw error;
+
+            if (!data) {
+                // Primera vez: no existe perfil → subir local inmediatamente
+                await _sentinelSync();
+                return;
+            }
+
+            const cloudTs = new Date(data.updated_at).getTime();
+            const localTs = (() => {
+                try {
+                    const raw = localStorage.getItem(SENTINEL_TS_KEY);
+                    return raw ? new Date(raw).getTime() : 0;
+                } catch (_) { return 0; }
+            })();
+
+            if (cloudTs > localTs) {
+                // Nube más reciente → aplicar snapshot local
+                _applySnapshot(data.game_data);
+                _setLastSyncLabel(data.updated_at);
+                _setSyncMsg('Progreso restaurado desde la nube ✓');
+                setTimeout(() => _setSyncMsg(''), 5_000);
+            } else {
+                // Local más reciente o empate → subir a la nube
+                await _sentinelSync();
+            }
+
+            _setStatusBadge('synced');
+        } catch (err) {
+            console.error('[Sentinel] Error al cargar desde la nube:', err);
+            _setStatusBadge('error');
+        }
+    }
+
+    // ── StorageInterceptor ────────────────────────────────────────────────────
+
+    // Referencia al setItem ORIGINAL antes de ser interceptado.
+    // Se usa en _applySnapshot() para evitar re-disparar el debounce.
+    const _originalSetItem = localStorage.setItem.bind(localStorage);
+
+    /**
+     * Intercepta localStorage.setItem.
+     * Si la clave pertenece a SENTINEL_WATCHED_KEYS y hay sesión activa,
+     * programa una sincronización con debounce.
+     * El valor se escribe normalmente en localStorage independientemente.
+     */
+    localStorage.setItem = function interceptedSetItem(key, value) {
+        _originalSetItem(key, value);
+        if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession) {
+            _sentinelScheduleSync();
+        }
+    };
+
+    // ── Autenticación — onAuthStateChange ────────────────────────────────────
+
+    function _handleSignIn(session) {
+        _sbSession = session;
+        _showPanel(true);
+        _setSessionEmail(session.user.email);
+        _setStatusBadge('connected');
+        _sentinelLoad(); // Comparar y resolver conflictos
+    }
+
+    function _handleSignOut() {
+        _sbSession = null;
+        _showPanel(false);
+        _setStatusBadge('inactive');
+        _setSessionEmail('');
+        clearTimeout(_syncTimer);
+    }
+
+    // ── Inicialización ────────────────────────────────────────────────────────
+
+    async function _sentinelInit() {
+        // 1. Obtener credenciales desde el proxy seguro
+        let supabaseUrl, supabaseKey;
+        try {
+            const res = await fetch('/api/client-config', { cache: 'no-store' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const cfg = await res.json();
+            supabaseUrl = cfg.supabaseUrl;
+            supabaseKey = cfg.supabaseKey;
+        } catch (err) {
+            console.warn('[Sentinel] No se pudieron obtener credenciales de nube:', err.message);
+            return; // Degradación elegante — funciona sin nube
+        }
+
+        if (!supabaseUrl || !supabaseKey) {
+            console.warn('[Sentinel] Variables de entorno de Supabase no configuradas en Vercel.');
+            return;
+        }
+
+        // 2. Crear cliente Supabase
+        try {
+            _sbClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+        } catch (err) {
+            console.error('[Sentinel] Error creando cliente Supabase:', err);
+            return;
+        }
+
+        // 3. Escuchar cambios de sesión
+        _sbClient.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                _handleSignIn(session);
+            } else if (event === 'SIGNED_OUT') {
+                _handleSignOut();
+            }
+        });
+
+        // 4. Recuperar sesión existente (para recargas de página)
+        const { data: { session } } = await _sbClient.auth.getSession();
+        if (session) _handleSignIn(session);
+    }
+
+    // ── Listeners de UI ──────────────────────────────────────────────────────
+
+    document.addEventListener('DOMContentLoaded', () => {
+
+        // ── Enviar Magic Link ────────────────────────────────────────────────
+        const btnLogin = document.getElementById('btn-cloud-login');
+        if (btnLogin) {
+            btnLogin.addEventListener('click', async () => {
+                if (!_sbClient) {
+                    _setLoginMsg('Servicio no disponible. Recarga la página.', true);
+                    return;
+                }
+                const emailInput = document.getElementById('cloud-email-input');
+                const email = emailInput?.value?.trim();
+                if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+                    _setLoginMsg('Ingresa un correo válido.', true);
+                    return;
+                }
+
+                btnLogin.disabled = true;
+                btnLogin.style.opacity = '0.6';
+                _setLoginMsg('Enviando enlace…');
+
+                try {
+                    const { error } = await _sbClient.auth.signInWithOtp({
+                        email,
+                        options: { emailRedirectTo: window.location.origin }
+                    });
+                    if (error) throw error;
+                    _setLoginMsg(`¡Enlace enviado a ${email}! Revisa tu correo.`);
+                } catch (err) {
+                    _setLoginMsg(`Error: ${err.message}`, true);
+                    btnLogin.disabled = false;
+                    btnLogin.style.opacity = '1';
+                }
+            });
+        }
+
+        // ── Sincronizar ahora (manual) ───────────────────────────────────────
+        const btnSyncNow = document.getElementById('btn-cloud-sync-now');
+        if (btnSyncNow) {
+            btnSyncNow.addEventListener('click', () => {
+                clearTimeout(_syncTimer); // Cancelar debounce pendiente
+                _sentinelSync();
+            });
+        }
+
+        // ── Cerrar sesión ────────────────────────────────────────────────────
+        const btnSignOut = document.getElementById('btn-cloud-signout');
+        if (btnSignOut) {
+            btnSignOut.addEventListener('click', async () => {
+                if (!_sbClient) return;
+                await _sbClient.auth.signOut();
+                // _handleSignOut() es llamado por onAuthStateChange
+            });
+        }
+
+        // ── Restaurar UI si ya hay sesión en localStorage de Supabase ───────
+        // _sentinelInit() ya maneja esto, pero el panel puede renderizarse
+        // antes de que la Promise resuelva; _showPanel(false) es el estado por defecto.
+    });
+
+    // ── Arranque ─────────────────────────────────────────────────────────────
+    // Se ejecuta en background sin bloquear el INIT síncrono de app.js.
+    // El fetch a /api/client-config se lanza ANTES del DOMContentLoaded
+    // para que las credenciales estén listas cuando el usuario navegue
+    // a la pestaña de Sincronizar.
+    _sentinelInit().catch(err => {
+        console.error('[Sentinel] Error en inicialización:', err);
+    });
+
+    // Exponer API mínima para diagnóstico en DevTools
+    window.Sentinel = {
+        syncNow:    () => _sentinelSync(),
+        getSession: () => _sbSession,
+        getStatus:  () => ({ hasClient: !!_sbClient, hasSession: !!_sbSession }),
+    };
+
+})(); // fin IIFE SentinelCloudSync

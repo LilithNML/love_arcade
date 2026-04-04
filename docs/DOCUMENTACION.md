@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v12.1 Body Parser Hardening · v12.0 Telegram Proxy & Secure Telemetry · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v12.1 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
+### Plataforma de Recompensas · v13.0 Sentinel Cloud Sync · v12.1 Body Parser Hardening · v12.0 Telegram Proxy & Secure Telemetry · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v12.1 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
 
 ---
 
@@ -34,6 +34,7 @@
 2aa. [Novedades en v11.1 — Word Hunt: Métricas de Progresión](#2aa-novedades-en-v111--word-hunt-métricas-de-progresión)
 2ab. [Novedades en v12.0 — Infraestructura de Telemetría Segura (Telegram Proxy)](#2ab-novedades-en-v120--infraestructura-de-telemetría-segura-telegram-proxy)
 2ac. [Novedades en v12.1 — Body Parser Hardening (Bugfix)](#2ac-novedades-en-v121--body-parser-hardening-bugfix)
+2ad. [Novedades en v13.0 — Sentinel Cloud Sync (Supabase)](#2ad-novedades-en-v130--sentinel-cloud-sync-supabase)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -4705,5 +4706,204 @@ Si los valores siguen siendo los defaults, revisar los logs de la función serve
 
 ---
 
-*Love Arcade · Documentación técnica v12.1 + Ghost Analytics v12.1 (Body Parser Hardening · Telegram Proxy · Doble Candado · Word Hunt Progression Metrics)*
-*Arquitectura: vanilla JS + Vercel Serverless + Telegram Bot API · Compatible con GitHub Pages (frontend) + Vercel (proxy)*
+*Love Arcade · Documentación técnica v13.0 + Ghost Analytics v12.1 (Sentinel Cloud Sync · Body Parser Hardening · Telegram Proxy · Doble Candado · Word Hunt Progression Metrics)*
+*Arquitectura: vanilla JS + Vercel Serverless + Supabase (Auth + PostgreSQL JSONB) · Compatible con GitHub Pages (frontend) + Vercel (proxy + serverless)*
+---
+
+## 2ad. Novedades en v13.0 — Sentinel Cloud Sync (Supabase)
+
+### Visión General
+
+La v13.0 introduce la **capa de persistencia en la nube** de Love Arcade mediante el **Patrón Sentinel (Observador)**. El progreso del usuario ahora es **portable entre dispositivos** sin modificar el código de ningún minijuego.
+
+---
+
+### Arquitectura — El Patrón "Sentinel"
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  DOMINIO COMPARTIDO (mismo origen — todos los juegos)                │
+│                                                                      │
+│  Word Hunt ─┐                                                        │
+│  Rompecabez ─┤  localStorage.setItem() ──► StorageInterceptor       │
+│  2048 Lumina ─┤  (claves vigiladas)          (en js/app.js)          │
+│  Space Shoot ─┤                                     │                │
+│  Ollin Smash ─┤                               debounce 12 s          │
+│  Jungle Dash ─┤                                     │                │
+│  Dodger ─────┘                               _sentinelSync()         │
+│                                                     │                │
+│  gamecenter_v6_promos (Hub) ─────────────────►  Supabase            │
+│                                                  (JSONB upsert)      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+El Sentinel vive **exclusivamente en `js/app.js`** como una IIFE (`SentinelCloudSync`). Dado que todos los minijuegos corren bajo el mismo dominio (subcarpetas), comparten el localStorage del Hub. El Sentinel intercepta `localStorage.setItem`, detecta escrituras a claves críticas y orquesta la subida a Supabase sin que ningún juego lo sepa.
+
+---
+
+### Mapa de Claves Vigiladas
+
+| Juego | Claves sincronizadas |
+|---|---|
+| Hub Principal | `gamecenter_v6_promos` |
+| Word Hunt | `la_ws_completedLevels`, `la_ws_state` |
+| Rompecabezas | `puz_arcade_progress`, `puz_arcade_unlocked` |
+| 2048 Lumina | `LUMINA_bestScore`, `LUMINA_gameState` |
+| Space Shooter | `la_shooter_highscore`, `la_shooter_settings` |
+| Ollin Smash | `OS_highscore` |
+| Jungle Dash | `JD_highscore`, `JD_muted` |
+| Dodger | `dodger_highscore`, `dodger_skin`, `dodger_muted` |
+
+---
+
+### Infraestructura — Supabase
+
+#### Variables de entorno (Vercel Dashboard → Settings → Environment Variables)
+
+| Variable | Descripción |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto en Supabase (ej: `https://abc.supabase.co`) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Llave API pública (Anon). Segura en cliente gracias a RLS. |
+
+> **Nota de seguridad:** El Anon Key de Supabase está diseñado para ser público. La seguridad real la provee la política de Row Level Security (RLS) de la base de datos, que garantiza que cada usuario solo pueda leer y escribir su propio perfil.
+
+#### Esquema SQL — ejecutar UNA VEZ en el editor de Supabase
+
+```sql
+-- Tabla de perfiles de usuario con JSONB para el snapshot de progreso
+CREATE TABLE user_profiles (
+  id          UUID REFERENCES auth.users PRIMARY KEY,
+  game_data   JSONB NOT NULL DEFAULT '{}',
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Row Level Security: cada usuario solo accede a su propio registro
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "own_select" ON user_profiles
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "own_insert" ON user_profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "own_update" ON user_profiles
+  FOR UPDATE USING (auth.uid() = id);
+```
+
+---
+
+### Flujo de Autenticación — Magic Link
+
+1. El usuario navega a **Tienda → Sincronizar → Sincronización en la Nube**.
+2. Ingresa su correo y pulsa **Enviar Magic Link**.
+3. Supabase envía un email con el enlace de autenticación.
+4. El usuario hace clic en el enlace → el navegador redirige al hub con el token en el URL hash.
+5. `onAuthStateChange` detecta el evento `SIGNED_IN`.
+6. El Sentinel ejecuta `_sentinelLoad()`: descarga el perfil y aplica **Last Write Wins**.
+
+```
+Usuario → escribe email → btn-cloud-login
+    → supabase.auth.signInWithOtp({ email })
+        → email enviado
+            → usuario hace clic en enlace
+                → onAuthStateChange('SIGNED_IN')
+                    → _sentinelLoad()
+                        → comparar updated_at (nube vs local)
+                            → aplicar el más reciente
+```
+
+---
+
+### Resolución de Conflictos — Last Write Wins (LWW)
+
+La estrategia **Last Write Wins** se basa en el campo `updated_at` de la tabla `user_profiles`:
+
+| Escenario | Acción |
+|---|---|
+| Perfil en nube no existe | Subir snapshot local inmediatamente |
+| `updated_at` nube > timestamp local | Aplicar snapshot de nube al localStorage |
+| Timestamp local ≥ `updated_at` nube | Subir snapshot local a la nube |
+
+El timestamp local se almacena en la clave `love_arcade_sentinel_ts` (separada del store principal para no contaminar checksums de exportación).
+
+---
+
+### StorageInterceptor — Debounce Sync
+
+```javascript
+// El setItem original se preserva para uso interno del Sentinel
+const _originalSetItem = localStorage.setItem.bind(localStorage);
+
+// Interceptor instalado globalmente
+localStorage.setItem = function(key, value) {
+    _originalSetItem(key, value);                    // siempre escribe
+    if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession) {
+        _sentinelScheduleSync();                     // dispara debounce
+    }
+};
+```
+
+**Debounce de 12 segundos:** tras la última escritura a una clave vigilada, el Sentinel espera 12 s de inactividad antes de subir. Esto agrupa múltiples cambios rápidos (ej: partida rápida con varias escrituras) en una sola llamada a Supabase.
+
+**Claves no vigiladas** (ej: `love_arcade_time_cache`, `love_arcade_last_recipient`) pasan por el interceptor sin disparar sync, preservando la eficiencia.
+
+---
+
+### Endpoint Serverless — `api/client-config.js`
+
+```
+GET /api/client-config
+→ { supabaseUrl: string, supabaseKey: string }
+```
+
+Funciona como proxy seguro para las variables de entorno. El cliente nunca las ve en el código fuente del repositorio. Si las variables no están configuradas, devuelve strings vacíos y el Sentinel se desactiva en modo degradado.
+
+**Cache-Control:** `no-store` para evitar que el CDN de Vercel cachee credenciales.
+
+---
+
+### Evento Personalizado — `la:cloudsynced`
+
+Cuando el Sentinel aplica un snapshot de la nube al localStorage, dispara:
+
+```javascript
+document.dispatchEvent(new CustomEvent('la:cloudsynced', {
+  detail: { source: 'cloud' }
+}));
+```
+
+Los módulos que necesiten reaccionar a una restauración de progreso (ej: `shop-logic.js`, `event-logic.js`) pueden escuchar este evento sin acoplamiento directo con el Sentinel.
+
+---
+
+### API de Diagnóstico
+
+Disponible en DevTools (`Console`) tras la inicialización:
+
+```javascript
+window.Sentinel.getStatus()
+// → { hasClient: true, hasSession: true }
+
+window.Sentinel.syncNow()
+// Fuerza sincronización inmediata ignorando el debounce
+
+window.Sentinel.getSession()
+// → objeto de sesión de Supabase (user.id, user.email, etc.)
+```
+
+---
+
+### Resumen de Cambios por Archivo (v13.0)
+
+| Archivo | Tipo | Cambios clave |
+|---|---|---|
+| `index.html` | **Modificado** | CDN de `@supabase/supabase-js@2` en `<head>`. Card "Sincronización en la Nube" en `#tab-sync`. Panel de login (email + Magic Link) y panel de sesión (estado, sync manual, cerrar sesión). Comentario de orden de scripts actualizado. |
+| `js/app.js` | **Modificado** | IIFE `SentinelCloudSync` añadida al final. Incluye: `SENTINEL_WATCHED_KEYS`, `StorageInterceptor`, `_buildSnapshot()`, `_applySnapshot()`, `_sentinelSync()`, `_sentinelLoad()`, `_sentinelScheduleSync()`, `_handleSignIn()`, `_handleSignOut()`, listeners de UI, `_sentinelInit()`, `window.Sentinel` API pública. |
+| `api/client-config.js` | **Nuevo** | Función serverless Vercel. Expone `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` al cliente. Cache-Control: no-store. Bodyparser desactivado (GET-only). |
+| `vercel.json` | **Modificado** | Header `Content-Type: application/json` y `Cache-Control: no-store` para rutas `/api/*`. Sin cambios en rewrites (la regla `/api/(.*)` existente cubre el nuevo endpoint). |
+| `DOCUMENTACION.md` | **Modificado** | Sección §2ad añadida. ToC actualizado. Header actualizado a v13.0. |
+
+---
+
+*Love Arcade · Documentación técnica v13.0 + Ghost Analytics v12.1 (Sentinel Cloud Sync · Body Parser Hardening · Telegram Proxy · Doble Candado · Word Hunt Progression Metrics)*
+*Arquitectura: vanilla JS + Vercel Serverless + Supabase (Auth + PostgreSQL JSONB) · Compatible con GitHub Pages (frontend) + Vercel (proxy + serverless)*
