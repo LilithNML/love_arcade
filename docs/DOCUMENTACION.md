@@ -4926,6 +4926,7 @@ La v14.0 mueve el acceso cloud desde la zona de tienda a un **flujo de entrada a
 | **Sentinel v14** | El `upsert` mantiene el esquema de `user_profiles` y ahora persiste `id`, `game_data`, `nickname`, y `updated_at` para alimentar dashboard y trigger metadata-flow. |
 | **Consistencia multi-dispositivo** | `SentinelCloudSync` aplica estrategia **Last Write Wins** comparando `updated_at` cloud vs marca local (`SENTINEL_TS_KEY`), evitando sobreescritura con snapshots antiguos. |
 | **Persistencia rápida** | Debounce de sync reducido a 1 s + sincronización inmediata en operaciones críticas de monedas (`completeLevel`, `addCoins`, `buyItem`, `spendCoins`). |
+| **Reintento asíncrono de sesión** | Si una escritura crítica ocurre antes de restaurar sesión Supabase en una pestaña de juego, se programa reintento diferido de sync inmediato (500 ms, hasta 3 intentos) para evitar pérdidas silenciosas. |
 
 ### Contrato Supabase respetado (v14)
 

@@ -1379,15 +1379,45 @@ window.MailHelper = {
 // FUNCIONES INTERNAS
 // =====================================================
 
+let _pendingSyncRetries = 0;
+let _cloudSyncRetryTimer = null;
+const MAX_SYNC_RETRIES = 3;
+const SYNC_RETRY_DELAY = 500;
+
+function _scheduleImmediateCloudRetry() {
+    if (_pendingSyncRetries >= MAX_SYNC_RETRIES) return;
+    if (_cloudSyncRetryTimer) return;
+    _pendingSyncRetries += 1;
+    _cloudSyncRetryTimer = setTimeout(() => {
+        _cloudSyncRetryTimer = null;
+        _syncCloudIfNeeded(true);
+    }, SYNC_RETRY_DELAY);
+}
+
 function _syncCloudIfNeeded(immediate = false) {
     const sentinel = window.Sentinel;
-    if (!sentinel?.getStatus) return;
+    if (!sentinel?.getStatus) {
+        if (immediate) _scheduleImmediateCloudRetry();
+        return;
+    }
     try {
         const status = sentinel.getStatus();
-        if (!status?.hasSession) return;
-        if (immediate && sentinel.syncNow) sentinel.syncNow();
+        if (status?.hasSession) {
+            _pendingSyncRetries = 0;
+            if (_cloudSyncRetryTimer) {
+                clearTimeout(_cloudSyncRetryTimer);
+                _cloudSyncRetryTimer = null;
+            }
+            if (immediate && sentinel.syncNow) sentinel.syncNow();
+            return;
+        }
+        if (immediate) _scheduleImmediateCloudRetry();
     } catch (_) {}
 }
+
+document.addEventListener('la:cloud-authenticated', () => {
+    if (_pendingSyncRetries > 0) _syncCloudIfNeeded(true);
+});
 
 function saveState(options = {}) {
     const { immediateCloudSync = false } = options;
@@ -2098,8 +2128,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const localRawTs = localStorage.getItem(SENTINEL_TS_KEY);
-            const localTime = localRawTs ? new Date(localRawTs).getTime() : 0;
-            const cloudTime = data?.updated_at ? new Date(data.updated_at).getTime() : 0;
+            const _safeTs = (iso) => {
+                const t = iso ? new Date(iso).getTime() : 0;
+                return Number.isFinite(t) ? t : 0;
+            };
+            const localTime = _safeTs(localRawTs);
+            const cloudTime = _safeTs(data?.updated_at);
             const localSnapshot = _buildSnapshot();
             const hasLocalSnapshot = Object.keys(localSnapshot).length > 0;
             const hasCloudSnapshot = effectiveData && Object.keys(effectiveData).length > 0;
