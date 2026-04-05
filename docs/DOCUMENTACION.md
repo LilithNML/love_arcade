@@ -4924,6 +4924,8 @@ La v14.0 mueve el acceso cloud desde la zona de tienda a un **flujo de entrada a
 | **Contraseñas reforzadas** | Registro y cambio de contraseña exigen: mínimo 20 caracteres, mayúscula, minúscula, dígito y símbolo (`@$!%*?&`). |
 | **Validación en vivo** | Reglas visuales bajo el input cambian de rojo a verde en tiempo real y bloquean submit hasta cumplir el 100% de requisitos. |
 | **Sentinel v14** | El `upsert` mantiene el esquema de `user_profiles` y ahora persiste `id`, `game_data`, `nickname`, y `updated_at` para alimentar dashboard y trigger metadata-flow. |
+| **Consistencia multi-dispositivo** | `SentinelCloudSync` aplica estrategia **Last Write Wins** comparando `updated_at` cloud vs marca local (`SENTINEL_TS_KEY`), evitando sobreescritura con snapshots antiguos. |
+| **Persistencia rápida** | Debounce de sync reducido a 1 s + sincronización inmediata en operaciones críticas de monedas (`completeLevel`, `addCoins`, `buyItem`, `spendCoins`). |
 
 ### Contrato Supabase respetado (v14)
 
@@ -4942,5 +4944,5 @@ public.user_profiles (
 2. Si falta ambas, se abre Gatekeeper en modo bloqueado.
 3. Registro/Login habilitan sesión cloud (con `nickname` en `signUp.options.data`).
 4. Invitado desbloquea acceso local y mantiene estado volátil.
-5. Sentinel sincroniza con debounce de 3 s y actualiza `updated_at` para dashboard.
+5. Sentinel sincroniza con debounce de 1 s y actualiza `updated_at` para dashboard.
 *Arquitectura: vanilla JS + Vercel Serverless + Supabase (Auth + PostgreSQL JSONB) · Compatible con GitHub Pages (frontend) + Vercel (proxy + serverless)*

@@ -614,7 +614,7 @@ window.GameCenter = {
             `Nivel ${levelId} completado · ${gameId}` +
             (finalAmount !== rewardAmount ? ' [multiplicador activo]' : '')
         );
-        saveState();
+        saveState({ immediateCloudSync: true });
 
         // [v11.0] Incrementar estadísticas diarias de misiones.
         window.GameCenter.incrementMissionStat('games_played', 1);
@@ -660,7 +660,7 @@ window.GameCenter = {
             logTransaction('ingreso', cashback, `Cashback: ${itemData.name}`);
         }
 
-        saveState();
+        saveState({ immediateCloudSync: true });
         return { success: true, finalPrice, cashback };
     },
 
@@ -679,7 +679,7 @@ window.GameCenter = {
         if (store.coins < n) return { success: false, reason: 'insufficient', coins: store.coins };
         store.coins -= n;
         logTransaction('gasto', n, motivo);
-        saveState();
+        saveState({ immediateCloudSync: true });
         return { success: true, coins: store.coins };
     },
 
@@ -702,7 +702,7 @@ window.GameCenter = {
         if (!Number.isFinite(n) || n <= 0) return { success: false, coins: store.coins };
         store.coins += n;
         logTransaction('ingreso', n, motivo);
-        saveState();
+        saveState({ immediateCloudSync: true });
         return { success: true, coins: store.coins };
     },
 
@@ -1379,9 +1379,21 @@ window.MailHelper = {
 // FUNCIONES INTERNAS
 // =====================================================
 
-function saveState() {
+function _syncCloudIfNeeded(immediate = false) {
+    const sentinel = window.Sentinel;
+    if (!sentinel?.getStatus) return;
+    try {
+        const status = sentinel.getStatus();
+        if (!status?.hasSession) return;
+        if (immediate && sentinel.syncNow) sentinel.syncNow();
+    } catch (_) {}
+}
+
+function saveState(options = {}) {
+    const { immediateCloudSync = false } = options;
     localStorage.setItem(CONFIG.stateKey, JSON.stringify(store));
     updateUI();
+    _syncCloudIfNeeded(immediateCloudSync);
 }
 
 /**
@@ -1842,7 +1854,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let _sbSession  = null;   // Sesión de usuario activa
     let _syncTimer  = null;   // Timer de debounce
     let _isSyncing  = false;  // Mutex de subida activa
-    const DEBOUNCE_MS = 3_000; // 3 s de inactividad antes de subir
+    const DEBOUNCE_MS = 1_000; // 1 s de inactividad antes de subir
 
     // ── Utilidades de UI ─────────────────────────────────────────────────────
 
@@ -1948,11 +1960,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const raw = localStorage.getItem(CONFIG.stateKey);
             if (raw) {
-                // Actualizar la variable `store` global mediante migrateState
-                // (accedemos al store a través de GameCenter.getState() para lectura,
-                //  pero para aplicar usamos importSave que recorre migrateState).
-                // Solución más directa: re-ejecutar la carga del store en el objeto GameCenter.
-                const parsed = JSON.parse(raw);
+                // Rehidratar el store global en memoria para evitar desfase entre
+                // localStorage y estado vivo del Hub tras una restauración cloud.
+                store = migrateState(JSON.parse(raw));
                 // Emitir evento para que los módulos sepan que el store fue reemplazado
                 document.dispatchEvent(new CustomEvent('la:cloudsynced', { detail: { source: 'cloud' } }));
                 // Forzar refresh de UI
@@ -2087,16 +2097,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 effectiveData = await _migrateGuestData(effectiveData);
             }
 
-            if (effectiveData && Object.keys(effectiveData).length > 0) {
+            const localRawTs = localStorage.getItem(SENTINEL_TS_KEY);
+            const localTime = localRawTs ? new Date(localRawTs).getTime() : 0;
+            const cloudTime = data?.updated_at ? new Date(data.updated_at).getTime() : 0;
+            const localSnapshot = _buildSnapshot();
+            const hasLocalSnapshot = Object.keys(localSnapshot).length > 0;
+            const hasCloudSnapshot = effectiveData && Object.keys(effectiveData).length > 0;
+
+            if (hasCloudSnapshot && cloudTime > localTime) {
                 _applySnapshot(effectiveData);
-                if (data?.updated_at) {
-                    _originalSetItem(SENTINEL_TS_KEY, data.updated_at);
-                    _setLastSyncLabel(data.updated_at);
-                }
-                _setSyncMsg('Progreso cloud cargado ✓');
+                _originalSetItem(SENTINEL_TS_KEY, data.updated_at);
+                _setLastSyncLabel(data.updated_at);
+                _setSyncMsg('Progreso cloud restaurado (más reciente) ✓');
                 setTimeout(() => _setSyncMsg(''), 4_000);
-            } else {
+            } else if (hasLocalSnapshot && (!hasCloudSnapshot || localTime > cloudTime)) {
                 await _sentinelSync();
+            } else if (hasCloudSnapshot) {
+                _setLastSyncLabel(data?.updated_at || localRawTs);
             }
 
             _setAccountStateLabel(true);
@@ -2396,6 +2413,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => cloudIndicator.classList.remove('is-pulse'), 1800);
             });
         }
+
+        window.addEventListener('pagehide', () => {
+            if (!_sbSession) return;
+            clearTimeout(_syncTimer);
+            _sentinelSync();
+        });
 
         document.addEventListener('la:cloud-authenticated', () => {
             gateLocked = false;
