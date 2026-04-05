@@ -3761,6 +3761,42 @@ svg { stroke-width: 2; }
     margin-top: 12px;
 }
 
+.cloud-gatekeeper-modal-box.is-locked #cloud-gatekeeper-close {
+    display: none;
+}
+
+.cloud-password-form {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-mid);
+}
+
+.cloud-password-rules {
+    margin: 2px 0 8px;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 4px;
+}
+
+.cloud-password-rules li {
+    color: var(--error);
+    font-size: 0.67rem;
+    line-height: 1.35;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cloud-password-rules li::before {
+    content: '•';
+    color: inherit;
+}
+
+.cloud-password-rules li.is-valid {
+    color: var(--success, #68d391);
+}
+
 /* ── Reduce motion ───────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {

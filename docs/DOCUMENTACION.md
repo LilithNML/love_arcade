@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v13.0 Sentinel Cloud Sync · v12.1 Body Parser Hardening · v12.0 Telegram Proxy & Secure Telemetry · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v12.1 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
+### Plataforma de Recompensas · v14.0 Gatekeeper Security & UX Refactor · v13.0 Sentinel Cloud Sync · v12.1 Body Parser Hardening · v12.0 Telegram Proxy & Secure Telemetry · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v12.1 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
 
 ---
 
@@ -35,6 +35,7 @@
 2ab. [Novedades en v12.0 — Infraestructura de Telemetría Segura (Telegram Proxy)](#2ab-novedades-en-v120--infraestructura-de-telemetría-segura-telegram-proxy)
 2ac. [Novedades en v12.1 — Body Parser Hardening (Bugfix)](#2ac-novedades-en-v121--body-parser-hardening-bugfix)
 2ad. [Novedades en v13.0 — Sentinel Cloud Sync (Supabase)](#2ad-novedades-en-v130--sentinel-cloud-sync-supabase)
+2ae. [Novedades en v14.0 — Gatekeeper Security & UX Refactor](#2ae-novedades-en-v140--gatekeeper-security--ux-refactor)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -4906,4 +4907,40 @@ window.Sentinel.getSession()
 ---
 
 *Love Arcade · Documentación técnica v13.0 + Ghost Analytics v12.1 (Sentinel Cloud Sync · Body Parser Hardening · Telegram Proxy · Doble Candado · Word Hunt Progression Metrics)*
+
+---
+
+## 2ae. Novedades en v14.0 — Gatekeeper Security & UX Refactor
+
+La v14.0 mueve el acceso cloud desde la zona de tienda a un **flujo de entrada automático** y endurece la seguridad de credenciales con una política de contraseña de nivel consola.
+
+### Cambios clave
+
+| Área | Cambio |
+|---|---|
+| **Entrada automática** | Al cargar (`DOMContentLoaded`), si no hay sesión cloud y no hay identidad local, se abre automáticamente el **Modal de Acceso Unificado** y se bloquea el acceso hasta elegir registro/login o entrar como invitad@. |
+| **Modo Invitado** | El botón "Invitado" activa estado guest, permite entrar al hub y deja mensaje explícito de progreso volátil. |
+| **Dashboard en Tienda** | La tarjeta de nube pasa a ser un panel de cuenta: estado (`En línea` / `Invitado`), última sincronización (`updated_at`) y acciones de gestión (`Cambiar Contraseña`, `Cerrar Sesión`). |
+| **Contraseñas reforzadas** | Registro y cambio de contraseña exigen: mínimo 20 caracteres, mayúscula, minúscula, dígito y símbolo (`@$!%*?&`). |
+| **Validación en vivo** | Reglas visuales bajo el input cambian de rojo a verde en tiempo real y bloquean submit hasta cumplir el 100% de requisitos. |
+| **Sentinel v14** | El `upsert` mantiene el esquema de `user_profiles` y ahora persiste `id`, `game_data`, `nickname`, y `updated_at` para alimentar dashboard y trigger metadata-flow. |
+
+### Contrato Supabase respetado (v14)
+
+```sql
+public.user_profiles (
+  id uuid primary key,
+  updated_at timestamptz,
+  game_data jsonb,
+  nickname text
+)
+```
+
+### Flujo de autenticación actualizado
+
+1. `DOMContentLoaded` evalúa identidad local y sesión cloud.
+2. Si falta ambas, se abre Gatekeeper en modo bloqueado.
+3. Registro/Login habilitan sesión cloud (con `nickname` en `signUp.options.data`).
+4. Invitado desbloquea acceso local y mantiene estado volátil.
+5. Sentinel sincroniza con debounce de 3 s y actualiza `updated_at` para dashboard.
 *Arquitectura: vanilla JS + Vercel Serverless + Supabase (Auth + PostgreSQL JSONB) · Compatible con GitHub Pages (frontend) + Vercel (proxy + serverless)*

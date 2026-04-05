@@ -1881,11 +1881,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function _setLastSyncLabel(isoStr) {
         const el = document.getElementById('cloud-last-sync');
-        if (!el || !isoStr) return;
+        if (!el) return;
+        if (!isoStr) {
+            el.textContent = 'Última sincronización: —-';
+            return;
+        }
         const d = new Date(isoStr);
         el.textContent = `Última sincronización: ${d.toLocaleString('es-MX', {
             day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
         })}`;
+    }
+
+    function _setAccountStateLabel(isOnline) {
+        const el = document.getElementById('cloud-account-state');
+        if (!el) return;
+        el.textContent = isOnline ? 'Estado: En línea' : 'Estado: Invitado';
+        el.style.color = isOnline ? '#68d391' : 'var(--text-low)';
     }
 
     function _setSessionEmail(email) {
@@ -1966,11 +1977,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const snap       = _buildSnapshot();
             const now        = new Date().toISOString();
             const userId     = _sbSession.user.id;
+            const nickname   = window.GameCenter?.getIdentity?.()?.nickname || '';
 
             const { error } = await _sbClient
                 .from(SUPABASE_TABLE)
                 .upsert(
-                    { id: userId, game_data: snap, updated_at: now },
+                    { id: userId, game_data: snap, nickname, updated_at: now },
                     { onConflict: 'id' }
                 );
 
@@ -2025,9 +2037,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const mergedData = { ...(cloudData || {}), ...localGuestData };
         const now = new Date().toISOString();
         const userId = _sbSession.user.id;
+        const nickname = window.GameCenter?.getIdentity?.()?.nickname || '';
         const { error } = await _sbClient
             .from(SUPABASE_TABLE)
-            .upsert({ id: userId, game_data: mergedData, updated_at: now }, { onConflict: 'id' });
+            .upsert({ id: userId, game_data: mergedData, nickname, updated_at: now }, { onConflict: 'id' });
         if (error) throw error;
 
         _originalSetItem(SENTINEL_TS_KEY, now);
@@ -2060,10 +2073,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const userId = session.user.id;
             const { data, error } = await _sbClient
                 .from(SUPABASE_TABLE)
-                .select('game_data, updated_at')
+                .select('game_data, updated_at, nickname')
                 .eq('id', userId)
                 .maybeSingle();
             if (error) throw error;
+
+            if (data?.nickname && !window.GameCenter?.hasIdentity?.()) {
+                window.GameCenter?.setIdentity?.(data.nickname, '@');
+            }
 
             let effectiveData = data?.game_data || {};
             if (_isGuestMode() && event === 'SIGNED_IN') {
@@ -2082,7 +2099,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 await _sentinelSync();
             }
 
+            _setAccountStateLabel(true);
             _setStatusBadge('synced');
+            document.dispatchEvent(new CustomEvent('la:cloud-authenticated'));
         } catch (err) {
             console.error('[Sentinel] Error al procesar auth change:', err);
             _setStatusBadge('error');
@@ -2115,7 +2134,9 @@ document.addEventListener('DOMContentLoaded', () => {
         _sbSession = null;
         _setStatusBadge('inactive');
         _setSessionEmail('');
+        _setAccountStateLabel(false);
         clearTimeout(_syncTimer);
+        document.dispatchEvent(new CustomEvent('la:cloud-signedout'));
     }
 
     // ── Inicialización ────────────────────────────────────────────────────────
@@ -2165,9 +2186,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('DOMContentLoaded', () => {
         const gateModal = document.getElementById('cloud-gatekeeper-modal');
+        const gateBox = gateModal?.querySelector('.cloud-gatekeeper-modal-box');
         const gateMsgEl = document.getElementById('cloud-gatekeeper-msg');
         const gateTabs = Array.from(document.querySelectorAll('[data-gate-tab]'));
         const gatePanels = Array.from(document.querySelectorAll('[data-gate-panel]'));
+        const passwordForm = document.getElementById('cloud-password-form');
+        const registerForm = document.getElementById('cloud-register-form');
+        const loginForm = document.getElementById('cloud-login-form');
+        const registerSubmitBtn = document.getElementById('btn-cloud-register');
+        const changePasswordSubmitBtn = document.getElementById('btn-cloud-change-password-submit');
+        let gateLocked = false;
+
+        const PASSWORD_SYMBOL_REGEX = /[@$!%*?&]/;
+        const evaluatePasswordRules = (value) => ({
+            length: value.length >= 20,
+            upper: /[A-Z]/.test(value),
+            lower: /[a-z]/.test(value),
+            digit: /\d/.test(value),
+            symbol: PASSWORD_SYMBOL_REGEX.test(value),
+        });
+
+        const bindPasswordValidation = (inputId, listId, submitBtn) => {
+            const input = document.getElementById(inputId);
+            const list = document.getElementById(listId);
+            if (!input || !list || !submitBtn) return () => false;
+
+            const refresh = () => {
+                const rules = evaluatePasswordRules(input.value || '');
+                let allValid = true;
+                list.querySelectorAll('li[data-rule]').forEach(item => {
+                    const key = item.dataset.rule;
+                    const valid = Boolean(rules[key]);
+                    item.classList.toggle('is-valid', valid);
+                    allValid = allValid && valid;
+                });
+                submitBtn.disabled = !allValid;
+                return allValid;
+            };
+
+            input.addEventListener('input', refresh);
+            refresh();
+            return refresh;
+        };
 
         const setGateMsg = (msg, isError = false) => {
             if (!gateMsgEl) return;
@@ -2175,7 +2235,22 @@ document.addEventListener('DOMContentLoaded', () => {
             gateMsgEl.style.color = isError ? 'var(--error, #fc8181)' : '#68d391';
         };
 
+        const setPasswordMode = (active) => {
+            passwordForm?.classList.toggle('hidden', !active);
+            if (active) {
+                gatePanels.forEach(panel => {
+                    panel.classList.remove('is-active');
+                    panel.setAttribute('aria-hidden', 'true');
+                });
+                gateTabs.forEach(tab => {
+                    tab.classList.remove('is-active');
+                    tab.setAttribute('aria-selected', 'false');
+                });
+            }
+        };
+
         const switchGateTab = (name) => {
+            setPasswordMode(false);
             gateTabs.forEach(tab => {
                 const active = tab.dataset.gateTab === name;
                 tab.classList.toggle('is-active', active);
@@ -2190,20 +2265,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
         gateTabs.forEach(tab => tab.addEventListener('click', () => switchGateTab(tab.dataset.gateTab)));
 
+        const openGate = ({ tab = 'register', locked = false, passwordMode = false } = {}) => {
+            gateLocked = locked;
+            gateModal?.classList.remove('hidden');
+            gateBox?.classList.toggle('is-locked', gateLocked);
+            setGateMsg('');
+            if (passwordMode) {
+                setPasswordMode(true);
+            } else {
+                switchGateTab(tab);
+            }
+        };
+
         const btnOpenGate = document.getElementById('btn-cloud-open-gatekeeper');
         btnOpenGate?.addEventListener('click', () => {
-            gateModal?.classList.remove('hidden');
-            switchGateTab('register');
-            setGateMsg('');
+            openGate({ tab: _sbSession ? 'login' : 'register' });
         });
 
-        const closeGate = () => gateModal?.classList.add('hidden');
+        const closeGate = () => {
+            if (gateLocked) return;
+            gateModal?.classList.add('hidden');
+            setPasswordMode(false);
+        };
         document.getElementById('cloud-gatekeeper-close')?.addEventListener('click', closeGate);
         gateModal?.addEventListener('click', (e) => {
-            if (e.target === gateModal) closeGate();
+            if (e.target === gateModal && !gateLocked) closeGate();
         });
 
-        const registerForm = document.getElementById('cloud-register-form');
+        const validateRegisterPassword = bindPasswordValidation('cloud-register-password', 'cloud-register-password-rules', registerSubmitBtn);
+        const validateChangePassword = bindPasswordValidation('cloud-change-password-input', 'cloud-change-password-rules', changePasswordSubmitBtn);
+
         registerForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!_sbClient) return setGateMsg('Servicio no disponible. Recarga la página.', true);
@@ -2212,6 +2303,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const password = document.getElementById('cloud-register-password')?.value || '';
             const nickname = document.getElementById('cloud-register-nickname')?.value?.trim();
             if (!email || !password || !nickname) return setGateMsg('Completa nickname, email y password.', true);
+            if (!validateRegisterPassword()) return setGateMsg('La contraseña no cumple los requisitos de seguridad.', true);
 
             setGateMsg('Creando cuenta en Plataforma Cloud…');
             try {
@@ -2229,7 +2321,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        const loginForm = document.getElementById('cloud-login-form');
         loginForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!_sbClient) return setGateMsg('Servicio no disponible. Recarga la página.', true);
@@ -2250,21 +2341,43 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        passwordForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!_sbClient || !_sbSession) return setGateMsg('Debes iniciar sesión para cambiar tu contraseña.', true);
+            if (!validateChangePassword()) return setGateMsg('La contraseña no cumple los requisitos de seguridad.', true);
+
+            const password = document.getElementById('cloud-change-password-input')?.value || '';
+            try {
+                const { error } = await _sbClient.auth.updateUser({ password });
+                if (error) throw error;
+                setGateMsg('Contraseña actualizada con éxito ✓');
+                setTimeout(() => closeGate(), 700);
+            } catch (err) {
+                setGateMsg(`Error: ${err.message}`, true);
+            }
+        });
+
         document.getElementById('btn-cloud-guest')?.addEventListener('click', () => {
             _setGuestMode(true);
+            if (!window.GameCenter?.hasIdentity?.()) {
+                window.GameCenter?.setIdentity?.('Invitad@', '@');
+            }
+            _setAccountStateLabel(false);
             setGateMsg('Modo invitad@ activado. Tu progreso es volátil.', false);
             _setLoginMsg('Jugando como invitad@ (progreso local volátil).');
+            gateLocked = false;
+            gateBox?.classList.remove('is-locked');
             closeGate();
         });
 
-        // ── Sincronizar ahora (manual) ───────────────────────────────────────
-        const btnSyncNow = document.getElementById('btn-cloud-sync-now');
-        if (btnSyncNow) {
-            btnSyncNow.addEventListener('click', () => {
-                clearTimeout(_syncTimer); // Cancelar debounce pendiente
-                _sentinelSync();
-            });
-        }
+        document.getElementById('btn-cloud-change-password')?.addEventListener('click', () => {
+            if (!_sbSession) {
+                openGate({ tab: 'login' });
+                setGateMsg('Inicia sesión para poder cambiar tu contraseña.', true);
+                return;
+            }
+            openGate({ passwordMode: true });
+        });
 
         // ── Cerrar sesión ────────────────────────────────────────────────────
         const btnSignOut = document.getElementById('btn-cloud-signout');
@@ -2282,6 +2395,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 cloudIndicator.classList.add('is-active', 'is-pulse');
                 setTimeout(() => cloudIndicator.classList.remove('is-pulse'), 1800);
             });
+        }
+
+        document.addEventListener('la:cloud-authenticated', () => {
+            gateLocked = false;
+            gateBox?.classList.remove('is-locked');
+            closeGate();
+        });
+
+        _setLastSyncLabel(localStorage.getItem(SENTINEL_TS_KEY));
+        _setAccountStateLabel(Boolean(_sbSession));
+
+        const hasLocalIdentity = window.GameCenter?.hasIdentity?.();
+        if (!hasLocalIdentity && !_sbSession) {
+            openGate({ locked: true, tab: 'register' });
         }
     });
 

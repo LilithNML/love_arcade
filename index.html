@@ -72,7 +72,7 @@
       ║                                                              ║
       ║  Carga el cliente oficial de Supabase desde el CDN de jsDelivr.║
       ║  Expondrá window.supabase — usado por el Sentinel en app.js ║
-      ║  para autenticación Magic Link y sincronización JSONB.       ║
+      ║  para autenticación Email/Password y sincronización JSONB.   ║
       ║  Posición: en <head> para que el objeto esté disponible      ║
       ║  antes de que app.js ejecute su INIT síncrono al final de    ║
       ║  <body>. Sin este orden app.js no puede leer window.supabase ║
@@ -793,18 +793,20 @@
                             <span id="cloud-status-text">Inactivo</span>
                         </span>
                     </div>
-                    <p style="font-size:0.78rem; color:var(--text-low); margin:0 0 12px; line-height:1.5;">
-                        Accede a Plataforma Cloud con registro o login tradicional. También puedes jugar como invitad@ (progreso local volátil).
+                    <p id="cloud-account-state" style="font-size:0.78rem; color:var(--text-low); margin:0 0 6px; line-height:1.5;">
+                        Estado: Invitado
+                    </p>
+                    <p id="cloud-last-sync" style="font-size:0.68rem; color:var(--text-low); margin:0 0 12px;">
+                        Última sincronización: —-
                     </p>
 
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button id="btn-cloud-open-gatekeeper" class="btn-primary" style="flex:1; justify-content:center;">
                             <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-lock"></use></svg>
-                            Abrir Gatekeeper Cloud
+                            Gestionar Cuenta
                         </button>
-                        <button id="btn-cloud-sync-now" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
-                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-upload-cloud"></use></svg>
-                            Sincronizar ahora
+                        <button id="btn-cloud-change-password" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
+                            Cambiar Contraseña
                         </button>
                         <button id="btn-cloud-signout" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
                             Cerrar sesión
@@ -812,7 +814,6 @@
                     </div>
                     <p id="cloud-login-msg" class="feedback-msg" style="min-height:18px;"></p>
                     <p id="cloud-sync-msg" class="feedback-msg" style="min-height:18px;"></p>
-                    <p id="cloud-last-sync" style="font-size:0.68rem; color:var(--text-low); margin:0;"></p>
                 </div>
             </section>
 
@@ -1110,7 +1111,14 @@
                     <input id="cloud-register-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
 
                     <label class="identity-label" for="cloud-register-password">Password</label>
-                    <input id="cloud-register-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres" required>
+                    <input id="cloud-register-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="20" placeholder="Mínimo 20 caracteres" required>
+                    <ul id="cloud-register-password-rules" class="cloud-password-rules">
+                        <li data-rule="length">20+ caracteres</li>
+                        <li data-rule="upper">Al menos una mayúscula</li>
+                        <li data-rule="lower">Al menos una minúscula</li>
+                        <li data-rule="digit">Al menos un número</li>
+                        <li data-rule="symbol">Al menos un símbolo (@$!%*?&)</li>
+                    </ul>
 
                     <button id="btn-cloud-register" class="btn-primary cloud-gatekeeper-submit" type="submit">
                         <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-plus"></use></svg>
@@ -1131,6 +1139,23 @@
                     </button>
                 </form>
             </div>
+
+            <form id="cloud-password-form" class="cloud-password-form hidden">
+                <label class="identity-label" for="cloud-change-password-input">Nueva contraseña</label>
+                <input id="cloud-change-password-input" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="20" placeholder="Mínimo 20 caracteres" required>
+                <ul id="cloud-change-password-rules" class="cloud-password-rules">
+                    <li data-rule="length">20+ caracteres</li>
+                    <li data-rule="upper">Al menos una mayúscula</li>
+                    <li data-rule="lower">Al menos una minúscula</li>
+                    <li data-rule="digit">Al menos un número</li>
+                    <li data-rule="symbol">Al menos un símbolo (@$!%*?&)</li>
+                </ul>
+
+                <button id="btn-cloud-change-password-submit" class="btn-primary cloud-gatekeeper-submit" type="submit" disabled>
+                    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-shield-check"></use></svg>
+                    Actualizar contraseña
+                </button>
+            </form>
 
             <div class="cloud-guest-block">
                 <p class="cloud-guest-note">Modo Invitado activo: tu progreso se guarda solo en este dispositivo y puede perderse al borrar datos del navegador.</p>
@@ -1477,11 +1502,7 @@
         // Si el usuario ya tiene nickname → revealUI() directamente.
         // Si no → mostrar modal de bienvenida; revealUI() se llama al confirmar.
 
-        if (window.GameCenter?.hasIdentity?.()) {
-            window.revealUI?.();
-        } else {
-            openIdentityModal('welcome');
-        }
+        window.revealUI?.();
 
         // ── Botón de edición en el HUD ──────────────────────────────────────
         document.getElementById('btn-edit-identity')
@@ -1506,4 +1527,4 @@
     </script>
 
 </body>
-</html
+</html>
