@@ -349,6 +349,10 @@
                                     aria-label="Editar nombre y saludo">
                                 <svg class="icon" width="11" height="11" aria-hidden="true"><use href="#icon-pencil"></use></svg>
                             </button>
+                            <span id="hud-cloud-sync-indicator" class="hud-cloud-sync-indicator" aria-live="polite" title="Sincronización en la nube">
+                                <svg class="icon" width="11" height="11" aria-hidden="true"><use href="#icon-upload-cloud"></use></svg>
+                                Nube
+                            </span>
                         </div>
                         <p class="hud-status">
                             <span class="hud-status-dot"></span>
@@ -773,7 +777,7 @@
                     <p id="import-msg" class="feedback-msg"></p>
                 </div>
 
-                <!-- ── NUBE: Sentinel Cloud Sync v13.0 ── -->
+                <!-- ── NUBE: Sentinel Cloud Sync v14.0 ── -->
                 <div class="memory-card" id="cloud-sync-card" style="border-color:rgba(99,179,237,0.35); margin-top:8px;">
                     <div class="memory-card__header">
                         <div class="memory-card__chip" style="background:linear-gradient(135deg,rgba(99,179,237,0.25),rgba(66,153,225,0.15)); border:1px solid rgba(99,179,237,0.4);">
@@ -789,49 +793,26 @@
                             <span id="cloud-status-text">Inactivo</span>
                         </span>
                     </div>
+                    <p style="font-size:0.78rem; color:var(--text-low); margin:0 0 12px; line-height:1.5;">
+                        Accede a Plataforma Cloud con registro o login tradicional. También puedes jugar como invitad@ (progreso local volátil).
+                    </p>
 
-                    <!-- Panel A: no autenticado -->
-                    <div id="cloud-panel-login" style="display:flex; flex-direction:column; gap:10px;">
-                        <p style="font-size:0.78rem; color:var(--text-low); margin:0; line-height:1.5;">
-                            Inicia sesión con tu correo para sincronizar automáticamente tu progreso en todos tus dispositivos. Sin contraseñas — solo un enlace mágico.
-                        </p>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <input
-                                type="email"
-                                id="cloud-email-input"
-                                placeholder="tu@correo.com"
-                                autocomplete="email"
-                                style="flex:1; min-width:180px; padding:9px 13px; border-radius:10px; border:1px solid var(--accent-border); background:rgba(255,255,255,0.05); color:var(--text); font-size:0.82rem; outline:none;"
-                            >
-                            <button id="btn-cloud-login" class="btn-primary" style="white-space:nowrap; padding:9px 16px; font-size:0.82rem;">
-                                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-send"></use></svg>
-                                Enviar Magic Link
-                            </button>
-                        </div>
-                        <p id="cloud-login-msg" class="feedback-msg" style="min-height:18px;"></p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button id="btn-cloud-open-gatekeeper" class="btn-primary" style="flex:1; justify-content:center;">
+                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-lock"></use></svg>
+                            Abrir Gatekeeper Cloud
+                        </button>
+                        <button id="btn-cloud-sync-now" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
+                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-upload-cloud"></use></svg>
+                            Sincronizar ahora
+                        </button>
+                        <button id="btn-cloud-signout" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
+                            Cerrar sesión
+                        </button>
                     </div>
-
-                    <!-- Panel B: autenticado -->
-                    <div id="cloud-panel-session" style="display:none; flex-direction:column; gap:10px;">
-                        <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:10px; background:rgba(99,179,237,0.08); border:1px solid rgba(99,179,237,0.2);">
-                            <svg class="icon" width="14" height="14" style="color:#63b3ed; flex-shrink:0;" aria-hidden="true"><use href="#icon-shield-check"></use></svg>
-                            <div style="flex:1; min-width:0;">
-                                <p style="margin:0; font-size:0.72rem; font-weight:700; color:#63b3ed;">Sesión activa</p>
-                                <p id="cloud-session-email" style="margin:0; font-size:0.68rem; color:var(--text-low); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></p>
-                            </div>
-                        </div>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <button id="btn-cloud-sync-now" class="btn-primary" style="flex:1; justify-content:center; font-size:0.82rem; padding:9px 14px;">
-                                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-upload-cloud"></use></svg>
-                                Sincronizar ahora
-                            </button>
-                            <button id="btn-cloud-signout" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
-                                Cerrar sesión
-                            </button>
-                        </div>
-                        <p id="cloud-sync-msg" class="feedback-msg" style="min-height:18px;"></p>
-                        <p id="cloud-last-sync" style="font-size:0.68rem; color:var(--text-low); margin:0;"></p>
-                    </div>
+                    <p id="cloud-login-msg" class="feedback-msg" style="min-height:18px;"></p>
+                    <p id="cloud-sync-msg" class="feedback-msg" style="min-height:18px;"></p>
+                    <p id="cloud-last-sync" style="font-size:0.68rem; color:var(--text-low); margin:0;"></p>
                 </div>
             </section>
 
@@ -1102,6 +1083,65 @@
                 <button id="modal-cancel" class="btn-ghost">Cancelar</button>
                 <button id="modal-confirm" class="btn-primary">Confirmar</button>
             </div>
+        </div>
+    </div>
+
+    <div id="cloud-gatekeeper-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cloud-gatekeeper-title">
+        <div class="modal-box cloud-gatekeeper-modal-box">
+            <button id="cloud-gatekeeper-close" class="modal-close-btn" type="button" aria-label="Cerrar acceso cloud">
+                <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-x"></use></svg>
+            </button>
+
+            <p class="cloud-gatekeeper-kicker">Sentinel v14.0</p>
+            <h3 id="cloud-gatekeeper-title" class="modal-title cloud-gatekeeper-title">Modal de Acceso Unificado</h3>
+            <p class="cloud-gatekeeper-sub">Regístrate, inicia sesión o entra como invitad@ sin salir de la partida.</p>
+
+            <div class="cloud-gatekeeper-tabs" role="tablist" aria-label="Opciones de acceso">
+                <button id="gate-tab-register" class="cloud-gatekeeper-tab is-active" role="tab" aria-selected="true" data-gate-tab="register">Registro</button>
+                <button id="gate-tab-login" class="cloud-gatekeeper-tab" role="tab" aria-selected="false" data-gate-tab="login">Login</button>
+            </div>
+
+            <div class="cloud-gatekeeper-panels">
+                <form id="cloud-register-form" class="cloud-gatekeeper-panel is-active" data-gate-panel="register">
+                    <label class="identity-label" for="cloud-register-nickname">Nickname</label>
+                    <input id="cloud-register-nickname" class="identity-input cloud-gatekeeper-input" type="text" maxlength="15" autocomplete="nickname" placeholder="ArcadeMaster" required>
+
+                    <label class="identity-label" for="cloud-register-email">Email</label>
+                    <input id="cloud-register-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
+
+                    <label class="identity-label" for="cloud-register-password">Password</label>
+                    <input id="cloud-register-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres" required>
+
+                    <button id="btn-cloud-register" class="btn-primary cloud-gatekeeper-submit" type="submit">
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-plus"></use></svg>
+                        Crear cuenta
+                    </button>
+                </form>
+
+                <form id="cloud-login-form" class="cloud-gatekeeper-panel" data-gate-panel="login" aria-hidden="true">
+                    <label class="identity-label" for="cloud-login-email">Email</label>
+                    <input id="cloud-login-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
+
+                    <label class="identity-label" for="cloud-login-password">Password</label>
+                    <input id="cloud-login-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="current-password" placeholder="Tu password" required>
+
+                    <button id="btn-cloud-login" class="btn-primary cloud-gatekeeper-submit" type="submit">
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-lock"></use></svg>
+                        Ingresar a Plataforma Cloud
+                    </button>
+                </form>
+            </div>
+
+            <div class="cloud-guest-block">
+                <p class="cloud-guest-note">Modo Invitado activo: tu progreso se guarda solo en este dispositivo y puede perderse al borrar datos del navegador.</p>
+                <button id="btn-cloud-guest" class="btn-ghost" type="button">
+                    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-monitor"></use></svg>
+                    Jugar como invitad@
+                </button>
+            </div>
+
+            <p id="cloud-gatekeeper-msg" class="feedback-msg cloud-gatekeeper-msg" aria-live="polite"></p>
+            <p id="cloud-session-email" style="margin:0; font-size:0.68rem; color:var(--text-low); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></p>
         </div>
     </div>
 

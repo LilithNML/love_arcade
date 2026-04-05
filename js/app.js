@@ -1762,7 +1762,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // exclusivamente en shop-logic.js para evitar el doble-registro de eventos.
 });
 // =====================================================
-// ☁️  SENTINEL CLOUD SYNC — v13.0
+// ☁️  SENTINEL CLOUD SYNC — v14.0
 // ─────────────────────────────────────────────────────────────────────────────
 // Arquitectura: Patrón "Sentinel" (Observador)
 //
@@ -1774,10 +1774,10 @@ document.addEventListener('DOMContentLoaded', () => {
 //
 // Flujo principal:
 //  1. init: obtiene credenciales de /api/client-config → crea cliente Supabase
-//  2. onAuthStateChange: detecta sesión activa (Magic Link)
+//  2. onAuthStateChange: detecta sesión activa (Email/Password)
 //     → al SIGNED_IN: descarga perfil de la nube y aplica Last Write Wins
 //  3. StorageInterceptor: intercepta localStorage.setItem para claves vigiladas
-//     → dispara _sentinelScheduleSync() con debounce de 12 s
+//     → dispara _sentinelScheduleSync() con debounce de 3 s
 //  4. _sentinelSync(): sube snapshot de todas las claves vigiladas a Supabase
 //
 // Resolución de conflictos — Last Write Wins (timestamp):
@@ -1832,6 +1832,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Clave del registro de marca de tiempo local (para Last Write Wins)
     const SENTINEL_TS_KEY = 'love_arcade_sentinel_ts';
+    const SENTINEL_GUEST_KEY = 'love_arcade_guest_mode';
 
     // Tabla de Supabase
     const SUPABASE_TABLE = 'user_profiles';
@@ -1841,7 +1842,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let _sbSession  = null;   // Sesión de usuario activa
     let _syncTimer  = null;   // Timer de debounce
     let _isSyncing  = false;  // Mutex de subida activa
-    const DEBOUNCE_MS = 12_000; // 12 s de inactividad antes de subir
+    const DEBOUNCE_MS = 3_000; // 3 s de inactividad antes de subir
 
     // ── Utilidades de UI ─────────────────────────────────────────────────────
 
@@ -1887,17 +1888,18 @@ document.addEventListener('DOMContentLoaded', () => {
         })}`;
     }
 
-    function _showPanel(loggedIn) {
-        const loginPanel   = document.getElementById('cloud-panel-login');
-        const sessionPanel = document.getElementById('cloud-panel-session');
-        if (!loginPanel || !sessionPanel) return;
-        loginPanel.style.display   = loggedIn ? 'none'  : 'flex';
-        sessionPanel.style.display = loggedIn ? 'flex'  : 'none';
-    }
-
     function _setSessionEmail(email) {
         const el = document.getElementById('cloud-session-email');
         if (el) el.textContent = email || '';
+    }
+
+    function _setGuestMode(active) {
+        if (active) _originalSetItem(SENTINEL_GUEST_KEY, '1');
+        else localStorage.removeItem(SENTINEL_GUEST_KEY);
+    }
+
+    function _isGuestMode() {
+        return localStorage.getItem(SENTINEL_GUEST_KEY) === '1';
     }
 
     // ── Snapshot — lectura/escritura del estado vigilado ─────────────────────
@@ -1979,6 +1981,9 @@ document.addEventListener('DOMContentLoaded', () => {
             _setStatusBadge('synced');
             _setSyncMsg('¡Progreso guardado en la nube! ✓');
             _setLastSyncLabel(now);
+            document.dispatchEvent(new CustomEvent('la:synced', {
+                detail: { at: now, source: 'sentinel-upsert' }
+            }));
 
             // Limpiar mensaje tras 4 s
             setTimeout(() => _setSyncMsg(''), 4_000);
@@ -2005,57 +2010,83 @@ document.addEventListener('DOMContentLoaded', () => {
         _syncTimer = setTimeout(_sentinelSync, delay);
     }
 
-    // ── Carga desde la nube (Last Write Wins) ────────────────────────────────
+    // ── Carga/merge desde la nube — Sentinel v14.0 ──────────────────────────
 
-    /**
-     * Descarga el perfil de la nube y aplica Last Write Wins basado en updated_at.
-     * - Si la nube es más reciente que el local → sobreescribir localStorage.
-     * - Si el local es más reciente → subir local a la nube.
-     * - Si no existe perfil en la nube → subir el local.
-     */
-    async function _sentinelLoad() {
-        if (!_sbClient || !_sbSession) return;
-        _setStatusBadge('syncing');
+    async function _migrateGuestData(cloudData = {}) {
+        if (!_sbClient || !_sbSession) return cloudData || {};
+
+        const localGuestData = _buildSnapshot();
+        const hasGuestProgress = Object.keys(localGuestData).length > 0;
+        if (!hasGuestProgress) {
+            _setGuestMode(false);
+            return cloudData || {};
+        }
+
+        const mergedData = { ...(cloudData || {}), ...localGuestData };
+        const now = new Date().toISOString();
+        const userId = _sbSession.user.id;
+        const { error } = await _sbClient
+            .from(SUPABASE_TABLE)
+            .upsert({ id: userId, game_data: mergedData, updated_at: now }, { onConflict: 'id' });
+        if (error) throw error;
+
+        _originalSetItem(SENTINEL_TS_KEY, now);
+        _setGuestMode(false);
+        _setSyncMsg('Progreso de invitad@ migrado a la nube ✓');
+        _setLastSyncLabel(now);
+        document.dispatchEvent(new CustomEvent('la:synced', {
+            detail: { at: now, source: 'guest-migration' }
+        }));
+
+        return mergedData;
+    }
+
+    async function _handleAuthChange(event, session) {
+        if (!_sbClient) return;
+
+        if (!session) {
+            _sbSession = null;
+            _setStatusBadge('inactive');
+            _setSessionEmail('');
+            clearTimeout(_syncTimer);
+            return;
+        }
+
+        _sbSession = session;
+        _setSessionEmail(session.user?.email || '');
+        _setStatusBadge('connected');
 
         try {
-            const userId = _sbSession.user.id;
+            const userId = session.user.id;
             const { data, error } = await _sbClient
                 .from(SUPABASE_TABLE)
                 .select('game_data, updated_at')
                 .eq('id', userId)
                 .maybeSingle();
-
             if (error) throw error;
 
-            if (!data) {
-                // Primera vez: no existe perfil → subir local inmediatamente
-                await _sentinelSync();
-                return;
+            let effectiveData = data?.game_data || {};
+            if (_isGuestMode() && event === 'SIGNED_IN') {
+                effectiveData = await _migrateGuestData(effectiveData);
             }
 
-            const cloudTs = new Date(data.updated_at).getTime();
-            const localTs = (() => {
-                try {
-                    const raw = localStorage.getItem(SENTINEL_TS_KEY);
-                    return raw ? new Date(raw).getTime() : 0;
-                } catch (_) { return 0; }
-            })();
-
-            if (cloudTs > localTs) {
-                // Nube más reciente → aplicar snapshot local
-                _applySnapshot(data.game_data);
-                _setLastSyncLabel(data.updated_at);
-                _setSyncMsg('Progreso restaurado desde la nube ✓');
-                setTimeout(() => _setSyncMsg(''), 5_000);
+            if (effectiveData && Object.keys(effectiveData).length > 0) {
+                _applySnapshot(effectiveData);
+                if (data?.updated_at) {
+                    _originalSetItem(SENTINEL_TS_KEY, data.updated_at);
+                    _setLastSyncLabel(data.updated_at);
+                }
+                _setSyncMsg('Progreso cloud cargado ✓');
+                setTimeout(() => _setSyncMsg(''), 4_000);
             } else {
-                // Local más reciente o empate → subir a la nube
                 await _sentinelSync();
             }
 
             _setStatusBadge('synced');
         } catch (err) {
-            console.error('[Sentinel] Error al cargar desde la nube:', err);
+            console.error('[Sentinel] Error al procesar auth change:', err);
             _setStatusBadge('error');
+            _setSyncMsg('No se pudo sincronizar al iniciar sesión.', true);
         }
     }
 
@@ -2080,17 +2111,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Autenticación — onAuthStateChange ────────────────────────────────────
 
-    function _handleSignIn(session) {
-        _sbSession = session;
-        _showPanel(true);
-        _setSessionEmail(session.user.email);
-        _setStatusBadge('connected');
-        _sentinelLoad(); // Comparar y resolver conflictos
-    }
-
     function _handleSignOut() {
         _sbSession = null;
-        _showPanel(false);
         _setStatusBadge('inactive');
         _setSessionEmail('');
         clearTimeout(_syncTimer);
@@ -2127,55 +2149,113 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 3. Escuchar cambios de sesión
         _sbClient.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                _handleSignIn(session);
-            } else if (event === 'SIGNED_OUT') {
+            if (event === 'SIGNED_OUT') {
                 _handleSignOut();
+                return;
             }
+            _handleAuthChange(event, session);
         });
 
         // 4. Recuperar sesión existente (para recargas de página)
         const { data: { session } } = await _sbClient.auth.getSession();
-        if (session) _handleSignIn(session);
+        if (session) _handleAuthChange('INITIAL_SESSION', session);
     }
 
     // ── Listeners de UI ──────────────────────────────────────────────────────
 
     document.addEventListener('DOMContentLoaded', () => {
+        const gateModal = document.getElementById('cloud-gatekeeper-modal');
+        const gateMsgEl = document.getElementById('cloud-gatekeeper-msg');
+        const gateTabs = Array.from(document.querySelectorAll('[data-gate-tab]'));
+        const gatePanels = Array.from(document.querySelectorAll('[data-gate-panel]'));
 
-        // ── Enviar Magic Link ────────────────────────────────────────────────
-        const btnLogin = document.getElementById('btn-cloud-login');
-        if (btnLogin) {
-            btnLogin.addEventListener('click', async () => {
-                if (!_sbClient) {
-                    _setLoginMsg('Servicio no disponible. Recarga la página.', true);
-                    return;
-                }
-                const emailInput = document.getElementById('cloud-email-input');
-                const email = emailInput?.value?.trim();
-                if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
-                    _setLoginMsg('Ingresa un correo válido.', true);
-                    return;
-                }
+        const setGateMsg = (msg, isError = false) => {
+            if (!gateMsgEl) return;
+            gateMsgEl.textContent = msg || '';
+            gateMsgEl.style.color = isError ? 'var(--error, #fc8181)' : '#68d391';
+        };
 
-                btnLogin.disabled = true;
-                btnLogin.style.opacity = '0.6';
-                _setLoginMsg('Enviando enlace…');
-
-                try {
-                    const { error } = await _sbClient.auth.signInWithOtp({
-                        email,
-                        options: { emailRedirectTo: window.location.origin }
-                    });
-                    if (error) throw error;
-                    _setLoginMsg(`¡Enlace enviado a ${email}! Revisa tu correo.`);
-                } catch (err) {
-                    _setLoginMsg(`Error: ${err.message}`, true);
-                    btnLogin.disabled = false;
-                    btnLogin.style.opacity = '1';
-                }
+        const switchGateTab = (name) => {
+            gateTabs.forEach(tab => {
+                const active = tab.dataset.gateTab === name;
+                tab.classList.toggle('is-active', active);
+                tab.setAttribute('aria-selected', String(active));
             });
-        }
+            gatePanels.forEach(panel => {
+                const active = panel.dataset.gatePanel === name;
+                panel.classList.toggle('is-active', active);
+                panel.setAttribute('aria-hidden', String(!active));
+            });
+        };
+
+        gateTabs.forEach(tab => tab.addEventListener('click', () => switchGateTab(tab.dataset.gateTab)));
+
+        const btnOpenGate = document.getElementById('btn-cloud-open-gatekeeper');
+        btnOpenGate?.addEventListener('click', () => {
+            gateModal?.classList.remove('hidden');
+            switchGateTab('register');
+            setGateMsg('');
+        });
+
+        const closeGate = () => gateModal?.classList.add('hidden');
+        document.getElementById('cloud-gatekeeper-close')?.addEventListener('click', closeGate);
+        gateModal?.addEventListener('click', (e) => {
+            if (e.target === gateModal) closeGate();
+        });
+
+        const registerForm = document.getElementById('cloud-register-form');
+        registerForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!_sbClient) return setGateMsg('Servicio no disponible. Recarga la página.', true);
+
+            const email = document.getElementById('cloud-register-email')?.value?.trim();
+            const password = document.getElementById('cloud-register-password')?.value || '';
+            const nickname = document.getElementById('cloud-register-nickname')?.value?.trim();
+            if (!email || !password || !nickname) return setGateMsg('Completa nickname, email y password.', true);
+
+            setGateMsg('Creando cuenta en Plataforma Cloud…');
+            try {
+                const { error } = await _sbClient.auth.signUp({
+                    email,
+                    password,
+                    options: { data: { nickname } }
+                });
+                if (error) throw error;
+                _setGuestMode(false);
+                setGateMsg('Cuenta creada. Revisa tu correo para confirmar si aplica.');
+                _setLoginMsg('Registro cloud completado ✓');
+            } catch (err) {
+                setGateMsg(`Error: ${err.message}`, true);
+            }
+        });
+
+        const loginForm = document.getElementById('cloud-login-form');
+        loginForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!_sbClient) return setGateMsg('Servicio no disponible. Recarga la página.', true);
+
+            const email = document.getElementById('cloud-login-email')?.value?.trim();
+            const password = document.getElementById('cloud-login-password')?.value || '';
+            if (!email || !password) return setGateMsg('Completa email y password.', true);
+
+            setGateMsg('Iniciando sesión…');
+            try {
+                const { error } = await _sbClient.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+                setGateMsg('Sesión iniciada ✓');
+                _setLoginMsg(`Cloud activo para ${email}`);
+                closeGate();
+            } catch (err) {
+                setGateMsg(`Error: ${err.message}`, true);
+            }
+        });
+
+        document.getElementById('btn-cloud-guest')?.addEventListener('click', () => {
+            _setGuestMode(true);
+            setGateMsg('Modo invitad@ activado. Tu progreso es volátil.', false);
+            _setLoginMsg('Jugando como invitad@ (progreso local volátil).');
+            closeGate();
+        });
 
         // ── Sincronizar ahora (manual) ───────────────────────────────────────
         const btnSyncNow = document.getElementById('btn-cloud-sync-now');
@@ -2196,9 +2276,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // ── Restaurar UI si ya hay sesión en localStorage de Supabase ───────
-        // _sentinelInit() ya maneja esto, pero el panel puede renderizarse
-        // antes de que la Promise resuelva; _showPanel(false) es el estado por defecto.
+        const cloudIndicator = document.getElementById('hud-cloud-sync-indicator');
+        if (cloudIndicator) {
+            document.addEventListener('la:synced', () => {
+                cloudIndicator.classList.add('is-active', 'is-pulse');
+                setTimeout(() => cloudIndicator.classList.remove('is-pulse'), 1800);
+            });
+        }
     });
 
     // ── Arranque ─────────────────────────────────────────────────────────────

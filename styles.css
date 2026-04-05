@@ -725,6 +725,39 @@ body::before {
     background: var(--accent-soft);
     transform: scale(1.12);
 }
+
+.hud-cloud-sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(99, 179, 237, 0.35);
+    background: rgba(99, 179, 237, 0.08);
+    color: #63b3ed;
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1;
+    opacity: 0;
+    transform: translateY(2px);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.hud-cloud-sync-indicator.is-active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.hud-cloud-sync-indicator.is-pulse {
+    animation: cloudSyncPulse 0.8s ease-in-out 2;
+}
+
+@keyframes cloudSyncPulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(99, 179, 237, 0); }
+    50%      { box-shadow: 0 0 14px rgba(99, 179, 237, 0.45); }
+}
 .hud-status {
     font-size: 0.72rem;
     color: var(--text-low);
@@ -3618,6 +3651,115 @@ svg { stroke-width: 2; }
     z-index: 2;
 }
 .modal-close-btn:hover { background: rgba(255,255,255,0.14); }
+
+/* ── Cloud Gatekeeper modal — Sentinel v14.0 ───────────────────────────── */
+.cloud-gatekeeper-modal-box {
+    max-width: 430px;
+    width: min(92vw, 430px);
+    border: 1px solid rgba(99, 179, 237, 0.35);
+}
+
+.cloud-gatekeeper-kicker {
+    margin: 0 0 8px;
+    color: #63b3ed;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    font-size: 0.64rem;
+    font-weight: 700;
+}
+
+.cloud-gatekeeper-title {
+    font-family: var(--font-display);
+    font-size: 1.08rem;
+    margin-bottom: 8px;
+}
+
+.cloud-gatekeeper-sub {
+    margin: 0 0 18px;
+    color: var(--text-low);
+    font-size: 0.77rem;
+    line-height: 1.45;
+}
+
+.cloud-gatekeeper-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.cloud-gatekeeper-tab {
+    border: 1px solid var(--border-mid);
+    background: var(--solid-surface-base);
+    color: var(--text-low);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.cloud-gatekeeper-tab.is-active {
+    border-color: var(--accent-border);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.cloud-gatekeeper-panels {
+    position: relative;
+}
+
+.cloud-gatekeeper-panel {
+    display: none;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.cloud-gatekeeper-panel.is-active {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.cloud-gatekeeper-input {
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+}
+
+.cloud-gatekeeper-submit {
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+    font-family: var(--font-display);
+    font-weight: 800;
+}
+
+.cloud-guest-block {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-mid);
+}
+
+.cloud-guest-note {
+    margin: 0 0 10px;
+    color: var(--text-low);
+    font-size: 0.72rem;
+    line-height: 1.45;
+}
+
+#btn-cloud-guest {
+    width: 100%;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 700;
+}
+
+.cloud-gatekeeper-msg {
+    min-height: 18px;
+    margin-top: 12px;
+}
 
 /* ── Reduce motion ───────────────────────────────────────────────────────── */
 
