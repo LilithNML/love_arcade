@@ -2179,6 +2179,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // ── Cross-tab bridge: detectar writes desde otras pestañas ───────────────
+    // El evento 'storage' NO se dispara en la pestaña que ejecuta setItem,
+    // sólo en el resto de pestañas del mismo origen (ej: Hub abierto + juego).
+    window.addEventListener('storage', (event) => {
+        if (!_sbSession) return; // Invitado o sesión no restaurada → ignorar
+        if (!event?.key) return;
+        if (!SENTINEL_WATCHED_KEYS.has(event.key)) return;
+        console.log(`[Sentinel] Cambio detectado en pestaña externa (${event.key}). Sincronizando...`);
+        _sentinelScheduleSync(); // Debounce centralizado (1 s)
+    });
+
     // ── Autenticación — onAuthStateChange ────────────────────────────────────
 
     function _handleSignOut() {
@@ -2440,7 +2451,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        const cloudIndicator = document.getElementById('hud-cloud-sync-indicator');
+        const cloudIndicator = document.getElementById('cloud-sync-indicator')
+            || document.getElementById('hud-cloud-sync-indicator');
         if (cloudIndicator) {
             document.addEventListener('la:synced', () => {
                 cloudIndicator.classList.add('is-active', 'is-pulse');
