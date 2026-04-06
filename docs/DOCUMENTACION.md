@@ -4931,6 +4931,7 @@ La v14.0 mueve el acceso cloud desde la zona de tienda a un **flujo de entrada a
 | **Memoria del Hub en caliente** | Ante cambios cross-tab se rehidrata el `store` en memoria desde `localStorage` para que HUD/saldo no queden desactualizados hasta la próxima interacción. |
 | **Marca de tiempo local robusta** | Cambios detectados por `storage` actualizan `love_arcade_sentinel_ts` local, evitando falsos empates de timestamp contra nube en recargas posteriores. |
 | **Navegador en segundo plano** | Si la pestaña está oculta, el scheduler evita depender de `setTimeout` throttled y fuerza sync en `visibilitychange/pagehide` cuando hay cambios pendientes. |
+| **Sentinel v14.5 (prioridades)** | Claves críticas (monedas/progreso/configuración) sincronizan en ~1 s; claves pasivas (playtime/estado incremental) usan ventana de 60 s o flush al salir/minimizar. |
 
 ### Contrato Supabase respetado (v14)
 

@@ -1883,9 +1883,25 @@ document.addEventListener('DOMContentLoaded', () => {
     let _sbClient   = null;   // Cliente Supabase inicializado
     let _sbSession  = null;   // Sesión de usuario activa
     let _syncTimer  = null;   // Timer de debounce
+    let _scheduledSyncPriority = null; // 'high' | 'passive' | null
     let _isSyncing  = false;  // Mutex de subida activa
     let _hasUnsyncedChanges = false; // Dirty flag local (incluye cambios cross-tab)
-    const DEBOUNCE_MS = 1_000; // 1 s de inactividad antes de subir
+    const HIGH_PRIORITY_DEBOUNCE_MS = 1_000;
+    const PASSIVE_PRIORITY_DEBOUNCE_MS = 60_000;
+
+    const HIGH_PRIORITY_KEYS = new Set([
+        CONFIG.stateKey,              // gamecenter_v6_promos
+        'gamecenter_v6_promos',
+        'love_arcade_inventory',
+        'LUMINA_bestScore',
+        'love_arcade_settings',
+    ]);
+
+    const PASSIVE_PRIORITY_KEYS = new Set([
+        'love_arcade_missions',
+        'LUMINA_gameState',
+        SENTINEL_TS_KEY,
+    ]);
 
     // ── Utilidades de UI ─────────────────────────────────────────────────────
 
@@ -2056,16 +2072,59 @@ document.addEventListener('DOMContentLoaded', () => {
      * Programa una sincronización con debounce.
      * Cada llamada reinicia el timer; la subida ocurre sólo cuando el
      * usuario lleva `delay` ms sin escribir en localStorage.
-     * @param {number} [delay=DEBOUNCE_MS]
+     * @param {number} [delay=HIGH_PRIORITY_DEBOUNCE_MS]
      */
-    function _sentinelScheduleSync(delay = DEBOUNCE_MS) {
+    function _sentinelScheduleSync(delay = HIGH_PRIORITY_DEBOUNCE_MS) {
         if (!_sbSession) return;
         clearTimeout(_syncTimer);
         if (document.hidden) {
             _sentinelSync();
             return;
         }
-        _syncTimer = setTimeout(_sentinelSync, delay);
+        _scheduledSyncPriority = delay <= HIGH_PRIORITY_DEBOUNCE_MS ? 'high' : 'passive';
+        _syncTimer = setTimeout(() => {
+            _syncTimer = null;
+            _scheduledSyncPriority = null;
+            _sentinelSync();
+        }, delay);
+    }
+
+    function _isMissionsOnlyDelta(prevRaw, nextRaw) {
+        try {
+            if (!prevRaw || !nextRaw) return false;
+            const prev = migrateState(JSON.parse(prevRaw));
+            const next = migrateState(JSON.parse(nextRaw));
+            const prevM = prev?.missions || {};
+            const nextM = next?.missions || {};
+            const missionsChanged = JSON.stringify(prevM) !== JSON.stringify(nextM);
+            if (!missionsChanged) return false;
+            prev.missions = { ...prevM, playtime: 0, games_played: 0 };
+            next.missions = { ...nextM, playtime: 0, games_played: 0 };
+            return JSON.stringify(prev) === JSON.stringify(next);
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function _resolveSyncPriority(key, prevValue, nextValue) {
+        if ((key === CONFIG.stateKey || key === 'gamecenter_v6_promos') && _isMissionsOnlyDelta(prevValue, nextValue)) {
+            return 'passive';
+        }
+        if (HIGH_PRIORITY_KEYS.has(key)) return 'high';
+        if (PASSIVE_PRIORITY_KEYS.has(key)) return 'passive';
+        return 'passive'; // resto de claves vigiladas
+    }
+
+    function _sentinelScheduleSyncForKey(key, prevValue = null, nextValue = null) {
+        if (!_sbSession) return;
+        const priority = _resolveSyncPriority(key, prevValue, nextValue);
+        if (priority === 'high') {
+            _sentinelScheduleSync(HIGH_PRIORITY_DEBOUNCE_MS);
+            return;
+        }
+        // Prioridad pasiva: sólo programar si no hay sync pendiente.
+        if (_syncTimer) return;
+        _sentinelScheduleSync(PASSIVE_PRIORITY_DEBOUNCE_MS);
     }
 
     // ── Carga/merge desde la nube — Sentinel v14.0 ──────────────────────────
@@ -2182,11 +2241,12 @@ document.addEventListener('DOMContentLoaded', () => {
      * El valor se escribe normalmente en localStorage independientemente.
      */
     localStorage.setItem = function interceptedSetItem(key, value) {
+        const prevValue = localStorage.getItem(key);
         _originalSetItem(key, value);
         if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession) {
             _hasUnsyncedChanges = true;
             _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
-            _sentinelScheduleSync();
+            _sentinelScheduleSyncForKey(key, prevValue, value);
         }
     };
 
@@ -2204,7 +2264,7 @@ document.addEventListener('DOMContentLoaded', () => {
         _hasUnsyncedChanges = true;
         if (!_sbSession) return; // Invitado o sesión no restaurada → ignorar sync cloud
         console.log(`[Sentinel] Cambio detectado en pestaña externa (${event.key}). Sincronizando...`);
-        _sentinelScheduleSync(); // Debounce centralizado (1 s)
+        _sentinelScheduleSyncForKey(event.key, event.oldValue, event.newValue);
     });
 
     // ── Autenticación — onAuthStateChange ────────────────────────────────────
@@ -2479,6 +2539,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         window.addEventListener('pagehide', () => {
+            if (!_sbSession || !_hasUnsyncedChanges) return;
+            clearTimeout(_syncTimer);
+            _sentinelSync();
+        });
+
+        window.addEventListener('beforeunload', () => {
             if (!_sbSession || !_hasUnsyncedChanges) return;
             clearTimeout(_syncTimer);
             _sentinelSync();
