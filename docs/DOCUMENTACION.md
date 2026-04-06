@@ -4928,6 +4928,9 @@ La v14.0 mueve el acceso cloud desde la zona de tienda a un **flujo de entrada a
 | **Persistencia rápida** | Debounce de sync reducido a 1 s + sincronización inmediata en operaciones críticas de monedas (`completeLevel`, `addCoins`, `buyItem`, `spendCoins`). |
 | **Reintento asíncrono de sesión** | Si una escritura crítica ocurre antes de restaurar sesión Supabase en una pestaña de juego, se programa reintento diferido de sync inmediato (500 ms, hasta 3 intentos) para evitar pérdidas silenciosas. |
 | **Bridge cross-tab (`storage`)** | El Hub escucha el evento global `storage`: cuando otra pestaña (juego) modifica una clave vigilada y hay sesión activa, el Sentinel programa sync con debounce de 1 s. |
+| **Memoria del Hub en caliente** | Ante cambios cross-tab se rehidrata el `store` en memoria desde `localStorage` para que HUD/saldo no queden desactualizados hasta la próxima interacción. |
+| **Marca de tiempo local robusta** | Cambios detectados por `storage` actualizan `love_arcade_sentinel_ts` local, evitando falsos empates de timestamp contra nube en recargas posteriores. |
+| **Navegador en segundo plano** | Si la pestaña está oculta, el scheduler evita depender de `setTimeout` throttled y fuerza sync en `visibilitychange/pagehide` cuando hay cambios pendientes. |
 
 ### Contrato Supabase respetado (v14)
 

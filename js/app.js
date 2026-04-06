@@ -1884,6 +1884,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let _sbSession  = null;   // Sesión de usuario activa
     let _syncTimer  = null;   // Timer de debounce
     let _isSyncing  = false;  // Mutex de subida activa
+    let _hasUnsyncedChanges = false; // Dirty flag local (incluye cambios cross-tab)
     const DEBOUNCE_MS = 1_000; // 1 s de inactividad antes de subir
 
     // ── Utilidades de UI ─────────────────────────────────────────────────────
@@ -1986,16 +1987,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 _originalSetItem(key, snap[key]);
             }
         });
-        // Recargar el store principal del Hub en memoria
+        _rehydrateHubStoreFromDisk();
+        // Emitir evento para que los módulos sepan que el store fue reemplazado
+        document.dispatchEvent(new CustomEvent('la:cloudsynced', { detail: { source: 'cloud' } }));
+    }
+
+    function _rehydrateHubStoreFromDisk() {
         try {
             const raw = localStorage.getItem(CONFIG.stateKey);
             if (raw) {
-                // Rehidratar el store global en memoria para evitar desfase entre
-                // localStorage y estado vivo del Hub tras una restauración cloud.
                 store = migrateState(JSON.parse(raw));
-                // Emitir evento para que los módulos sepan que el store fue reemplazado
-                document.dispatchEvent(new CustomEvent('la:cloudsynced', { detail: { source: 'cloud' } }));
-                // Forzar refresh de UI
                 window.GameCenter?.syncUI?.();
             }
         } catch (_) {}
@@ -2033,6 +2034,7 @@ document.addEventListener('DOMContentLoaded', () => {
             _setStatusBadge('synced');
             _setSyncMsg('¡Progreso guardado en la nube! ✓');
             _setLastSyncLabel(now);
+            _hasUnsyncedChanges = false;
             document.dispatchEvent(new CustomEvent('la:synced', {
                 detail: { at: now, source: 'sentinel-upsert' }
             }));
@@ -2059,6 +2061,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function _sentinelScheduleSync(delay = DEBOUNCE_MS) {
         if (!_sbSession) return;
         clearTimeout(_syncTimer);
+        if (document.hidden) {
+            _sentinelSync();
+            return;
+        }
         _syncTimer = setTimeout(_sentinelSync, delay);
     }
 
@@ -2085,6 +2091,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         _originalSetItem(SENTINEL_TS_KEY, now);
         _setGuestMode(false);
+        _hasUnsyncedChanges = false;
         _setSyncMsg('Progreso de invitad@ migrado a la nube ✓');
         _setLastSyncLabel(now);
         document.dispatchEvent(new CustomEvent('la:synced', {
@@ -2137,6 +2144,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const localSnapshot = _buildSnapshot();
             const hasLocalSnapshot = Object.keys(localSnapshot).length > 0;
             const hasCloudSnapshot = effectiveData && Object.keys(effectiveData).length > 0;
+            const snapshotsDiffer = hasLocalSnapshot && hasCloudSnapshot
+                && JSON.stringify(localSnapshot) !== JSON.stringify(effectiveData);
 
             if (hasCloudSnapshot && cloudTime > localTime) {
                 _applySnapshot(effectiveData);
@@ -2144,7 +2153,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 _setLastSyncLabel(data.updated_at);
                 _setSyncMsg('Progreso cloud restaurado (más reciente) ✓');
                 setTimeout(() => _setSyncMsg(''), 4_000);
-            } else if (hasLocalSnapshot && (!hasCloudSnapshot || localTime > cloudTime)) {
+            } else if (hasLocalSnapshot && (!hasCloudSnapshot || localTime > cloudTime || (localTime === cloudTime && snapshotsDiffer))) {
                 await _sentinelSync();
             } else if (hasCloudSnapshot) {
                 _setLastSyncLabel(data?.updated_at || localRawTs);
@@ -2175,6 +2184,8 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem = function interceptedSetItem(key, value) {
         _originalSetItem(key, value);
         if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession) {
+            _hasUnsyncedChanges = true;
+            _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
             _sentinelScheduleSync();
         }
     };
@@ -2183,9 +2194,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // El evento 'storage' NO se dispara en la pestaña que ejecuta setItem,
     // sólo en el resto de pestañas del mismo origen (ej: Hub abierto + juego).
     window.addEventListener('storage', (event) => {
-        if (!_sbSession) return; // Invitado o sesión no restaurada → ignorar
         if (!event?.key) return;
+        if (event.key === CONFIG.stateKey) {
+            _rehydrateHubStoreFromDisk();
+        }
         if (!SENTINEL_WATCHED_KEYS.has(event.key)) return;
+        _rehydrateHubStoreFromDisk();
+        _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
+        _hasUnsyncedChanges = true;
+        if (!_sbSession) return; // Invitado o sesión no restaurada → ignorar sync cloud
         console.log(`[Sentinel] Cambio detectado en pestaña externa (${event.key}). Sincronizando...`);
         _sentinelScheduleSync(); // Debounce centralizado (1 s)
     });
@@ -2194,6 +2211,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function _handleSignOut() {
         _sbSession = null;
+        _hasUnsyncedChanges = false;
         _setStatusBadge('inactive');
         _setSessionEmail('');
         _setAccountStateLabel(false);
@@ -2461,7 +2479,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         window.addEventListener('pagehide', () => {
-            if (!_sbSession) return;
+            if (!_sbSession || !_hasUnsyncedChanges) return;
+            clearTimeout(_syncTimer);
+            _sentinelSync();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden || !_sbSession || !_hasUnsyncedChanges) return;
             clearTimeout(_syncTimer);
             _sentinelSync();
         });
