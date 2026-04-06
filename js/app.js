@@ -502,6 +502,11 @@ function migrateState(loadedStore) {
     if (typeof merged.missions.games_played !== 'number') merged.missions.games_played = 0;
     if (!Array.isArray(merged.missions.claimed))          merged.missions.claimed      = [];
 
+    // v14.1 — Limpieza de legado: eliminar lista en texto plano ya obsoleta.
+    if (Object.prototype.hasOwnProperty.call(merged, 'redeemedCodes')) {
+        delete merged.redeemedCodes;
+    }
+
     return merged;
 }
 
@@ -567,10 +572,162 @@ function animateValue(elements, start, end, duration = 650) {
 function logTransaction(tipo, cantidad, motivo) {
     if (!Array.isArray(store.history)) store.history = [];
     store.history.push({ tipo, cantidad, motivo, fecha: Date.now() });
-    // Limitar a las últimas 150 entradas para no inflar el localStorage
-    if (store.history.length > 150) {
-        store.history = store.history.slice(-150);
+    // Limitar a las últimas 50 entradas para no inflar el localStorage
+    if (store.history.length > 50) {
+        store.history = store.history.slice(-50);
     }
+}
+
+const KB = 1024;
+const AVATAR_MAX_LOCAL_KB = 100;
+const AVATAR_CLEANUP_KB = 200;
+const STORE_WARNING_KB = 4000;
+
+function _isBase64Avatar(value) {
+    return typeof value === 'string' && value.startsWith('data:image/');
+}
+
+function _dataUrlToBlob(dataUrl) {
+    const [meta, base64] = String(dataUrl).split(',');
+    if (!meta || !base64) throw new Error('Formato de imagen inválido.');
+    const match = /data:(.*?);base64/.exec(meta);
+    const mime = match?.[1] || 'image/jpeg';
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+}
+
+function _blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+function compressImage(blob, maxWidth = 200, maxHeight = 200, quality = 0.7) {
+    return new Promise((resolve, reject) => {
+        try {
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+                const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+                const width = Math.max(1, Math.round(img.width * scale));
+                const height = Math.max(1, Math.round(img.height * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    URL.revokeObjectURL(url);
+                    reject(new Error('No se pudo comprimir la imagen.'));
+                    return;
+                }
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob((compressed) => {
+                    URL.revokeObjectURL(url);
+                    if (!compressed) {
+                        reject(new Error('No se pudo comprimir la imagen.'));
+                        return;
+                    }
+                    resolve(compressed);
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                reject(new Error('No se pudo procesar la imagen.'));
+            };
+            img.src = url;
+        } catch (err) {
+            reject(err);
+        }
+    });
+}
+
+function trimGameProgress() {
+    if (!store.progress || typeof store.progress !== 'object') return false;
+    let changed = false;
+    Object.keys(store.progress).forEach((gameId) => {
+        if (!Array.isArray(store.progress[gameId])) return;
+        if (store.progress[gameId].length > 50) {
+            store.progress[gameId] = store.progress[gameId].slice(-50);
+            changed = true;
+        }
+    });
+    return changed;
+}
+
+function _showStorageToast(message, type = 'warning') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast--${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('toast--visible'));
+    setTimeout(() => {
+        toast.classList.remove('toast--visible');
+        setTimeout(() => toast.remove(), 400);
+    }, 5200);
+}
+
+function emergencyCleanup() {
+    let changed = false;
+
+    if (_isBase64Avatar(store.userAvatar) && store.userAvatar.length > (AVATAR_CLEANUP_KB * KB)) {
+        store.userAvatar = null;
+        changed = true;
+    }
+
+    if (Array.isArray(store.history) && store.history.length > 30) {
+        store.history = store.history.slice(-30);
+        changed = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(store, 'redeemedCodes')) {
+        delete store.redeemedCodes;
+        changed = true;
+    }
+
+    if (trimGameProgress()) changed = true;
+
+    const serialized = JSON.stringify(store);
+    if (serialized.length > (4 * 1024 * 1024) && Array.isArray(store.history) && store.history.length) {
+        store.history = [];
+        changed = true;
+    }
+
+    return changed;
+}
+
+function checkStorageSize() {
+    try {
+        const sizeKB = JSON.stringify(store).length / KB;
+        if (sizeKB > STORE_WARNING_KB) {
+            window.GhostAnalytics?.track('storage_warning', { size_kb: Math.round(sizeKB) });
+            _showStorageToast(
+                'Tu progreso está cerca del límite de almacenamiento. Exporta tu partida y contacta soporte.',
+                'warning'
+            );
+            return sizeKB;
+        }
+        return sizeKB;
+    } catch (_) {
+        return 0;
+    }
+}
+
+async function _saveAvatarLocally(dataUrl) {
+    const sourceBlob = _dataUrlToBlob(dataUrl);
+    const compressed = await compressImage(sourceBlob, 200, 200, 0.7);
+    const finalDataUrl = await _blobToDataUrl(compressed);
+    const sizeKB = finalDataUrl.length / KB;
+    if (sizeKB > AVATAR_MAX_LOCAL_KB) {
+        throw new Error('Imagen demasiado grande. Usa una foto de menos de 100 KB.');
+    }
+    store.userAvatar = finalDataUrl;
+    saveState({ immediateCloudSync: true });
+    applyAvatar();
 }
 
 // =====================================================
@@ -1190,7 +1347,40 @@ window.GameCenter = {
 
     // ── AVATAR ───────────────────────────────────────────────────────────────
 
-    setAvatar: (dataUrl) => { store.userAvatar = dataUrl; saveState(); applyAvatar(); },
+    setAvatar: async (dataUrl) => {
+        const session = window.Sentinel?.getSession?.();
+        const sbClient = window.Sentinel?.getClient?.();
+        const userId = session?.user?.id;
+
+        if (session && sbClient && userId) {
+            try {
+                const sourceBlob = _dataUrlToBlob(dataUrl);
+                const compressed = await compressImage(sourceBlob, 200, 200, 0.7);
+                const path = `avatars/${userId}/profile.jpg`;
+                const { error: uploadError } = await sbClient
+                    .storage
+                    .from('avatars')
+                    .upload(path, compressed, {
+                        cacheControl: '3600',
+                        upsert: true,
+                        contentType: 'image/jpeg'
+                    });
+                if (uploadError) throw uploadError;
+
+                const { data } = sbClient.storage.from('avatars').getPublicUrl(path);
+                if (!data?.publicUrl) throw new Error('No se pudo generar URL pública del avatar.');
+                store.userAvatar = data.publicUrl;
+                saveState({ immediateCloudSync: true });
+                applyAvatar();
+                return { success: true, remote: true, url: data.publicUrl };
+            } catch (err) {
+                console.warn('[GameCenter] Avatar cloud upload falló, usando fallback local:', err?.message || err);
+            }
+        }
+
+        await _saveAvatarLocally(dataUrl);
+        return { success: true, remote: false };
+    },
     getAvatar: ()        => store.userAvatar,
 
     // Alias de compatibilidad — mantenido por si juegos externos llaman a activateMoonBlessing().
@@ -1421,9 +1611,45 @@ document.addEventListener('la:cloud-authenticated', () => {
 
 function saveState(options = {}) {
     const { immediateCloudSync = false } = options;
-    localStorage.setItem(CONFIG.stateKey, JSON.stringify(store));
+    let payload = JSON.stringify(store);
+    if (payload.length > (STORE_WARNING_KB * KB)) {
+        trimGameProgress();
+        payload = JSON.stringify(store);
+    }
+
+    try {
+        localStorage.setItem(CONFIG.stateKey, payload);
+    } catch (e) {
+        if (e?.name === 'QuotaExceededError') {
+            const changed = emergencyCleanup();
+            try {
+                localStorage.setItem(CONFIG.stateKey, JSON.stringify(store));
+                window.GhostAnalytics?.track('storage_cleaned', {
+                    reason: 'quota_exceeded',
+                    cleaned: changed
+                });
+            } catch (retryError) {
+                console.error('GameCenter: No se pudo guardar estado tras cleanup', retryError);
+                _showStorageToast(
+                    'No se puede guardar el progreso. Exporta tu partida y borra datos del sitio.',
+                    'error'
+                );
+                if (Array.isArray(store.history) && store.history.length) {
+                    store.history = [];
+                    try {
+                        localStorage.setItem(CONFIG.stateKey, JSON.stringify(store));
+                    } catch (_) {}
+                }
+                return;
+            }
+        } else {
+            throw e;
+        }
+    }
+
     updateUI();
     _syncCloudIfNeeded(immediateCloudSync);
+    checkStorageSize();
 }
 
 /**
@@ -1652,6 +1878,12 @@ window.revealUI = revealUI;
 //    añade la clase theme-{key} al <body> y actualiza los botones de ajustes.
 applyTheme(store.theme || 'violet');
 
+if (_isBase64Avatar(store.userAvatar) && store.userAvatar.length > (AVATAR_CLEANUP_KB * KB)) {
+    store.userAvatar = null;
+    window.GhostAnalytics?.track('storage_cleaned', { reason: 'avatar_too_large' });
+    saveState();
+}
+
 // 2. SALDO — escribe el valor formateado síncronamente.
 //    El .coin-badge tiene opacity:0 por CSS; nunca pintará el "0" del HTML.
 _displayedCoins = store.coins;
@@ -1747,13 +1979,17 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(_syncTimeBackground, 30 * 60 * 1000);
 
     // Avatar upload — delegado único
-    document.addEventListener('change', (e) => {
+    document.addEventListener('change', async (e) => {
         if (e.target.id === 'avatar-upload' || e.target.id === 'avatar-upload-hud') {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = (evt) => {
-                window.GameCenter.setAvatar(evt.target.result);
+            reader.onload = async (evt) => {
+                try {
+                    await window.GameCenter.setAvatar(evt.target.result);
+                } catch (err) {
+                    _showStorageToast(err?.message || 'No se pudo guardar el avatar.', 'error');
+                }
             };
             reader.readAsDataURL(file);
         }
@@ -2581,9 +2817,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Exponer API mínima para diagnóstico en DevTools
+    // Nota: para subir avatares desde el frontend debe existir el bucket público `avatars`
+    // con políticas RLS apropiadas configuradas manualmente en Supabase.
     window.Sentinel = {
         syncNow:    () => _sentinelSync(),
         getSession: () => _sbSession,
+        getClient:  () => _sbClient,
         getStatus:  () => ({ hasClient: !!_sbClient, hasSession: !!_sbSession }),
     };
 

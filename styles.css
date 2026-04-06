@@ -1756,6 +1756,11 @@ body::before {
     border: 1px solid rgba(255,66,102,0.35);
     color: var(--error);
 }
+.toast--warning {
+    background: rgba(20, 10, 0, 0.97);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    color: #f59e0b;
+}
 
 /* ================================================================
    FEEDBACK MSG

@@ -1660,6 +1660,11 @@ function fireConfetti() {
 function showToast(html, type = 'success') {
     const toast     = document.createElement('div');
     toast.className = `toast toast--${type}`;
+    if (type === 'warning') {
+        toast.classList.add('toast--warning');
+        toast.style.borderColor = '#f59e0b';
+        toast.style.color = '#f59e0b';
+    }
     toast.innerHTML = html;
     document.body.appendChild(toast);
     requestAnimationFrame(() => toast.classList.add('toast--visible'));
