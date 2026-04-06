@@ -498,6 +498,8 @@
         // ── Bugs / Errores ────────────────────────────────────────────────────
         detected_error:           'bug',
         invalid_promo_code:       'bug',
+        storage_cleaned:          'bug',
+        storage_warning:          'bug',
         wordsearch_content_alert: 'bug',    // Alerta de agotamiento de contenido
         // ── Logros del jugador ────────────────────────────────────────────────
         buy_item:                 'achievement',
@@ -542,6 +544,8 @@
         // ── v9.9.2 ──────────────────────────────────────────────────────────
         invalid_promo_code:       '🔑',
         insufficient_funds:       '💸',
+        storage_cleaned:          '🧹',
+        storage_warning:          '⚠️',
         wishlist_add:             '💜',
         daily_bonus:              '🌟',
         user_snapshot:            '📊',

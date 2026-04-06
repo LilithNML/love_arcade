@@ -36,6 +36,7 @@
 2ac. [Novedades en v12.1 — Body Parser Hardening (Bugfix)](#2ac-novedades-en-v121--body-parser-hardening-bugfix)
 2ad. [Novedades en v13.0 — Sentinel Cloud Sync (Supabase)](#2ad-novedades-en-v130--sentinel-cloud-sync-supabase)
 2ae. [Novedades en v14.0 — Gatekeeper Security & UX Refactor](#2ae-novedades-en-v140--gatekeeper-security--ux-refactor)
+2af. [Novedades en v14.1 — Gestión robusta de cuota localStorage y avatares](#2af-novedades-en-v141--gestión-robusta-de-cuota-localstorage-y-avatares)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -4952,3 +4953,34 @@ public.user_profiles (
 4. Invitado desbloquea acceso local y mantiene estado volátil.
 5. Sentinel sincroniza con debounce de 1 s y actualiza `updated_at` para dashboard.
 *Arquitectura: vanilla JS + Vercel Serverless + Supabase (Auth + PostgreSQL JSONB) · Compatible con GitHub Pages (frontend) + Vercel (proxy + serverless)*
+
+## 2af. Novedades en v14.1 — Gestión robusta de cuota localStorage y avatares
+
+Esta versión endurece la persistencia local para evitar `QuotaExceededError` y proteger el progreso del jugador cuando el almacenamiento del navegador está cerca del límite (5–10 MB según navegador/dispositivo).
+
+### Cambios clave
+
+| Área | Cambio |
+|---|---|
+| **Avatares** | `GameCenter.setAvatar()` ahora es asíncrona. Comprime imágenes con canvas (`200x200`, calidad `0.7`) antes de guardar/subir. |
+| **Cloud Avatar (Supabase Storage)** | Si existe sesión cloud (`Sentinel.getSession()`), el avatar se sube al bucket `avatars` en `avatars/{userId}/profile.jpg` (upsert). Se guarda URL pública en `store.userAvatar`. |
+| **Fallback local seguro** | Si no hay sesión cloud o falla la subida, el avatar se guarda como Base64 comprimido solo si queda por debajo de `100 KB`. Si supera ese límite, se rechaza con mensaje de error controlado. |
+| **Limpieza de avatar legado** | En INIT síncrono, si detecta avatar Base64 > `200 KB`, se elimina automáticamente y se registra `GhostAnalytics.track('storage_cleaned', { reason: 'avatar_too_large' })`. |
+| **Historial** | `logTransaction()` reduce retención: de 150 → 50 entradas. |
+| **Migración de estado** | `migrateState()` elimina el campo legado `redeemedCodes` para reducir payload persistido. |
+| **Progreso por juego** | Nuevo `trimGameProgress()` limita cada arreglo `store.progress[gameId]` a las últimas 50 entradas. |
+| **Limpieza de emergencia** | Nuevo `emergencyCleanup()` ejecutado al detectar cuota excedida: limpia avatar grande, recorta historial, elimina legado y trimea progreso. Si el store sigue >4 MB, vacía historial. |
+| **Guardado resiliente** | `saveState()` maneja `QuotaExceededError` con reintento tras cleanup. Si falla de nuevo, muestra toast de error y evita freeze del flujo. |
+| **Monitoreo de tamaño** | Nuevo `checkStorageSize()` registra `storage_warning` cuando el store supera 4000 KB y muestra recomendación al usuario para exportar partida. |
+| **Toasts de warning** | Se añade soporte visual para `toast--warning` en `shop-logic.js` y `styles.css`. |
+| **Analytics** | `analytics.js` incorpora eventos `storage_cleaned` (🧹) y `storage_warning` (⚠️), ambos clasificados como tipo `bug`. |
+
+### Requisito manual en Supabase (importante)
+
+Para que la subida de avatares cloud funcione en producción:
+
+1. Crear bucket público `avatars`.
+2. Configurar políticas RLS de lectura pública y escritura restringida por `auth.uid()`.
+3. Mantener la convención de ruta `avatars/{userId}/profile.jpg` para que cumpla con `storage.foldername(name)` en políticas.
+
+> Nota: este paso se configura en Supabase Dashboard / SQL Editor y no se automatiza desde frontend.
