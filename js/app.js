@@ -411,7 +411,7 @@ function getSyncWorker() {
  * la respuesta del worker. Múltiples llamadas concurrentes se resuelven de forma
  * independiente gracias a este id.
  *
- * @param {{ action: 'export'|'import', [key: string]: any }} payload
+ * @param {{ action: string, [key: string]: any }} payload
  * @returns {Promise<any>}
  */
 function workerTask(payload) {
@@ -429,6 +429,7 @@ function workerTask(payload) {
         worker.postMessage({ ...payload, id });
     });
 }
+window.workerTask = workerTask;
 
 // =====================================================
 // MIGRACIÓN SILENCIOSA

@@ -1731,43 +1731,33 @@ async function handleExport() {
     const msg = document.getElementById('export-msg');
     const btn = document.getElementById('btn-export');
     btn.disabled = true;
-    showMsg(msg, 'Generando código con checksum…', 'var(--text-low)');
-
-    const code = await GameCenter.exportSave();
+    showMsg(msg, 'Procesando…', 'var(--text-low)');
+    const result = await window.BackupEngine?.exportBackup({
+        onStatus: (type, message) => {
+            if (type === 'processing') showMsg(msg, message, 'var(--text-low)');
+        }
+    });
     btn.disabled = false;
 
-    if (!code) { showMsg(msg, 'Error al generar el código.', 'var(--error)'); return; }
-
-    // Usar la utilidad centralizada de portapapeles para evitar duplicar
-    // el patrón navigator.clipboard + fallback execCommand (ya existe en MailHelper).
-    const clipboardOk = await window.MailHelper.copyToClipboard(code);
-
-    try {
-        const blob = new Blob([code], { type: 'text/plain' });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href     = url;
-        a.download = `love-arcade-backup-${new Date().toISOString().slice(0,10)}.txt`;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    } catch (_) {}
+    if (!result?.success) {
+        showMsg(msg, result?.message || 'Error al crear el respaldo.', 'var(--error)');
+        return;
+    }
 
     // [v9.9.2] Mide cuántos usuarios utilizan la sincronización entre dispositivos.
     window.GhostAnalytics?.track('sync_export', {
-        portapapeles: clipboardOk ? 'sí' : 'no'
+        formato: 'labak'
     });
-
-    showMsg(msg, clipboardOk
-        ? '✓ Código copiado al portapapeles y archivo .txt descargado.'
-        : '✓ Archivo .txt descargado.', 'var(--success)');
+    showMsg(msg, '✓ Copia de seguridad creada.', 'var(--success)');
 }
 
 async function handleImport() {
-    const code = document.getElementById('import-input').value.trim();
     const msg  = document.getElementById('import-msg');
     const btn  = document.getElementById('btn-import');
+    const input = document.getElementById('import-file');
+    const file = input?.files?.[0] || null;
 
-    if (!code) { showMsg(msg, 'Carga un archivo o pega un código.', 'var(--error)'); return; }
+    if (!file) { showMsg(msg, 'Selecciona un archivo .labak.', 'var(--error)'); return; }
 
     const confirmed = await openConfirmModal({
         title:    'Importar partida',
@@ -1781,16 +1771,19 @@ async function handleImport() {
     if (!confirmed) return;
 
     btn.disabled = true;
-    showMsg(msg, 'Verificando integridad…', 'var(--text-low)');
-
-    const result = await GameCenter.importSave(code);
+    showMsg(msg, 'Procesando…', 'var(--text-low)');
+    const result = await window.BackupEngine?.importBackupFromFile(file, {
+        onStatus: (type, message) => {
+            if (type === 'processing') showMsg(msg, message, 'var(--text-low)');
+        }
+    });
     btn.disabled = false;
 
     if (result.success) {
-        showMsg(msg, '✓ Importado correctamente. Recargando…', 'var(--success)');
+        showMsg(msg, '✓ Progreso restaurado con éxito. Recargando…', 'var(--success)');
         setTimeout(() => location.reload(), 1200);
     } else {
-        showMsg(msg, result.message || 'Código inválido o corrupto.', 'var(--error)');
+        showMsg(msg, result.message || 'Archivo inválido o corrupto.', 'var(--error)');
     }
 }
 
@@ -2188,23 +2181,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Sync
     document.getElementById('btn-export')?.addEventListener('click', handleExport);
-    document.getElementById('btn-import')?.addEventListener('click', handleImport);
+    document.getElementById('btn-import')?.addEventListener('click', () => {
+        const fileInput = document.getElementById('import-file');
+        if (!fileInput?.files?.length) {
+            window.BackupEngine?.triggerImportPicker(fileInput);
+            return;
+        }
+        handleImport();
+    });
 
     document.getElementById('import-file')?.addEventListener('change', e => {
         const file = e.target.files[0];
         if (!file) return;
         const nameEl = document.getElementById('import-file-name');
         if (nameEl) nameEl.textContent = file.name;
-        const reader = new FileReader();
-        reader.onload  = evt => {
-            const ta = document.getElementById('import-input');
-            if (ta) ta.value = evt.target.result.trim();
-            showMsg(document.getElementById('import-msg'),
-                `Archivo "${file.name}" cargado. Haz clic en Importar.`, 'var(--text-med)');
-        };
-        reader.onerror = () =>
-            showMsg(document.getElementById('import-msg'), 'Error al leer.', 'var(--error)');
-        reader.readAsText(file);
+        showMsg(document.getElementById('import-msg'),
+            `Archivo "${file.name}" listo. Haz clic en Importar.`, 'var(--text-med)');
     });
 
     // Moon Blessing button
