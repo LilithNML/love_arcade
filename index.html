@@ -757,14 +757,14 @@
                         </div>
                         <div>
                             <h3 class="memory-card__title">Importar partida</h3>
-                            <p class="memory-card__sub">Carga un archivo .labak para restaurar tu progreso</p>
+                            <p class="memory-card__sub">Carga un archivo .labak o .labak.gz para restaurar tu progreso</p>
                         </div>
                     </div>
 
                     <label for="import-file" class="btn-ghost file-label" style="position:relative; z-index:1;">
-                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-file-up"></use></svg> Seleccionar archivo .labak
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-file-up"></use></svg> Seleccionar archivo .labak / .labak.gz
                     </label>
-                    <input type="file" id="import-file" accept=".labak" hidden>
+                    <input type="file" id="import-file" accept=".labak,.gz" hidden>
                     <span id="import-file-name" class="file-name-display">Ningún archivo seleccionado</span>
 
                     <button id="btn-import" class="btn-primary" style="margin-top:10px; width:100%; justify-content:center; position:relative; z-index:1; background:linear-gradient(135deg,#22d07a,#16a85e); color:#041a0a;">

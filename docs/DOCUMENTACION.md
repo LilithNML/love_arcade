@@ -88,7 +88,7 @@ Love Arcade es una **plataforma de recompensas sin backend** construida con HTML
 | **Wishlist** | Indicador de coste: muestra cuántas monedas faltan para comprar toda la lista. |
 | **Wishlist** | Los ítems en Wishlist aparecen siempre al principio de los resultados de búsqueda. |
 | **Sync** | Exportación: migrada a archivo binario comprimido `.labak` (`gzip`) con checksum SHA-256. Se descarga automáticamente sin portapapeles. |
-| **Sync** | Importación: usa `<input type="file" accept=".labak">`, descompresión (`DecompressionStream`) y validación de integridad previa a restaurar `localStorage`. |
+| **Sync** | Importación: usa `<input type="file" accept=".labak,.gz">`, descompresión (`DecompressionStream`) y validación de integridad previa a restaurar `localStorage`. Estándar actual: `.labak`; legado compatible en importación: `.labak.gz`. |
 | **Economía** | Sin cambios. `saleMultiplier` y `cashbackRate` se mantienen intactos. |
 | **LocalStorage** | Sin cambios. La clave `gamecenter_v6_promos` permanece igual. |
 
@@ -2751,8 +2751,13 @@ Mensaje: "Copia de seguridad creada"
 
 ### Flujo de importación (v15.0)
 
+**Política de compatibilidad de extensiones**
+
+- **Estándar vigente:** `*.labak` (formato recomendado para respaldos nuevos).
+- **Compatibilidad legada en importación:** `*.labak.gz` (se acepta para no romper respaldos históricos).
+
 ```
-Usuario selecciona archivo .labak  →  evento 'change' en #import-file
+Usuario selecciona archivo .labak o .labak.gz  →  evento 'change' en #import-file
     │
     ▼
 Usuario hace clic en "Importar progreso"  →  handleImport() async
