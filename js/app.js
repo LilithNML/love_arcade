@@ -2109,6 +2109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Clave del registro de marca de tiempo local (para Last Write Wins)
     const SENTINEL_TS_KEY = 'love_arcade_sentinel_ts';
     const SENTINEL_GUEST_KEY = 'love_arcade_guest_mode';
+    const SENTINEL_BOOTSTRAP_KEY = 'love_arcade_cloud_bootstrap_completed_v1';
 
     // Tabla de Supabase
     const SUPABASE_TABLE = 'user_profiles';
@@ -2120,6 +2121,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let _scheduledSyncPriority = null; // 'high' | 'passive' | null
     let _isSyncing  = false;  // Mutex de subida activa
     let _hasUnsyncedChanges = false; // Dirty flag local (incluye cambios cross-tab)
+    let _isHydratingFromCloud = false;
+    let _hydrationReady = false;
     const HIGH_PRIORITY_DEBOUNCE_MS = 1_000;
     const PASSIVE_PRIORITY_DEBOUNCE_MS = 60_000;
 
@@ -2204,6 +2207,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function _isGuestMode() {
         return localStorage.getItem(SENTINEL_GUEST_KEY) === '1';
+    }
+
+    function _readBootstrapMarker() {
+        try {
+            const raw = localStorage.getItem(SENTINEL_BOOTSTRAP_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' ? parsed : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function _hasCloudBootstrapCompleted(userId) {
+        const marker = _readBootstrapMarker();
+        return Boolean(marker?.userId && marker.userId === userId);
+    }
+
+    function _markCloudBootstrapCompleted(userId) {
+        if (!userId) return;
+        _originalSetItem(SENTINEL_BOOTSTRAP_KEY, JSON.stringify({
+            userId,
+            completedAt: new Date().toISOString(),
+            version: 1,
+        }));
+    }
+
+    function _trackHydrationBlockedSync(origin, key = '') {
+        try {
+            window.GhostAnalytics?.track?.('sentinel_hydration_sync_blocked', {
+                origin,
+                key,
+                hasSession: Boolean(_sbSession),
+                isHydratingFromCloud: _isHydratingFromCloud,
+                hydrationReady: _hydrationReady,
+            });
+        } catch (_) {}
     }
 
     // ── Snapshot — lectura/escritura del estado vigilado ─────────────────────
@@ -2351,6 +2391,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function _sentinelScheduleSyncForKey(key, prevValue = null, nextValue = null) {
         if (!_sbSession) return;
+        if (_isHydratingFromCloud || !_hydrationReady) {
+            _trackHydrationBlockedSync('schedule_for_key', key);
+            return;
+        }
         const priority = _resolveSyncPriority(key, prevValue, nextValue);
         if (priority === 'high') {
             _sentinelScheduleSync(HIGH_PRIORITY_DEBOUNCE_MS);
@@ -2399,6 +2443,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!session) {
             _sbSession = null;
+            _isHydratingFromCloud = false;
+            _hydrationReady = false;
             _setStatusBadge('inactive');
             _setSessionEmail('');
             clearTimeout(_syncTimer);
@@ -2406,6 +2452,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         _sbSession = session;
+        _isHydratingFromCloud = true;
+        _hydrationReady = false;
         _setSessionEmail(session.user?.email || '');
         _setStatusBadge('connected');
 
@@ -2437,21 +2485,28 @@ document.addEventListener('DOMContentLoaded', () => {
             const localSnapshot = _buildSnapshot();
             const hasLocalSnapshot = Object.keys(localSnapshot).length > 0;
             const hasCloudSnapshot = effectiveData && Object.keys(effectiveData).length > 0;
+            const hasBootstrapMarker = _hasCloudBootstrapCompleted(userId);
             const snapshotsDiffer = hasLocalSnapshot && hasCloudSnapshot
                 && JSON.stringify(localSnapshot) !== JSON.stringify(effectiveData);
+            const hasReliableLocalTimestamp = localTime > 0;
+            const localStateTrusted = hasLocalSnapshot && (hasReliableLocalTimestamp || hasBootstrapMarker);
+            const localStateLooksFreshAfterWipe = hasLocalSnapshot && !hasReliableLocalTimestamp && !hasBootstrapMarker;
 
-            if (hasCloudSnapshot && cloudTime > localTime) {
+            if (hasCloudSnapshot && (cloudTime > localTime || localStateLooksFreshAfterWipe)) {
                 _applySnapshot(effectiveData);
                 _originalSetItem(SENTINEL_TS_KEY, data.updated_at);
                 _setLastSyncLabel(data.updated_at);
                 _setSyncMsg('Progreso cloud restaurado (más reciente) ✓');
                 setTimeout(() => _setSyncMsg(''), 4_000);
-            } else if (hasLocalSnapshot && (!hasCloudSnapshot || localTime > cloudTime || (localTime === cloudTime && snapshotsDiffer))) {
+            } else if (localStateTrusted && (!hasCloudSnapshot || localTime > cloudTime || (localTime === cloudTime && snapshotsDiffer))) {
+                await _sentinelSync();
+            } else if (hasLocalSnapshot && !hasCloudSnapshot) {
                 await _sentinelSync();
             } else if (hasCloudSnapshot) {
                 _setLastSyncLabel(data?.updated_at || localRawTs);
             }
 
+            _markCloudBootstrapCompleted(userId);
             _setAccountStateLabel(true);
             _setStatusBadge('synced');
             document.dispatchEvent(new CustomEvent('la:cloud-authenticated'));
@@ -2459,6 +2514,9 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('[Sentinel] Error al procesar auth change:', err);
             _setStatusBadge('error');
             _setSyncMsg('No se pudo sincronizar al iniciar sesión.', true);
+        } finally {
+            _isHydratingFromCloud = false;
+            _hydrationReady = true;
         }
     }
 
@@ -2480,6 +2538,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession) {
             _hasUnsyncedChanges = true;
             _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
+            if (_isHydratingFromCloud || !_hydrationReady) {
+                _trackHydrationBlockedSync('intercepted_setitem', key);
+                return;
+            }
             _sentinelScheduleSyncForKey(key, prevValue, value);
         }
     };
