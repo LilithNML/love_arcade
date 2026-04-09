@@ -1,11 +1,12 @@
 /*
  * BackupEngine — Love Arcade v15.0
- * Exporta e importa localStorage a/desde archivos .labak (gzip + SHA-256).
+ * Exporta localStorage a .labak e importa desde .labak / .labak.gz (gzip + SHA-256).
  */
 (function () {
     'use strict';
 
     const FILE_EXTENSION = '.labak';
+    const LEGACY_FILE_EXTENSION = '.labak.gz';
     const MIME_TYPE = 'application/gzip';
     const KNOWN_KEYS = [
         'gamecenter_v6_promos',
@@ -184,9 +185,10 @@
         notify('processing', 'Procesando importación…');
 
         try {
-            if (!file) throw new Error('Selecciona un archivo .labak.');
-            const looksLikeBackup = file.name?.toLowerCase().endsWith(FILE_EXTENSION);
-            if (!looksLikeBackup) throw new Error('El archivo debe tener extensión .labak.');
+            if (!file) throw new Error('Selecciona un archivo .labak o .labak.gz.');
+            const lowerName = file.name?.toLowerCase() || '';
+            const looksLikeBackup = lowerName.endsWith(FILE_EXTENSION) || lowerName.endsWith(LEGACY_FILE_EXTENSION);
+            if (!looksLikeBackup) throw new Error('El archivo debe tener extensión .labak o .labak.gz.');
 
             let jsonText = '';
             try {
