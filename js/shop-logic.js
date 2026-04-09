@@ -165,6 +165,7 @@ let _stageCtxHandler = null;
 // Se guarda en openXxxModal() y se restaura en _closeXxxModal() para que los
 // usuarios de teclado no pierdan su posición en el flujo de la interfaz (WCAG 2.4.3).
 let _lastFocusedElement = null;
+let isRedeeming = false;
 
 // ── Utilidad de iconos (v9.6 — SVG Sprite) ───────────────────────────────────
 /**
@@ -1677,52 +1678,68 @@ function showToast(html, type = 'success') {
 
 // ── Código Promo ──────────────────────────────────────────────────────────────
 async function handleRedeem() {
+    if (isRedeeming) return;
+
     const input  = document.getElementById('promo-input');
     const msg    = document.getElementById('promo-msg');
     const btn    = document.getElementById('btn-redeem');
     const code   = input.value.trim();
     if (!code) return;
 
+    isRedeeming = true;
     btn.disabled = true;
-    const result = await window.GameCenter.redeemPromoCode(code);
-    btn.disabled = false;
+    try {
+        const result = await window.GameCenter.redeemPromoCode(code);
 
-    if (result.success) {
-        showMsg(msg, result.message, 'var(--success)');
-        input.value = '';
-        input.style.borderColor = '';
-        // Actualizar displays: navbar con formato abreviado, resto con valor exacto.
-        const bal = GameCenter.getBalance();
-        document.querySelectorAll('.navbar .coin-display').forEach(el => {
-            el.textContent = window.formatCoinsNavbar?.(bal) ?? bal;
-            el.closest('.coin-badge')?.setAttribute('title', `${bal} monedas`);
-        });
-        document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
-        if (!document.hidden) {
-            confetti({ particleCount: 80, spread: 100, origin: { y: 0.4 }, colors: ['#fbbf24','#9b59ff','#22d07a'] });
+        if (result.success) {
+            showMsg(msg, result.message, 'var(--success)');
+            input.value = '';
+            input.style.borderColor = '';
+            // Actualizar displays: navbar con formato abreviado, resto con valor exacto.
+            const bal = GameCenter.getBalance();
+            document.querySelectorAll('.navbar .coin-display').forEach(el => {
+                el.textContent = window.formatCoinsNavbar?.(bal) ?? bal;
+                el.closest('.coin-badge')?.setAttribute('title', `${bal} monedas`);
+            });
+            document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
+            if (!document.hidden) {
+                confetti({ particleCount: 80, spread: 100, origin: { y: 0.4 }, colors: ['#fbbf24','#9b59ff','#22d07a'] });
+            }
+            // [v9.9.2] Fuente ÚNICA de track('redeem_code'): aquí, al final de la cadena
+            // de éxito de UI. El disparo en app.js/redeemPromoCode() fue eliminado para
+            // evitar el doble reporte. Código ofuscado con *** para no exponer texto plano.
+            window.GhostAnalytics?.track('redeem_code', {
+                recompensa: result.reward,
+                código:     `${code.slice(0, 3)}***`
+            });
+        } else {
+            showMsg(msg, result.message, 'var(--error)');
+            input.style.borderColor = 'var(--error)';
+            shakeElement(btn);
+
+            // [v9.9.2] Fricción de usuario: código que no existe en absoluto.
+            // Solo se trackea cuando el código es desconocido ('Código inválido'),
+            // no cuando ya fue canjeado ('Ya canjeaste este código') para evitar
+            // saturar el canal con intentos legítimos pero repetidos.
+            if (result.message === 'Código inválido') {
+                window.GhostAnalytics?.track('invalid_promo_code', {
+                    intento: `${code.slice(0, 3)}***`,
+                    longitud: code.length
+                });
+            }
         }
-        // [v9.9.2] Fuente ÚNICA de track('redeem_code'): aquí, al final de la cadena
-        // de éxito de UI. El disparo en app.js/redeemPromoCode() fue eliminado para
-        // evitar el doble reporte. Código ofuscado con *** para no exponer texto plano.
-        window.GhostAnalytics?.track('redeem_code', {
-            recompensa: result.reward,
-            código:     `${code.slice(0, 3)}***`
-        });
-    } else {
-        showMsg(msg, result.message, 'var(--error)');
+    } catch (error) {
+        showMsg(msg, 'Ocurrió un error al canjear el código. Inténtalo de nuevo.', 'var(--error)');
         input.style.borderColor = 'var(--error)';
         shakeElement(btn);
-
-        // [v9.9.2] Fricción de usuario: código que no existe en absoluto.
-        // Solo se trackea cuando el código es desconocido ('Código inválido'),
-        // no cuando ya fue canjeado ('Ya canjeaste este código') para evitar
-        // saturar el canal con intentos legítimos pero repetidos.
-        if (result.message === 'Código inválido') {
-            window.GhostAnalytics?.track('invalid_promo_code', {
-                intento: `${code.slice(0, 3)}***`,
-                longitud: code.length
-            });
-        }
+        window.GhostAnalytics?.track('bug', {
+            módulo: 'shop-logic',
+            acción: 'redeem_code',
+            detalle: error?.message || 'redeemPromoCode_failed'
+        });
+    } finally {
+        btn.disabled = false;
+        isRedeeming = false;
     }
 }
 

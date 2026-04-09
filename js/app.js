@@ -441,7 +441,6 @@ function migrateState(loadedStore) {
         coins:          CONFIG.initialCoins,
         progress:       { maze: [], wordsearch: [], secretWordsFound: [] },
         inventory:      {},
-        redeemedCodes:  [],   // Legado (texto plano): se conserva por historial
         redeemedHashes: [],   // v7.5: hashes SHA-256 de códigos canjeados
         history:        [],
         userAvatar:     null,
@@ -1037,8 +1036,6 @@ window.GameCenter = {
 
         store.coins += reward;
         store.redeemedHashes.push(hash);
-        // Mantener compatibilidad con panel de historial antiguo
-        store.redeemedCodes.push(code);
         logTransaction('ingreso', reward, `Código canjeado`);
         saveState();
 
