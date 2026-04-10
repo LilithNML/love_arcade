@@ -2119,6 +2119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let _syncTimer  = null;   // Timer de debounce
     let _scheduledSyncPriority = null; // 'high' | 'passive' | null
     let _isSyncing  = false;  // Mutex de subida activa
+    let _isRestoringSession = false; // Evita sobrescrituras durante hidratación inicial
     let _hasUnsyncedChanges = false; // Dirty flag local (incluye cambios cross-tab)
     const HIGH_PRIORITY_DEBOUNCE_MS = 1_000;
     const PASSIVE_PRIORITY_DEBOUNCE_MS = 60_000;
@@ -2259,7 +2260,7 @@ document.addEventListener('DOMContentLoaded', () => {
      * Guarda la marca de tiempo local del envío para Last Write Wins.
      */
     async function _sentinelSync() {
-        if (!_sbClient || !_sbSession) return;
+        if (!_sbClient || !_sbSession || _isRestoringSession) return;
         if (_isSyncing) return; // Evitar doble subida simultánea
         _isSyncing = true;
         _setStatusBadge('syncing');
@@ -2309,7 +2310,7 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {number} [delay=HIGH_PRIORITY_DEBOUNCE_MS]
      */
     function _sentinelScheduleSync(delay = HIGH_PRIORITY_DEBOUNCE_MS) {
-        if (!_sbSession) return;
+        if (!_sbSession || _isRestoringSession) return;
         clearTimeout(_syncTimer);
         if (document.hidden) {
             _sentinelSync();
@@ -2406,6 +2407,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         _sbSession = session;
+        _isRestoringSession = true;
         _setSessionEmail(session.user?.email || '');
         _setStatusBadge('connected');
 
@@ -2459,6 +2461,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('[Sentinel] Error al procesar auth change:', err);
             _setStatusBadge('error');
             _setSyncMsg('No se pudo sincronizar al iniciar sesión.', true);
+        } finally {
+            _isRestoringSession = false;
+            if (_sbSession && _hasUnsyncedChanges) {
+                _sentinelScheduleSync(PASSIVE_PRIORITY_DEBOUNCE_MS);
+            }
         }
     }
 
@@ -2477,7 +2484,7 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem = function interceptedSetItem(key, value) {
         const prevValue = localStorage.getItem(key);
         _originalSetItem(key, value);
-        if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession) {
+        if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession && !_isRestoringSession) {
             _hasUnsyncedChanges = true;
             _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
             _sentinelScheduleSyncForKey(key, prevValue, value);
@@ -2496,7 +2503,7 @@ document.addEventListener('DOMContentLoaded', () => {
         _rehydrateHubStoreFromDisk();
         _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
         _hasUnsyncedChanges = true;
-        if (!_sbSession) return; // Invitado o sesión no restaurada → ignorar sync cloud
+        if (!_sbSession || _isRestoringSession) return; // Invitado o sesión no restaurada → ignorar sync cloud
         console.log(`[Sentinel] Cambio detectado en pestaña externa (${event.key}). Sincronizando...`);
         _sentinelScheduleSyncForKey(event.key, event.oldValue, event.newValue);
     });
@@ -2505,6 +2512,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function _handleSignOut() {
         _sbSession = null;
+        _isRestoringSession = false;
         _hasUnsyncedChanges = false;
         _setStatusBadge('inactive');
         _setSessionEmail('');
@@ -2553,7 +2561,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 4. Recuperar sesión existente (para recargas de página)
         const { data: { session } } = await _sbClient.auth.getSession();
-        if (session) _handleAuthChange('INITIAL_SESSION', session);
+        if (session && !_sbSession) _handleAuthChange('INITIAL_SESSION', session);
     }
 
     // ── Listeners de UI ──────────────────────────────────────────────────────
