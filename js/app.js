@@ -2577,39 +2577,66 @@ document.addEventListener('DOMContentLoaded', () => {
         const loginForm = document.getElementById('cloud-login-form');
         const registerSubmitBtn = document.getElementById('btn-cloud-register');
         const changePasswordSubmitBtn = document.getElementById('btn-cloud-change-password-submit');
+        const emailBanner = document.getElementById('cloud-email-change-banner');
         let gateLocked = false;
 
-        const PASSWORD_SYMBOL_REGEX = /[@$!%*?&]/;
-        const evaluatePasswordRules = (value) => ({
-            length: value.length >= 20,
-            upper: /[A-Z]/.test(value),
-            lower: /[a-z]/.test(value),
-            digit: /\d/.test(value),
-            symbol: PASSWORD_SYMBOL_REGEX.test(value),
-        });
-
-        const bindPasswordValidation = (inputId, listId, submitBtn) => {
+        const PASSPHRASE_MIN_LENGTH = 16;
+        const secureChars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789-_.!@#$%^&*+=';
+        const createPassphraseStrengthUpdater = (inputId, barId, submitBtn) => {
             const input = document.getElementById(inputId);
-            const list = document.getElementById(listId);
-            if (!input || !list || !submitBtn) return () => false;
+            const bar = document.getElementById(barId);
+            if (!input || !bar || !submitBtn) return () => false;
 
             const refresh = () => {
-                const rules = evaluatePasswordRules(input.value || '');
-                let allValid = true;
-                list.querySelectorAll('li[data-rule]').forEach(item => {
-                    const key = item.dataset.rule;
-                    const valid = Boolean(rules[key]);
-                    item.classList.toggle('is-valid', valid);
-                    allValid = allValid && valid;
-                });
-                submitBtn.disabled = !allValid;
-                return allValid;
+                const length = (input.value || '').length;
+                const ratio = Math.max(0, Math.min(1, length / PASSPHRASE_MIN_LENGTH));
+                bar.style.width = `${Math.round(ratio * 100)}%`;
+                if (ratio < 0.5) bar.style.background = 'linear-gradient(90deg, #f56565, #ed8936)';
+                else if (ratio < 1) bar.style.background = 'linear-gradient(90deg, #ed8936, #f6e05e)';
+                else bar.style.background = 'linear-gradient(90deg, #84f08f, #39ff88)';
+                submitBtn.disabled = length < PASSPHRASE_MIN_LENGTH;
+                return length >= PASSPHRASE_MIN_LENGTH;
             };
 
             input.addEventListener('input', refresh);
             refresh();
             return refresh;
         };
+        const generateSecurePassword = (length = 24) => {
+            const values = new Uint32Array(length);
+            window.crypto.getRandomValues(values);
+            return Array.from(values, (value) => secureChars[value % secureChars.length]).join('');
+        };
+        const bindPasswordGenerator = (buttonId, inputId, refreshFn) => {
+            const button = document.getElementById(buttonId);
+            const input = document.getElementById(inputId);
+            if (!button || !input) return;
+            button.addEventListener('click', async () => {
+                const generated = generateSecurePassword();
+                input.type = 'text';
+                input.value = generated;
+                refreshFn?.();
+                window.setTimeout(() => {
+                    if (input.value === generated) input.type = 'password';
+                }, 10000);
+                try {
+                    await navigator.clipboard.writeText(generated);
+                    _showStorageToast('Contraseña copiada. Por favor, asegúrate de guardarla en un lugar seguro (como un gestor de contraseñas).', 'warning');
+                } catch (_) {
+                    _showStorageToast('Se generó una contraseña segura, pero no se pudo copiar automáticamente al portapapeles.', 'warning');
+                }
+            });
+        };
+        const bindPasswordToggle = () => {
+            document.querySelectorAll('[data-password-toggle]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const input = document.getElementById(btn.dataset.passwordToggle || '');
+                    if (!input) return;
+                    input.type = input.type === 'password' ? 'text' : 'password';
+                });
+            });
+        };
+        bindPasswordToggle();
 
         const setGateMsg = (msg, isError = false) => {
             if (!gateMsgEl) return;
@@ -2619,6 +2646,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const setPasswordMode = (active) => {
             passwordForm?.classList.toggle('hidden', !active);
+            if (!active) emailBanner?.classList.add('hidden');
             if (active) {
                 gatePanels.forEach(panel => {
                     panel.classList.remove('is-active');
@@ -2674,8 +2702,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target === gateModal && !gateLocked) closeGate();
         });
 
-        const validateRegisterPassword = bindPasswordValidation('cloud-register-password', 'cloud-register-password-rules', registerSubmitBtn);
-        const validateChangePassword = bindPasswordValidation('cloud-change-password-input', 'cloud-change-password-rules', changePasswordSubmitBtn);
+        const validateRegisterPassword = createPassphraseStrengthUpdater('cloud-register-password', 'cloud-register-password-strength', registerSubmitBtn);
+        const validateChangePassword = createPassphraseStrengthUpdater('cloud-change-password-input', 'cloud-change-password-strength', changePasswordSubmitBtn);
+        bindPasswordGenerator('btn-generate-register-password', 'cloud-register-password', validateRegisterPassword);
+        bindPasswordGenerator('btn-generate-change-password', 'cloud-change-password-input', validateChangePassword);
 
         registerForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -2723,13 +2753,35 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        document.getElementById('btn-cloud-change-email-submit')?.addEventListener('click', async () => {
+            if (!_sbClient || !_sbSession) return setGateMsg('Debes iniciar sesión para cambiar tu correo.', true);
+            const newEmail = document.getElementById('cloud-change-email-input')?.value?.trim();
+            if (!newEmail) return setGateMsg('Ingresa un nuevo correo para continuar.', true);
+            try {
+                const { error } = await _sbClient.auth.updateUser({ email: newEmail });
+                if (error) throw error;
+                emailBanner?.classList.remove('hidden');
+                setGateMsg('Solicitud enviada. Revisa ambos correos para confirmar el cambio.');
+            } catch (err) {
+                setGateMsg(`Error: ${err.message}`, true);
+            }
+        });
+
         passwordForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!_sbClient || !_sbSession) return setGateMsg('Debes iniciar sesión para cambiar tu contraseña.', true);
             if (!validateChangePassword()) return setGateMsg('La contraseña no cumple los requisitos de seguridad.', true);
 
+            const currentPassword = document.getElementById('cloud-current-password-input')?.value || '';
             const password = document.getElementById('cloud-change-password-input')?.value || '';
+            if (!currentPassword) return setGateMsg('Debes ingresar tu contraseña actual.', true);
             try {
+                const email = _sbSession.user?.email || '';
+                const { error: authError } = await _sbClient.auth.signInWithPassword({ email, password: currentPassword });
+                if (authError) {
+                    setGateMsg('La contraseña actual es incorrecta. Verifícala antes de continuar.', true);
+                    return;
+                }
                 const { error } = await _sbClient.auth.updateUser({ password });
                 if (error) throw error;
                 setGateMsg('Contraseña actualizada con éxito ✓');
