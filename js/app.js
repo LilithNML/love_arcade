@@ -2790,14 +2790,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 const email = _sbSession.user?.email || '';
                 const { error: authError } = await _sbClient.auth.signInWithPassword({ email, password: currentPassword });
                 if (authError) {
+                    console.error('[Sentinel][Auth] Reautenticación previa fallida antes de cambiar contraseña.', authError);
                     setGateMsg('La contraseña actual es incorrecta. Verifícala antes de continuar.', true);
                     return;
                 }
+
                 const { error } = await _sbClient.auth.updateUser({ password });
                 if (error) throw error;
-                setGateMsg('Contraseña actualizada con éxito ✓');
-                setTimeout(() => closeGate(), 700);
+
+                const { error: signOutError } = await _sbClient.auth.signOut();
+                if (signOutError) {
+                    console.error('[Sentinel][Auth] No se pudo cerrar sesión tras actualizar contraseña.', signOutError);
+                    setGateMsg('La contraseña se cambió, pero no pudimos cerrar tu sesión. Cierra sesión manualmente y vuelve a iniciar para confirmar.', true);
+                    return;
+                }
+
+                setGateMsg('Contraseña actualizada, vuelve a iniciar sesión para confirmar.');
+                _setLoginMsg('Contraseña actualizada. Inicia sesión nuevamente con tu nueva contraseña.');
+                openGate({ mode: 'login' });
             } catch (err) {
+                console.error('[Sentinel][Auth] Error al actualizar contraseña.', err);
                 setGateMsg(`Error: ${err.message}`, true);
             }
         });
