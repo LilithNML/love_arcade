@@ -1108,14 +1108,19 @@
                     <input id="cloud-register-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
 
                     <label class="identity-label" for="cloud-register-password">Password</label>
-                    <input id="cloud-register-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="20" placeholder="Mínimo 20 caracteres" required>
-                    <ul id="cloud-register-password-rules" class="cloud-password-rules">
-                        <li data-rule="length">20+ caracteres</li>
-                        <li data-rule="upper">Al menos una mayúscula</li>
-                        <li data-rule="lower">Al menos una minúscula</li>
-                        <li data-rule="digit">Al menos un número</li>
-                        <li data-rule="symbol">Al menos un símbolo (@$!%*?&)</li>
-                    </ul>
+                    <div class="cloud-password-input-wrap">
+                        <input id="cloud-register-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="16" placeholder="perro-azul-salta-alto" required>
+                        <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-register-password" aria-label="Mostrar u ocultar password">
+                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                        </button>
+                    </div>
+                    <div class="cloud-password-strength" aria-hidden="true">
+                        <div id="cloud-register-password-strength" class="cloud-password-strength-bar"></div>
+                    </div>
+                    <p class="cloud-password-hint">Usa una frase larga y memorable. Estado óptimo: 16+ caracteres.</p>
+                    <button id="btn-generate-register-password" class="btn-ghost cloud-password-generate-btn" type="button">
+                        Generar contraseña segura
+                    </button>
 
                     <button id="btn-cloud-register" class="btn-primary cloud-gatekeeper-submit" type="submit">
                         <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-plus"></use></svg>
@@ -1128,7 +1133,12 @@
                     <input id="cloud-login-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
 
                     <label class="identity-label" for="cloud-login-password">Password</label>
-                    <input id="cloud-login-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="current-password" placeholder="Tu password" required>
+                    <div class="cloud-password-input-wrap">
+                        <input id="cloud-login-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="current-password" placeholder="perro-azul-salta-alto" required>
+                        <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-login-password" aria-label="Mostrar u ocultar password">
+                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                        </button>
+                    </div>
 
                     <button id="btn-cloud-login" class="btn-primary cloud-gatekeeper-submit" type="submit">
                         <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-lock"></use></svg>
@@ -1138,15 +1148,36 @@
             </div>
 
             <form id="cloud-password-form" class="cloud-password-form hidden">
+                <label class="identity-label" for="cloud-change-email-input">Nuevo correo electrónico</label>
+                <input id="cloud-change-email-input" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="nuevo@correo.com">
+                <button id="btn-cloud-change-email-submit" class="btn-ghost cloud-gatekeeper-submit" type="button">
+                    Solicitar cambio de correo
+                </button>
+                <p id="cloud-email-change-banner" class="cloud-email-change-banner hidden" role="status" aria-live="polite">
+                    <strong>Cambio pendiente:</strong> Hemos enviado un enlace de confirmación a tu correo actual y otro al nuevo. Debes confirmar ambos para finalizar el proceso.
+                </p>
+
+                <label class="identity-label" for="cloud-current-password-input">Contraseña actual</label>
+                <div class="cloud-password-input-wrap">
+                    <input id="cloud-current-password-input" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="current-password" minlength="16" placeholder="perro-azul-salta-alto" required>
+                    <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-current-password-input" aria-label="Mostrar u ocultar password">
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                    </button>
+                </div>
                 <label class="identity-label" for="cloud-change-password-input">Nueva contraseña</label>
-                <input id="cloud-change-password-input" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="20" placeholder="Mínimo 20 caracteres" required>
-                <ul id="cloud-change-password-rules" class="cloud-password-rules">
-                    <li data-rule="length">20+ caracteres</li>
-                    <li data-rule="upper">Al menos una mayúscula</li>
-                    <li data-rule="lower">Al menos una minúscula</li>
-                    <li data-rule="digit">Al menos un número</li>
-                    <li data-rule="symbol">Al menos un símbolo (@$!%*?&)</li>
-                </ul>
+                <div class="cloud-password-input-wrap">
+                    <input id="cloud-change-password-input" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="16" placeholder="perro-azul-salta-alto" required>
+                    <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-change-password-input" aria-label="Mostrar u ocultar password">
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                    </button>
+                </div>
+                <div class="cloud-password-strength" aria-hidden="true">
+                    <div id="cloud-change-password-strength" class="cloud-password-strength-bar"></div>
+                </div>
+                <p class="cloud-password-hint">Usa una frase larga y memorable. Estado óptimo: 16+ caracteres.</p>
+                <button id="btn-generate-change-password" class="btn-ghost cloud-password-generate-btn" type="button">
+                    Generar contraseña segura
+                </button>
 
                 <button id="btn-cloud-change-password-submit" class="btn-primary cloud-gatekeeper-submit" type="submit" disabled>
                     <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-shield-check"></use></svg>
