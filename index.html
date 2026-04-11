@@ -1093,24 +1093,23 @@
                 <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-x"></use></svg>
             </button>
 
-            <p class="cloud-gatekeeper-kicker">Sentinel v14.0</p>
-            <h3 id="cloud-gatekeeper-title" class="modal-title cloud-gatekeeper-title">Modal de Acceso Unificado</h3>
-            <p class="cloud-gatekeeper-sub">Regístrate, inicia sesión o entra como invitad@ sin salir de la partida.</p>
+            <h3 id="cloud-gatekeeper-title" class="modal-title cloud-gatekeeper-title">Elige cómo quieres continuar</h3>
+            <p class="cloud-gatekeeper-sub">Guarda tu avance con cuenta o sigue como invitado.</p>
 
             <div class="cloud-gatekeeper-tabs" role="tablist" aria-label="Opciones de acceso">
-                <button id="gate-tab-register" class="cloud-gatekeeper-tab is-active" role="tab" aria-selected="true" data-gate-tab="register">Registro</button>
-                <button id="gate-tab-login" class="cloud-gatekeeper-tab" role="tab" aria-selected="false" data-gate-tab="login">Login</button>
+                <button id="gate-tab-register" class="cloud-gatekeeper-tab is-active" role="tab" aria-selected="true" data-gate-tab="register">Crear cuenta</button>
+                <button id="gate-tab-login" class="cloud-gatekeeper-tab" role="tab" aria-selected="false" data-gate-tab="login">Iniciar sesión</button>
             </div>
 
             <div class="cloud-gatekeeper-panels">
                 <form id="cloud-register-form" class="cloud-gatekeeper-panel is-active" data-gate-panel="register">
-                    <label class="identity-label" for="cloud-register-nickname">Nickname</label>
+                    <label class="identity-label" for="cloud-register-nickname">Nombre de jugador</label>
                     <input id="cloud-register-nickname" class="identity-input cloud-gatekeeper-input" type="text" maxlength="15" autocomplete="nickname" placeholder="ArcadeMaster" required>
 
-                    <label class="identity-label" for="cloud-register-email">Email</label>
+                    <label class="identity-label" for="cloud-register-email">Correo</label>
                     <input id="cloud-register-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
 
-                    <label class="identity-label" for="cloud-register-password">Password</label>
+                    <label class="identity-label" for="cloud-register-password">Contraseña</label>
                     <div class="cloud-password-input-wrap">
                         <input id="cloud-register-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="16" placeholder="perro-azul-salta-alto" required>
                         <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-register-password" aria-label="Mostrar u ocultar password">
@@ -1132,10 +1131,10 @@
                 </form>
 
                 <form id="cloud-login-form" class="cloud-gatekeeper-panel" data-gate-panel="login" aria-hidden="true">
-                    <label class="identity-label" for="cloud-login-email">Email</label>
+                    <label class="identity-label" for="cloud-login-email">Correo</label>
                     <input id="cloud-login-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
 
-                    <label class="identity-label" for="cloud-login-password">Password</label>
+                    <label class="identity-label" for="cloud-login-password">Contraseña</label>
                     <div class="cloud-password-input-wrap">
                         <input id="cloud-login-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="current-password" placeholder="perro-azul-salta-alto" required>
                         <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-login-password" aria-label="Mostrar u ocultar password">
@@ -1145,7 +1144,7 @@
 
                     <button id="btn-cloud-login" class="btn-primary cloud-gatekeeper-submit" type="submit">
                         <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-lock"></use></svg>
-                        Ingresar a Plataforma Cloud
+                        Iniciar sesión
                     </button>
                 </form>
             </div>
@@ -1191,10 +1190,10 @@
             </form>
 
             <div class="cloud-guest-block">
-                <p class="cloud-guest-note">Modo Invitado activo: tu progreso se guarda solo en este dispositivo y puede perderse al borrar datos del navegador.</p>
+                <p class="cloud-guest-note">Como invitado, tu avance se guarda en este dispositivo.</p>
                 <button id="btn-cloud-guest" class="btn-ghost" type="button">
                     <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-monitor"></use></svg>
-                    Jugar como invitad@
+                    Continuar como invitado
                 </button>
             </div>
 

@@ -2640,9 +2640,22 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         bindPasswordToggle();
 
+        const simplifyGateError = (rawMsg = '') => {
+            const msg = String(rawMsg || '').toLowerCase();
+            if (!msg) return 'No se pudo completar la acción. Inténtalo de nuevo.';
+            if (msg.includes('invalid login credentials')) return 'Correo o contraseña incorrectos.';
+            if (msg.includes('email not confirmed')) return 'Revisa tu correo y confirma tu cuenta para continuar.';
+            if (msg.includes('user already registered')) return 'Ese correo ya tiene una cuenta.';
+            if (msg.includes('password should be at least')) return 'Tu contraseña es demasiado corta.';
+            if (msg.includes('network') || msg.includes('fetch')) return 'Sin conexión. Revisa internet e inténtalo de nuevo.';
+            if (msg.includes('rate limit') || msg.includes('too many requests')) return 'Demasiados intentos. Espera un momento y vuelve a intentar.';
+            return 'No se pudo completar la acción. Inténtalo de nuevo.';
+        };
+
         const setGateMsg = (msg, isError = false) => {
             if (!gateMsgEl) return;
-            gateMsgEl.textContent = msg || '';
+            const cleanMsg = isError ? simplifyGateError(msg) : String(msg || '');
+            gateMsgEl.textContent = cleanMsg;
             gateMsgEl.style.color = isError ? 'var(--error, #fc8181)' : '#68d391';
         };
 
@@ -2725,10 +2738,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const email = document.getElementById('cloud-register-email')?.value?.trim();
             const password = document.getElementById('cloud-register-password')?.value || '';
             const nickname = document.getElementById('cloud-register-nickname')?.value?.trim();
-            if (!email || !password || !nickname) return setGateMsg('Completa nickname, email y password.', true);
-            if (!validateRegisterPassword()) return setGateMsg('La contraseña no cumple los requisitos de seguridad.', true);
+            if (!email || !password || !nickname) return setGateMsg('Completa nombre, correo y contraseña.', true);
+            if (!validateRegisterPassword()) return setGateMsg('Tu contraseña es demasiado corta.', true);
 
-            setGateMsg('Creando cuenta en Plataforma Cloud…');
+            setGateMsg('Creando tu cuenta…');
             try {
                 const { error } = await _sbClient.auth.signUp({
                     email,
@@ -2737,10 +2750,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 if (error) throw error;
                 _setGuestMode(false);
-                setGateMsg('Cuenta creada. Revisa tu correo para confirmar si aplica.');
-                _setLoginMsg('Registro cloud completado ✓');
+                setGateMsg('Cuenta creada. Revisa tu correo para confirmarla.');
+                _setLoginMsg('Cuenta creada correctamente.');
             } catch (err) {
-                setGateMsg(`Error: ${err.message}`, true);
+                setGateMsg(err?.message, true);
             }
         });
 
@@ -2750,17 +2763,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const email = document.getElementById('cloud-login-email')?.value?.trim();
             const password = document.getElementById('cloud-login-password')?.value || '';
-            if (!email || !password) return setGateMsg('Completa email y password.', true);
+            if (!email || !password) return setGateMsg('Completa correo y contraseña.', true);
 
             setGateMsg('Iniciando sesión…');
             try {
                 const { error } = await _sbClient.auth.signInWithPassword({ email, password });
                 if (error) throw error;
-                setGateMsg('Sesión iniciada ✓');
-                _setLoginMsg(`Cloud activo para ${email}`);
+                setGateMsg('¡Listo! Iniciaste sesión.');
+                _setLoginMsg(`Sesión iniciada para ${email}.`);
                 closeGate();
             } catch (err) {
-                setGateMsg(`Error: ${err.message}`, true);
+                setGateMsg(err?.message, true);
             }
         });
 
@@ -2774,14 +2787,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 emailBanner?.classList.remove('hidden');
                 setGateMsg('Solicitud enviada. Revisa ambos correos para confirmar el cambio.');
             } catch (err) {
-                setGateMsg(`Error: ${err.message}`, true);
+                setGateMsg(err?.message, true);
             }
         });
 
         passwordForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!_sbClient || !_sbSession) return setGateMsg('Debes iniciar sesión para cambiar tu contraseña.', true);
-            if (!validateChangePassword()) return setGateMsg('La contraseña no cumple los requisitos de seguridad.', true);
+            if (!validateChangePassword()) return setGateMsg('Tu contraseña es demasiado corta.', true);
 
             const currentPassword = document.getElementById('cloud-current-password-input')?.value || '';
             const password = document.getElementById('cloud-change-password-input')?.value || '';
@@ -2795,10 +2808,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 const { error } = await _sbClient.auth.updateUser({ password });
                 if (error) throw error;
-                setGateMsg('Contraseña actualizada con éxito ✓');
+                setGateMsg('Contraseña actualizada.');
                 setTimeout(() => closeGate(), 700);
             } catch (err) {
-                setGateMsg(`Error: ${err.message}`, true);
+                setGateMsg(err?.message, true);
             }
         });
 
@@ -2808,8 +2821,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.GameCenter?.setIdentity?.('Invitad@', '@');
             }
             _setAccountStateLabel(false);
-            setGateMsg('Modo invitad@ activado. Tu progreso es volátil.', false);
-            _setLoginMsg('Jugando como invitad@ (progreso local volátil).');
+            setGateMsg('Estás jugando como invitado.');
+            _setLoginMsg('Jugando como invitado.');
             gateLocked = false;
             gateBox?.classList.remove('is-locked');
             closeGate();
