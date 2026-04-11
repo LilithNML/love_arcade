@@ -2572,6 +2572,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const gateMsgEl = document.getElementById('cloud-gatekeeper-msg');
         const gateTabs = Array.from(document.querySelectorAll('[data-gate-tab]'));
         const gatePanels = Array.from(document.querySelectorAll('[data-gate-panel]'));
+        const gateTabsWrap = gateModal?.querySelector('.cloud-gatekeeper-tabs');
+        const emailForm = document.getElementById('cloud-email-form');
         const passwordForm = document.getElementById('cloud-password-form');
         const registerForm = document.getElementById('cloud-register-form');
         const loginForm = document.getElementById('cloud-login-form');
@@ -2644,58 +2646,67 @@ document.addEventListener('DOMContentLoaded', () => {
             gateMsgEl.style.color = isError ? 'var(--error, #fc8181)' : '#68d391';
         };
 
-        const setPasswordMode = (active) => {
-            passwordForm?.classList.toggle('hidden', !active);
-            if (!active) emailBanner?.classList.add('hidden');
-            if (active) {
-                gatePanels.forEach(panel => {
-                    panel.classList.remove('is-active');
-                    panel.setAttribute('aria-hidden', 'true');
-                });
-                gateTabs.forEach(tab => {
-                    tab.classList.remove('is-active');
-                    tab.setAttribute('aria-selected', 'false');
-                });
-            }
+        const setFormEnabled = (formEl, enabled) => {
+            if (!formEl) return;
+            formEl.querySelectorAll('input, button, select, textarea').forEach((control) => {
+                control.disabled = !enabled;
+            });
         };
 
-        const switchGateTab = (name) => {
-            setPasswordMode(false);
+        const resetGateFeedback = () => {
+            setGateMsg('');
+            emailBanner?.classList.add('hidden');
+        };
+
+        const renderGateMode = (mode) => {
+            const selectedMode = mode || 'register';
+            const isRegister = selectedMode === 'register';
+            const isLogin = selectedMode === 'login';
+            const isChangeEmail = selectedMode === 'change-email';
+            const isChangePassword = selectedMode === 'change-password';
+            const hasTabMode = isRegister || isLogin;
+
+            resetGateFeedback();
+            gateTabsWrap?.classList.toggle('hidden', !hasTabMode);
             gateTabs.forEach(tab => {
-                const active = tab.dataset.gateTab === name;
+                const active = hasTabMode && tab.dataset.gateTab === selectedMode;
                 tab.classList.toggle('is-active', active);
                 tab.setAttribute('aria-selected', String(active));
             });
             gatePanels.forEach(panel => {
-                const active = panel.dataset.gatePanel === name;
+                const active = panel.dataset.gatePanel === selectedMode;
                 panel.classList.toggle('is-active', active);
                 panel.setAttribute('aria-hidden', String(!active));
+                setFormEnabled(panel, active);
             });
+            emailForm?.classList.toggle('hidden', !isChangeEmail);
+            passwordForm?.classList.toggle('hidden', !isChangePassword);
+            setFormEnabled(emailForm, isChangeEmail);
+            setFormEnabled(passwordForm, isChangePassword);
+        };
+
+        const switchGateTab = (name) => {
+            renderGateMode(name);
         };
 
         gateTabs.forEach(tab => tab.addEventListener('click', () => switchGateTab(tab.dataset.gateTab)));
 
-        const openGate = ({ tab = 'register', locked = false, passwordMode = false } = {}) => {
+        const openGate = ({ mode = 'register', locked = false } = {}) => {
             gateLocked = locked;
             gateModal?.classList.remove('hidden');
             gateBox?.classList.toggle('is-locked', gateLocked);
-            setGateMsg('');
-            if (passwordMode) {
-                setPasswordMode(true);
-            } else {
-                switchGateTab(tab);
-            }
+            renderGateMode(mode);
         };
 
         const btnOpenGate = document.getElementById('btn-cloud-open-gatekeeper');
         btnOpenGate?.addEventListener('click', () => {
-            openGate({ tab: _sbSession ? 'login' : 'register' });
+            openGate({ mode: _sbSession ? 'login' : 'register' });
         });
 
         const closeGate = () => {
             if (gateLocked) return;
             gateModal?.classList.add('hidden');
-            setPasswordMode(false);
+            renderGateMode('register');
         };
         document.getElementById('cloud-gatekeeper-close')?.addEventListener('click', closeGate);
         gateModal?.addEventListener('click', (e) => {
@@ -2806,11 +2817,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('btn-cloud-change-password')?.addEventListener('click', () => {
             if (!_sbSession) {
-                openGate({ tab: 'login' });
+                openGate({ mode: 'login' });
                 setGateMsg('Inicia sesión para poder cambiar tu contraseña.', true);
                 return;
             }
-            openGate({ passwordMode: true });
+            openGate({ mode: 'change-password' });
+        });
+
+        document.getElementById('btn-cloud-change-email')?.addEventListener('click', () => {
+            if (!_sbSession) {
+                openGate({ mode: 'login' });
+                setGateMsg('Inicia sesión para poder cambiar tu correo.', true);
+                return;
+            }
+            openGate({ mode: 'change-email' });
         });
 
         // ── Cerrar sesión ────────────────────────────────────────────────────
@@ -2861,7 +2881,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const hasLocalIdentity = window.GameCenter?.hasIdentity?.();
         if (!hasLocalIdentity && !_sbSession) {
-            openGate({ locked: true, tab: 'register' });
+            openGate({ locked: true, mode: 'register' });
         }
     });
 
