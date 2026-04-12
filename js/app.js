@@ -353,6 +353,48 @@ function _fetchTimeSource(url, extract) {
 }
 
 /**
+ * Lee el encabezado HTTP Date del propio origen (Vercel) para tener una
+ * referencia de tiempo sin depender de CORS de terceros.
+ *
+ * @returns {Promise<number>} Timestamp en ms.
+ */
+async function _fetchServerDateHeader() {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), TIME_API_TIMEOUT);
+    try {
+        const res = await fetch('/', {
+            method: 'HEAD',
+            cache: 'no-store',
+            signal: ctrl.signal
+        });
+        const dateHeader = res.headers.get('date');
+        if (!dateHeader) throw new Error('Date header ausente');
+        const ts = new Date(dateHeader).getTime();
+        if (!Number.isFinite(ts)) throw new Error('Date header inválido');
+        return ts;
+    } finally {
+        clearTimeout(tid);
+    }
+}
+
+let _timeSyncInFlight = false;
+let _lastTimeSyncAt   = 0;
+const TIME_SYNC_MIN_INTERVAL = 30_000;
+
+function _scheduleTimeSync(delay = 0) {
+    setTimeout(() => {
+        if (_timeSyncInFlight) return;
+        if ((Date.now() - _lastTimeSyncAt) < TIME_SYNC_MIN_INTERVAL) return;
+        _timeSyncInFlight = true;
+        _syncTimeBackground()
+            .finally(() => {
+                _timeSyncInFlight = false;
+                _lastTimeSyncAt = Date.now();
+            });
+    }, delay);
+}
+
+/**
  * Sincroniza el caché de tiempo en segundo plano: consulta las APIs en
  * paralelo (Promise.any) y persiste el resultado SIN bloquear la UI.
  *
@@ -367,10 +409,7 @@ async function _syncTimeBackground() {
                 'https://timeapi.io/api/time/current/ip',
                 d => new Date(d.dateTime ?? d.datetime).getTime()
             ),
-            _fetchTimeSource(
-                'https://worldtimeapi.org/api/ip',
-                d => new Date(d.datetime).getTime()
-            )
+            _fetchServerDateHeader()
         ]);
 
         const drift    = networkTime - Date.now();
@@ -1999,29 +2038,55 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cada segundo que la pestaña esté visible se suma 1 al contador de playtime.
     // El guardado en localStorage se realiza cada 60 s para no saturar el disco.
     let _missionSaveTimer = 0;
-    setInterval(() => {
-        if (document.visibilityState !== 'visible') return;
-        window.GameCenter.incrementMissionStat('playtime', 1);
-        _missionSaveTimer++;
+    let _playtimeTicker = null;
+    let _visibleStartedAt = document.visibilityState === 'visible' ? Date.now() : 0;
+
+    const flushVisiblePlaytime = () => {
+        if (!_visibleStartedAt) return;
+        const elapsedSec = Math.floor((Date.now() - _visibleStartedAt) / 1000);
+        if (elapsedSec <= 0) return;
+        window.GameCenter.incrementMissionStat('playtime', elapsedSec);
+        _visibleStartedAt += elapsedSec * 1000;
+        _missionSaveTimer += elapsedSec;
         if (_missionSaveTimer >= 60) {
             _missionSaveTimer = 0;
-            saveState(); // Persistir playtime acumulado cada minuto
+            saveState(); // Persistir playtime acumulado por lotes
         }
-    }, 1_000);
+    };
+
+    const startPlaytimeTicker = () => {
+        if (_playtimeTicker) return;
+        _visibleStartedAt = Date.now();
+        _playtimeTicker = setInterval(flushVisiblePlaytime, 15_000);
+    };
+
+    const stopPlaytimeTicker = () => {
+        flushVisiblePlaytime();
+        clearInterval(_playtimeTicker);
+        _playtimeTicker = null;
+        _visibleStartedAt = 0;
+    };
+
+    if (document.visibilityState === 'visible') startPlaytimeTicker();
 
     // ── Background time sync (v9.6) ───────────────────────────────────────
     // Se lanza 800 ms después del DOMContentLoaded para no competir con el
     // primer paint. El resultado se almacena en TIME_CACHE_KEY y será leído
     // por claimDaily() de forma síncrona, sin espera de red en el reclamo.
-    setTimeout(_syncTimeBackground, 800);
+    _scheduleTimeSync(800);
 
     // Actualizar el caché cuando el usuario vuelve a la pestaña
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') _syncTimeBackground();
+        if (document.visibilityState === 'visible') {
+            startPlaytimeTicker();
+            _scheduleTimeSync(250);
+        } else {
+            stopPlaytimeTicker();
+        }
     });
 
     // Refresco periódico cada 30 min por si la app permanece abierta mucho tiempo
-    setInterval(_syncTimeBackground, 30 * 60 * 1000);
+    setInterval(() => _scheduleTimeSync(), 30 * 60 * 1000);
 
     // Avatar upload — delegado único
     document.addEventListener('change', async (e) => {
