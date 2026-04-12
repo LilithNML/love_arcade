@@ -46,6 +46,26 @@ async function exportStore(store, salt) {
     return btoa(binary);
 }
 
+async function compressGzipBytes(text) {
+    if (typeof CompressionStream !== 'function') {
+        throw new Error('CompressionStream no soportado en Worker');
+    }
+    const stream = new Blob([text], { type: 'application/json' })
+        .stream()
+        .pipeThrough(new CompressionStream('gzip'));
+    const buffer = await new Response(stream).arrayBuffer();
+    return Array.from(new Uint8Array(buffer));
+}
+
+async function decompressGzipBytes(bytes) {
+    if (typeof DecompressionStream !== 'function') {
+        throw new Error('DecompressionStream no soportado en Worker');
+    }
+    const compressed = new Blob([new Uint8Array(bytes)], { type: 'application/gzip' });
+    const stream = compressed.stream().pipeThrough(new DecompressionStream('gzip'));
+    return await new Response(stream).text();
+}
+
 /**
  * Decodifica un código de exportación y valida su integridad.
  * @param {string} code Código importado por el usuario.
@@ -91,6 +111,14 @@ self.addEventListener('message', async (e) => {
         } else if (action === 'import') {
             const result = await importStore(data.code, data.salt);
             self.postMessage({ id, result });
+        } else if (action === 'backup-export') {
+            const checksum = await computeHash(data.canonical);
+            const payload = JSON.stringify({ ...JSON.parse(data.canonical), checksum });
+            const bytes = await compressGzipBytes(payload);
+            self.postMessage({ id, result: { checksum, bytes } });
+        } else if (action === 'backup-import') {
+            const jsonText = await decompressGzipBytes(data.bytes);
+            self.postMessage({ id, result: { jsonText } });
             
         } else {
             self.postMessage({ id, error: `Acción desconocida: ${action}` });

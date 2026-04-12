@@ -5,17 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Love Arcade</title>
 
-    <!-- ── Font preconnect: reduce FOIT/FOUT al pre-abrir la conexión con Google Fonts ── -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
     <link rel="stylesheet" href="styles.css">
-
-    <!-- Pre-load de fuentes críticas para evitar saltos visuales -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
-    </noscript>
 
     <!--
       ╔══════════════════════════════════════════════════════════════╗
@@ -65,6 +55,21 @@
     }();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+    <!--
+      ╔══════════════════════════════════════════════════════════════╗
+      ║  SUPABASE SDK — Sentinel Cloud Sync v13.0                   ║
+      ║                                                              ║
+      ║  Carga el cliente oficial de Supabase desde el CDN de jsDelivr.║
+      ║  Expondrá window.supabase — usado por el Sentinel en app.js ║
+      ║  para autenticación Email/Password y sincronización JSONB.   ║
+      ║  Posición: en <head> para que el objeto esté disponible      ║
+      ║  antes de que app.js ejecute su INIT síncrono al final de    ║
+      ║  <body>. Sin este orden app.js no puede leer window.supabase ║
+      ║  durante la inicialización del StorageInterceptor.           ║
+      ╚══════════════════════════════════════════════════════════════╝
+    -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <!--
   La clase theme-* ya NO va hardcodeada aquí.
@@ -334,6 +339,10 @@
                                     aria-label="Editar nombre y saludo">
                                 <svg class="icon" width="11" height="11" aria-hidden="true"><use href="#icon-pencil"></use></svg>
                             </button>
+                            <span id="cloud-sync-indicator" class="hud-cloud-sync-indicator" aria-live="polite" title="Sincronización en la nube">
+                                <svg class="icon" width="11" height="11" aria-hidden="true"><use href="#icon-upload-cloud"></use></svg>
+                                Nube
+                            </span>
                         </div>
                         <p class="hud-status">
                             <span class="hud-status-dot"></span>
@@ -641,19 +650,19 @@
                         </button>
                     </div>
                     <div class="filter-pills" id="filter-pills">
-                        <button class="pill active" data-filter="Todos">Todos</button>
-                        <button class="pill" data-filter="NoObtenidos">
+                        <button class="pill active" data-filter="NoObtenidos">
                             <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-sparkles"></use></svg> Nuevos
+                        </button>
+                        <button class="pill pill--wishlist" data-filter="Wishlist">
+                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-heart"></use></svg> Deseos
+                        </button>
+                        <button class="pill" data-filter="Mobile">
+                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-smartphone"></use></svg> Móvil
                         </button>
                         <button class="pill" data-filter="PC">
                             <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-monitor"></use></svg> PC
                         </button>
-                        <button class="pill" data-filter="Mobile">
-                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-smartphone"></use></svg> Mobile
-                        </button>
-                        <button class="pill pill--wishlist" data-filter="Wishlist">
-                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-heart"></use></svg> Lista de deseos
-                        </button>
+                        <button class="pill" data-filter="Todos">Todos</button>
                     </div>
                 </div>
 
@@ -721,7 +730,7 @@
                         </div>
                         <div>
                             <h3 class="memory-card__title">Exportar partida</h3>
-                            <p class="memory-card__sub">Genera un código de seguridad y descarga respaldo .txt</p>
+                            <p class="memory-card__sub">Genera y descarga un respaldo binario comprimido (.labak)</p>
                         </div>
                     </div>
                     <button id="btn-export" class="btn-primary" style="position:relative; z-index:1;">
@@ -738,24 +747,63 @@
                         </div>
                         <div>
                             <h3 class="memory-card__title">Importar partida</h3>
-                            <p class="memory-card__sub">Carga tu respaldo .txt o pega el código manualmente</p>
+                            <p class="memory-card__sub">Carga un archivo .labak o .labak.gz para restaurar tu progreso</p>
                         </div>
                     </div>
 
                     <label for="import-file" class="btn-ghost file-label" style="position:relative; z-index:1;">
-                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-file-up"></use></svg> Cargar archivo .txt
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-file-up"></use></svg> Seleccionar archivo .labak / .labak.gz
                     </label>
-                    <input type="file" id="import-file" accept=".txt" hidden>
+                    <input type="file" id="import-file" accept=".labak,.gz" hidden>
                     <span id="import-file-name" class="file-name-display">Ningún archivo seleccionado</span>
-
-                    <div class="sync-separator" style="position:relative; z-index:1;">o pega el código manualmente</div>
-                    <textarea id="import-input" class="sync-textarea" placeholder="Pega tu código aquí…" style="position:relative; z-index:1;"></textarea>
 
                     <button id="btn-import" class="btn-primary" style="margin-top:10px; width:100%; justify-content:center; position:relative; z-index:1; background:linear-gradient(135deg,#22d07a,#16a85e); color:#041a0a;">
                         <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-check-circle"></use></svg>
                         <span>Importar progreso</span>
                     </button>
                     <p id="import-msg" class="feedback-msg"></p>
+                </div>
+
+                <!-- ── NUBE: Sentinel Cloud Sync v14.0 ── -->
+                <div class="memory-card" id="cloud-sync-card" style="border-color:rgba(99,179,237,0.35); margin-top:8px;">
+                    <div class="memory-card__header">
+                        <div class="memory-card__chip" style="background:linear-gradient(135deg,rgba(99,179,237,0.25),rgba(66,153,225,0.15)); border:1px solid rgba(99,179,237,0.4);">
+                            <svg class="icon" width="18" height="18" aria-hidden="true" style="color:#63b3ed;"><use href="#icon-download-cloud"></use></svg>
+                        </div>
+                        <div>
+                            <h3 class="memory-card__title">Sincronización en la Nube</h3>
+                            <p class="memory-card__sub">Portabilidad total · progreso entre dispositivos</p>
+                        </div>
+                        <!-- Indicador de estado en tiempo real -->
+                        <span id="cloud-status-badge" style="margin-left:auto; font-size:0.65rem; font-weight:700; padding:3px 9px; border-radius:20px; background:rgba(113,128,150,0.2); color:var(--text-low); white-space:nowrap; display:flex; align-items:center; gap:4px;">
+                            <span id="cloud-status-dot" style="width:6px; height:6px; border-radius:50%; background:var(--text-low); display:inline-block;"></span>
+                            <span id="cloud-status-text">Inactivo</span>
+                        </span>
+                    </div>
+                    <p id="cloud-account-state" style="font-size:0.78rem; color:var(--text-low); margin:0 0 6px; line-height:1.5;">
+                        Estado: Invitado
+                    </p>
+                    <p id="cloud-last-sync" style="font-size:0.68rem; color:var(--text-low); margin:0 0 12px;">
+                        Última sincronización: —-
+                    </p>
+
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button id="btn-cloud-open-gatekeeper" class="btn-primary" style="flex:1; justify-content:center;">
+                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-lock"></use></svg>
+                            Gestionar Cuenta
+                        </button>
+                        <button id="btn-cloud-change-email" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
+                            Cambiar correo
+                        </button>
+                        <button id="btn-cloud-change-password" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
+                            Cambiar contraseña
+                        </button>
+                        <button id="btn-cloud-signout" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
+                            Cerrar sesión
+                        </button>
+                    </div>
+                    <p id="cloud-login-msg" class="feedback-msg" style="min-height:18px;"></p>
+                    <p id="cloud-sync-msg" class="feedback-msg" style="min-height:18px;"></p>
                 </div>
             </section>
 
@@ -1029,6 +1077,121 @@
         </div>
     </div>
 
+    <div id="cloud-gatekeeper-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cloud-gatekeeper-title">
+        <div class="modal-box cloud-gatekeeper-modal-box">
+            <button id="cloud-gatekeeper-close" class="modal-close-btn" type="button" aria-label="Cerrar acceso cloud">
+                <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-x"></use></svg>
+            </button>
+
+            <h3 id="cloud-gatekeeper-title" class="modal-title cloud-gatekeeper-title">Elige cómo quieres continuar</h3>
+            <p class="cloud-gatekeeper-sub">Guarda tu avance con cuenta o sigue como invitado.</p>
+
+            <div class="cloud-gatekeeper-tabs" role="tablist" aria-label="Opciones de acceso">
+                <button id="gate-tab-register" class="cloud-gatekeeper-tab is-active" role="tab" aria-selected="true" data-gate-tab="register">Crear cuenta</button>
+                <button id="gate-tab-login" class="cloud-gatekeeper-tab" role="tab" aria-selected="false" data-gate-tab="login">Iniciar sesión</button>
+            </div>
+
+            <div class="cloud-gatekeeper-panels">
+                <form id="cloud-register-form" class="cloud-gatekeeper-panel is-active" data-gate-panel="register">
+                    <label class="identity-label" for="cloud-register-nickname">Nombre de jugador</label>
+                    <input id="cloud-register-nickname" class="identity-input cloud-gatekeeper-input" type="text" maxlength="15" autocomplete="nickname" placeholder="ArcadeMaster" required>
+
+                    <label class="identity-label" for="cloud-register-email">Correo</label>
+                    <input id="cloud-register-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
+
+                    <label class="identity-label" for="cloud-register-password">Contraseña</label>
+                    <div class="cloud-password-input-wrap">
+                        <input id="cloud-register-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="16" placeholder="perro-azul-salta-alto" required>
+                        <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-register-password" aria-label="Mostrar u ocultar password">
+                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                        </button>
+                    </div>
+                    <div class="cloud-password-strength" aria-hidden="true">
+                        <div id="cloud-register-password-strength" class="cloud-password-strength-bar"></div>
+                    </div>
+                    <p class="cloud-password-hint">Usa una frase larga y memorable. Estado óptimo: 16+ caracteres.</p>
+                    <button id="btn-generate-register-password" class="btn-ghost cloud-password-generate-btn" type="button">
+                        Generar contraseña segura
+                    </button>
+
+                    <button id="btn-cloud-register" class="btn-primary cloud-gatekeeper-submit" type="submit">
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-plus"></use></svg>
+                        Crear cuenta
+                    </button>
+                </form>
+
+                <form id="cloud-login-form" class="cloud-gatekeeper-panel" data-gate-panel="login" aria-hidden="true">
+                    <label class="identity-label" for="cloud-login-email">Correo</label>
+                    <input id="cloud-login-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
+
+                    <label class="identity-label" for="cloud-login-password">Contraseña</label>
+                    <div class="cloud-password-input-wrap">
+                        <input id="cloud-login-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="current-password" placeholder="perro-azul-salta-alto" required>
+                        <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-login-password" aria-label="Mostrar u ocultar password">
+                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                        </button>
+                    </div>
+
+                    <button id="btn-cloud-login" class="btn-primary cloud-gatekeeper-submit" type="submit">
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-lock"></use></svg>
+                        Iniciar sesión
+                    </button>
+                </form>
+            </div>
+
+            <form id="cloud-email-form" class="cloud-password-form hidden">
+                <label class="identity-label" for="cloud-change-email-input">Nuevo correo electrónico</label>
+                <input id="cloud-change-email-input" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="nuevo@correo.com">
+                <button id="btn-cloud-change-email-submit" class="btn-ghost cloud-gatekeeper-submit" type="button">
+                    Solicitar cambio de correo
+                </button>
+                <p id="cloud-email-change-banner" class="cloud-email-change-banner hidden" role="status" aria-live="polite">
+                    <strong>Cambio pendiente:</strong> Hemos enviado un enlace de confirmación a tu correo actual y otro al nuevo. Debes confirmar ambos para finalizar el proceso.
+                </p>
+            </form>
+
+            <form id="cloud-password-form" class="cloud-password-form hidden">
+                <label class="identity-label" for="cloud-current-password-input">Contraseña actual</label>
+                <div class="cloud-password-input-wrap">
+                    <input id="cloud-current-password-input" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="current-password" minlength="16" placeholder="perro-azul-salta-alto" required>
+                    <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-current-password-input" aria-label="Mostrar u ocultar password">
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                    </button>
+                </div>
+                <label class="identity-label" for="cloud-change-password-input">Nueva contraseña</label>
+                <div class="cloud-password-input-wrap">
+                    <input id="cloud-change-password-input" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="16" placeholder="perro-azul-salta-alto" required>
+                    <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-change-password-input" aria-label="Mostrar u ocultar password">
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                    </button>
+                </div>
+                <div class="cloud-password-strength" aria-hidden="true">
+                    <div id="cloud-change-password-strength" class="cloud-password-strength-bar"></div>
+                </div>
+                <p class="cloud-password-hint">Usa una frase larga y memorable. Estado óptimo: 16+ caracteres.</p>
+                <button id="btn-generate-change-password" class="btn-ghost cloud-password-generate-btn" type="button">
+                    Generar contraseña segura
+                </button>
+
+                <button id="btn-cloud-change-password-submit" class="btn-primary cloud-gatekeeper-submit" type="submit" disabled>
+                    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-shield-check"></use></svg>
+                    Actualizar contraseña
+                </button>
+            </form>
+
+            <div class="cloud-guest-block">
+                <p class="cloud-guest-note">Como invitado, tu avance se guarda en este dispositivo.</p>
+                <button id="btn-cloud-guest" class="btn-ghost" type="button">
+                    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-monitor"></use></svg>
+                    Continuar como invitado
+                </button>
+            </div>
+
+            <p id="cloud-gatekeeper-msg" class="feedback-msg cloud-gatekeeper-msg" aria-live="polite"></p>
+            <p id="cloud-session-email" style="margin:0; font-size:0.68rem; color:var(--text-low); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></p>
+        </div>
+    </div>
+
     <!-- ── EMAIL MODAL ── -->
     <div id="email-modal"
          class="modal-overlay hidden"
@@ -1113,13 +1276,20 @@
 
     <!-- ══════════════════════════════════════════════════════════
          SCRIPTS — Orden estricto:
-         1. app.js      → GameCenter, store, updateUI (núcleo)
-         2. shop-logic.js → Catálogo, compras, sync, ajustes
-         3. spa-router.js → Navegación SPA entre vistas
-         Inline final: lucide + lógica exclusiva de la vista Inicio
+         1. analytics.js  → Ghost Analytics, telemetría
+         2. app.js        → GameCenter, store, updateUI (núcleo)
+                            Incluye Sentinel Cloud Sync v13.0:
+                            StorageInterceptor + Supabase auth/sync
+         3. shop-logic.js → Catálogo, compras, sync, ajustes
+         4. spa-router.js → Navegación SPA entre vistas
+         5. event-logic.js → Eventos LTE, gachapón
+         Nota: @supabase/supabase-js se carga en <head> (CDN)
+         para garantizar window.supabase disponible antes del
+         INIT síncrono de app.js al final del <body>.
          ══════════════════════════════════════════════════════════ -->
     <script src="js/analytics.js"></script>     
     <script src="js/app.js"></script>
+    <script src="js/backup-engine.js"></script>
     <script src="js/shop-logic.js"></script>
     <script src="js/spa-router.js"></script>
     <script src="js/event-logic.js"></script>
@@ -1355,11 +1525,7 @@
         // Si el usuario ya tiene nickname → revealUI() directamente.
         // Si no → mostrar modal de bienvenida; revealUI() se llama al confirmar.
 
-        if (window.GameCenter?.hasIdentity?.()) {
-            window.revealUI?.();
-        } else {
-            openIdentityModal('welcome');
-        }
+        window.revealUI?.();
 
         // ── Botón de edición en el HUD ──────────────────────────────────────
         document.getElementById('btn-edit-identity')
@@ -1384,4 +1550,4 @@
     </script>
 
 </body>
-</html
+</html>

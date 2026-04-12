@@ -152,8 +152,18 @@
 
 // ── Estado del catálogo (módulo privado) ──────────────────────────────────────
 let allItems     = [];
-let activeFilter = 'Todos';
+let activeFilter = 'NoObtenidos';
 let searchQuery  = '';
+let _pendingFilterFrame = null;
+let _shopDelegationBound = false;
+
+function scheduleFilterItems() {
+    if (_pendingFilterFrame !== null) cancelAnimationFrame(_pendingFilterFrame);
+    _pendingFilterFrame = requestAnimationFrame(() => {
+        _pendingFilterFrame = null;
+        filterItems();
+    });
+}
 
 // ── Handler de contextmenu para el mockup stage ──────────────────────────────
 // Guardado como variable de módulo (no como propiedad del nodo DOM) para evitar
@@ -165,6 +175,7 @@ let _stageCtxHandler = null;
 // Se guarda en openXxxModal() y se restaura en _closeXxxModal() para que los
 // usuarios de teclado no pierdan su posición en el flujo de la interfaz (WCAG 2.4.3).
 let _lastFocusedElement = null;
+let isRedeeming = false;
 
 // ── Utilidad de iconos (v9.6 — SVG Sprite) ───────────────────────────────────
 /**
@@ -630,7 +641,9 @@ let _preloadFlushId = null;
  */
 function _flushPreloadQueue() {
     _preloadFlushId = null;
-    const batchSize = _isLowBandwidth() ? 2 : _preloadQueue.length;
+    // Lote acotado para evitar tareas largas en requestIdleCallback durante
+    // scroll rápido con catálogos grandes (+70 ítems).
+    const batchSize = _isLowBandwidth() ? 2 : 4;
     _preloadQueue.splice(0, batchSize).forEach(({ cardEl, item }) =>
         _preloadItemHiRes(cardEl, item)
     );
@@ -1198,7 +1211,15 @@ function filterItems() {
     const gridEl  = document.getElementById('shop-container');
     const sorted  = [...wishlisted, ...others];
 
-    if (sorted.length === 0) {
+    if (sorted.length === 0 && activeFilter === 'NoObtenidos' && !searchQuery) {
+        const allWishlisted = allItems.filter(item =>  GameCenter.isWishlisted(item.id));
+        const allOthers     = allItems.filter(item => !GameCenter.isWishlisted(item.id));
+        renderShop([...allWishlisted, ...allOthers]);
+        gridEl.classList.remove('hidden');
+        emptyEl.classList.add('hidden');
+        countEl.textContent = 'No hay novedades pendientes';
+        countEl.classList.remove('hidden');
+    } else if (sorted.length === 0) {
         gridEl.classList.add('hidden');
         emptyEl.classList.remove('hidden');
         countEl.classList.add('hidden');
@@ -1214,14 +1235,14 @@ function filterItems() {
 
 function resetFilters() {
     document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-    document.querySelector('[data-filter="Todos"]').classList.add('active');
-    activeFilter = 'Todos';
+    document.querySelector('[data-filter="NoObtenidos"]').classList.add('active');
+    activeFilter = 'NoObtenidos';
     searchQuery  = '';
     const searchInput = document.getElementById('search-input');
     const clearBtn    = document.getElementById('search-clear');
     if (searchInput) searchInput.value = '';
     if (clearBtn)    clearBtn.classList.add('hidden');
-    filterItems();
+    scheduleFilterItems();
 }
 // Exponer globalmente (compatible con onclick="resetFilters()" en el HTML)
 window.resetFilters = resetFilters;
@@ -1282,6 +1303,8 @@ function renderShop(items) {
     const container = document.getElementById('shop-container');
     container.innerHTML = '';
     if (!items.length) return;
+
+    const frag = document.createDocumentFragment();
 
     items.forEach(item => {
         const bought     = GameCenter.getBoughtCount(item.id);
@@ -1354,49 +1377,9 @@ function renderShop(items) {
                 ${actionHTML}
             </div>`;
 
-        container.appendChild(card);
+        frag.appendChild(card);
     });
-
-    // Wishlist listeners
-    container.querySelectorAll('.wishlist-btn').forEach(btn => {
-        btn.addEventListener('click', e => {
-            e.stopPropagation();
-            const id    = parseInt(btn.dataset.id, 10);
-            const isNow = GameCenter.toggleWishlist(id);
-            btn.classList.toggle('wishlist-btn--active', isNow);
-            btn.title = isNow ? 'Quitar de lista' : 'Agregar a lista de deseos';
-            btn.innerHTML = '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>';
-            updateWishlistCost();
-            // [v9.9.2] Solo trackear al AGREGAR (isNow === true), no al quitar.
-            // Permite detectar qué wallpapers generan más interés sin registrar
-            // cada toggle como un evento distinto.
-            if (isNow) {
-                const item = allItems.find(i => i.id === id);
-                window.GhostAnalytics?.track('wishlist_add', {
-                    wallpaper: item?.name || `id:${id}`,
-                    precio:    item?.price ?? '?'
-                });
-            }
-        });
-    });
-
-    // Preview listeners
-    container.querySelectorAll('.shop-preview-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const item = allItems.find(i => i.id === parseInt(btn.dataset.id, 10));
-            if (item) openPreviewModal(item);
-        });
-    });
-
-    // Buy listeners
-    container.querySelectorAll('.shop-buy-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            try {
-                const item = JSON.parse(btn.dataset.item.replace(/&#39;/g, "'"));
-                await initiatePurchase(item, btn);
-            } catch (e) { console.error('Error parsing item', e); }
-        });
-    });
+    container.appendChild(frag);
 
     // Scope al container del catálogo.
     // @perf ADVERTENCIA: renderShop destruye y reconstruye el DOM completo en cada
@@ -1409,6 +1392,51 @@ function renderShop(items) {
     // a nodos huérfanos. _initPreloadObserver() lo desconecta y crea uno nuevo
     // observando únicamente los cards con .shop-preview-btn (no comprados).
     _initPreloadObserver(container, items);
+}
+
+function _bindShopContainerDelegation() {
+    if (_shopDelegationBound) return;
+    const container = document.getElementById('shop-container');
+    if (!container) return;
+    _shopDelegationBound = true;
+
+    container.addEventListener('click', async (e) => {
+        const wishlistBtn = e.target.closest('.wishlist-btn');
+        if (wishlistBtn) {
+            e.stopPropagation();
+            const id    = parseInt(wishlistBtn.dataset.id, 10);
+            const isNow = GameCenter.toggleWishlist(id);
+            wishlistBtn.classList.toggle('wishlist-btn--active', isNow);
+            wishlistBtn.title = isNow ? 'Quitar de lista' : 'Agregar a lista de deseos';
+            wishlistBtn.innerHTML = '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>';
+            updateWishlistCost();
+            if (isNow) {
+                const item = allItems.find(i => i.id === id);
+                window.GhostAnalytics?.track('wishlist_add', {
+                    wallpaper: item?.name || `id:${id}`,
+                    precio:    item?.price ?? '?'
+                });
+            }
+            return;
+        }
+
+        const previewBtn = e.target.closest('.shop-preview-btn');
+        if (previewBtn) {
+            const item = allItems.find(i => i.id === parseInt(previewBtn.dataset.id, 10));
+            if (item) openPreviewModal(item);
+            return;
+        }
+
+        const buyBtn = e.target.closest('.shop-buy-btn');
+        if (buyBtn) {
+            try {
+                const item = JSON.parse(buyBtn.dataset.item.replace(/&#39;/g, "'"));
+                await initiatePurchase(item, buyBtn);
+            } catch (err) {
+                console.error('Error parsing item', err);
+            }
+        }
+    });
 }
 
 // ── Render: Biblioteca ────────────────────────────────────────────────────────
@@ -1660,6 +1688,11 @@ function fireConfetti() {
 function showToast(html, type = 'success') {
     const toast     = document.createElement('div');
     toast.className = `toast toast--${type}`;
+    if (type === 'warning') {
+        toast.classList.add('toast--warning');
+        toast.style.borderColor = '#f59e0b';
+        toast.style.color = '#f59e0b';
+    }
     toast.innerHTML = html;
     document.body.appendChild(toast);
     requestAnimationFrame(() => toast.classList.add('toast--visible'));
@@ -1672,52 +1705,68 @@ function showToast(html, type = 'success') {
 
 // ── Código Promo ──────────────────────────────────────────────────────────────
 async function handleRedeem() {
+    if (isRedeeming) return;
+
     const input  = document.getElementById('promo-input');
     const msg    = document.getElementById('promo-msg');
     const btn    = document.getElementById('btn-redeem');
     const code   = input.value.trim();
     if (!code) return;
 
+    isRedeeming = true;
     btn.disabled = true;
-    const result = await window.GameCenter.redeemPromoCode(code);
-    btn.disabled = false;
+    try {
+        const result = await window.GameCenter.redeemPromoCode(code);
 
-    if (result.success) {
-        showMsg(msg, result.message, 'var(--success)');
-        input.value = '';
-        input.style.borderColor = '';
-        // Actualizar displays: navbar con formato abreviado, resto con valor exacto.
-        const bal = GameCenter.getBalance();
-        document.querySelectorAll('.navbar .coin-display').forEach(el => {
-            el.textContent = window.formatCoinsNavbar?.(bal) ?? bal;
-            el.closest('.coin-badge')?.setAttribute('title', `${bal} monedas`);
-        });
-        document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
-        if (!document.hidden) {
-            confetti({ particleCount: 80, spread: 100, origin: { y: 0.4 }, colors: ['#fbbf24','#9b59ff','#22d07a'] });
+        if (result.success) {
+            showMsg(msg, result.message, 'var(--success)');
+            input.value = '';
+            input.style.borderColor = '';
+            // Actualizar displays: navbar con formato abreviado, resto con valor exacto.
+            const bal = GameCenter.getBalance();
+            document.querySelectorAll('.navbar .coin-display').forEach(el => {
+                el.textContent = window.formatCoinsNavbar?.(bal) ?? bal;
+                el.closest('.coin-badge')?.setAttribute('title', `${bal} monedas`);
+            });
+            document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
+            if (!document.hidden) {
+                confetti({ particleCount: 80, spread: 100, origin: { y: 0.4 }, colors: ['#fbbf24','#9b59ff','#22d07a'] });
+            }
+            // [v9.9.2] Fuente ÚNICA de track('redeem_code'): aquí, al final de la cadena
+            // de éxito de UI. El disparo en app.js/redeemPromoCode() fue eliminado para
+            // evitar el doble reporte. Código ofuscado con *** para no exponer texto plano.
+            window.GhostAnalytics?.track('redeem_code', {
+                recompensa: result.reward,
+                código:     `${code.slice(0, 3)}***`
+            });
+        } else {
+            showMsg(msg, result.message, 'var(--error)');
+            input.style.borderColor = 'var(--error)';
+            shakeElement(btn);
+
+            // [v9.9.2] Fricción de usuario: código que no existe en absoluto.
+            // Solo se trackea cuando el código es desconocido ('Código inválido'),
+            // no cuando ya fue canjeado ('Ya canjeaste este código') para evitar
+            // saturar el canal con intentos legítimos pero repetidos.
+            if (result.message === 'Código inválido') {
+                window.GhostAnalytics?.track('invalid_promo_code', {
+                    intento: `${code.slice(0, 3)}***`,
+                    longitud: code.length
+                });
+            }
         }
-        // [v9.9.2] Fuente ÚNICA de track('redeem_code'): aquí, al final de la cadena
-        // de éxito de UI. El disparo en app.js/redeemPromoCode() fue eliminado para
-        // evitar el doble reporte. Código ofuscado con *** para no exponer texto plano.
-        window.GhostAnalytics?.track('redeem_code', {
-            recompensa: result.reward,
-            código:     `${code.slice(0, 3)}***`
-        });
-    } else {
-        showMsg(msg, result.message, 'var(--error)');
+    } catch (error) {
+        showMsg(msg, 'Ocurrió un error al canjear el código. Inténtalo de nuevo.', 'var(--error)');
         input.style.borderColor = 'var(--error)';
         shakeElement(btn);
-
-        // [v9.9.2] Fricción de usuario: código que no existe en absoluto.
-        // Solo se trackea cuando el código es desconocido ('Código inválido'),
-        // no cuando ya fue canjeado ('Ya canjeaste este código') para evitar
-        // saturar el canal con intentos legítimos pero repetidos.
-        if (result.message === 'Código inválido') {
-            window.GhostAnalytics?.track('invalid_promo_code', {
-                intento: `${code.slice(0, 3)}***`,
-                longitud: code.length
-            });
-        }
+        window.GhostAnalytics?.track('bug', {
+            módulo: 'shop-logic',
+            acción: 'redeem_code',
+            detalle: error?.message || 'redeemPromoCode_failed'
+        });
+    } finally {
+        btn.disabled = false;
+        isRedeeming = false;
     }
 }
 
@@ -1726,43 +1775,33 @@ async function handleExport() {
     const msg = document.getElementById('export-msg');
     const btn = document.getElementById('btn-export');
     btn.disabled = true;
-    showMsg(msg, 'Generando código con checksum…', 'var(--text-low)');
-
-    const code = await GameCenter.exportSave();
+    showMsg(msg, 'Procesando…', 'var(--text-low)');
+    const result = await window.BackupEngine?.exportBackup({
+        onStatus: (type, message) => {
+            if (type === 'processing') showMsg(msg, message, 'var(--text-low)');
+        }
+    });
     btn.disabled = false;
 
-    if (!code) { showMsg(msg, 'Error al generar el código.', 'var(--error)'); return; }
-
-    // Usar la utilidad centralizada de portapapeles para evitar duplicar
-    // el patrón navigator.clipboard + fallback execCommand (ya existe en MailHelper).
-    const clipboardOk = await window.MailHelper.copyToClipboard(code);
-
-    try {
-        const blob = new Blob([code], { type: 'text/plain' });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href     = url;
-        a.download = `love-arcade-backup-${new Date().toISOString().slice(0,10)}.txt`;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    } catch (_) {}
+    if (!result?.success) {
+        showMsg(msg, result?.message || 'Error al crear el respaldo.', 'var(--error)');
+        return;
+    }
 
     // [v9.9.2] Mide cuántos usuarios utilizan la sincronización entre dispositivos.
     window.GhostAnalytics?.track('sync_export', {
-        portapapeles: clipboardOk ? 'sí' : 'no'
+        formato: 'labak'
     });
-
-    showMsg(msg, clipboardOk
-        ? '✓ Código copiado al portapapeles y archivo .txt descargado.'
-        : '✓ Archivo .txt descargado.', 'var(--success)');
+    showMsg(msg, '✓ Copia de seguridad creada.', 'var(--success)');
 }
 
 async function handleImport() {
-    const code = document.getElementById('import-input').value.trim();
     const msg  = document.getElementById('import-msg');
     const btn  = document.getElementById('btn-import');
+    const input = document.getElementById('import-file');
+    const file = input?.files?.[0] || null;
 
-    if (!code) { showMsg(msg, 'Carga un archivo o pega un código.', 'var(--error)'); return; }
+    if (!file) { showMsg(msg, 'Selecciona un archivo .labak.', 'var(--error)'); return; }
 
     const confirmed = await openConfirmModal({
         title:    'Importar partida',
@@ -1776,16 +1815,19 @@ async function handleImport() {
     if (!confirmed) return;
 
     btn.disabled = true;
-    showMsg(msg, 'Verificando integridad…', 'var(--text-low)');
-
-    const result = await GameCenter.importSave(code);
+    showMsg(msg, 'Procesando…', 'var(--text-low)');
+    const result = await window.BackupEngine?.importBackupFromFile(file, {
+        onStatus: (type, message) => {
+            if (type === 'processing') showMsg(msg, message, 'var(--text-low)');
+        }
+    });
     btn.disabled = false;
 
     if (result.success) {
-        showMsg(msg, '✓ Importado correctamente. Recargando…', 'var(--success)');
+        showMsg(msg, '✓ Progreso restaurado con éxito. Recargando…', 'var(--success)');
         setTimeout(() => location.reload(), 1200);
     } else {
-        showMsg(msg, result.message || 'Código inválido o corrupto.', 'var(--error)');
+        showMsg(msg, result.message || 'Archivo inválido o corrupto.', 'var(--error)');
     }
 }
 
@@ -2077,6 +2119,7 @@ function loadCatalog() {
 
 // ── DOMContentLoaded — Registro de event listeners (una sola vez) ─────────────
 document.addEventListener('DOMContentLoaded', () => {
+    _bindShopContainerDelegation();
 
     // Inicializar banner y economía al cargar
     initSaleBanner();
@@ -2152,7 +2195,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearBtn     = document.getElementById('search-clear');
     const debouncedFilter = window.debounce(() => {
         searchQuery = searchInput.value.trim().toLowerCase();
-        filterItems();
+        scheduleFilterItems();
     }, 300);
 
     searchInput.addEventListener('input', () => {
@@ -2160,11 +2203,12 @@ document.addEventListener('DOMContentLoaded', () => {
         debouncedFilter();
     });
     clearBtn.addEventListener('click', () => {
+        if (!searchInput.value && !searchQuery) return;
         searchInput.value = '';
         searchQuery       = '';
         clearBtn.classList.add('hidden');
-        filterItems();
-        searchInput.focus();
+        scheduleFilterItems();
+        requestAnimationFrame(() => searchInput.focus({ preventScroll: true }));
     });
 
     // Botón "Ver todo el catálogo" en el estado vacío de filtros
@@ -2174,32 +2218,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // Filter pills
     document.querySelectorAll('.pill').forEach(pill => {
         pill.addEventListener('click', () => {
+            if (activeFilter === pill.dataset.filter) return;
             document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
             pill.classList.add('active');
             activeFilter = pill.dataset.filter;
-            filterItems();
+            scheduleFilterItems();
         });
     });
 
     // Sync
     document.getElementById('btn-export')?.addEventListener('click', handleExport);
-    document.getElementById('btn-import')?.addEventListener('click', handleImport);
+    document.getElementById('btn-import')?.addEventListener('click', () => {
+        const fileInput = document.getElementById('import-file');
+        if (!fileInput?.files?.length) {
+            window.BackupEngine?.triggerImportPicker(fileInput);
+            return;
+        }
+        handleImport();
+    });
 
     document.getElementById('import-file')?.addEventListener('change', e => {
         const file = e.target.files[0];
         if (!file) return;
         const nameEl = document.getElementById('import-file-name');
         if (nameEl) nameEl.textContent = file.name;
-        const reader = new FileReader();
-        reader.onload  = evt => {
-            const ta = document.getElementById('import-input');
-            if (ta) ta.value = evt.target.result.trim();
-            showMsg(document.getElementById('import-msg'),
-                `Archivo "${file.name}" cargado. Haz clic en Importar.`, 'var(--text-med)');
-        };
-        reader.onerror = () =>
-            showMsg(document.getElementById('import-msg'), 'Error al leer.', 'var(--error)');
-        reader.readAsText(file);
+        showMsg(document.getElementById('import-msg'),
+            `Archivo "${file.name}" listo. Haz clic en Importar.`, 'var(--text-med)');
     });
 
     // Moon Blessing button
