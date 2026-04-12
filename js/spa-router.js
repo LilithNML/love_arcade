@@ -163,7 +163,9 @@
                 return;
             }
             
-            navigateTo(viewId, anchor);
+            // Separar la navegación del mismo task del click para reducir INP
+            // cuando la vista de destino ejecuta lógica de entrada pesada.
+            requestAnimationFrame(() => navigateTo(viewId, anchor));
         });
     }
     

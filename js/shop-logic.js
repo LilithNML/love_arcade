@@ -631,7 +631,9 @@ let _preloadFlushId = null;
  */
 function _flushPreloadQueue() {
     _preloadFlushId = null;
-    const batchSize = _isLowBandwidth() ? 2 : _preloadQueue.length;
+    // Lote acotado para evitar tareas largas en requestIdleCallback durante
+    // scroll rápido con catálogos grandes (+70 ítems).
+    const batchSize = _isLowBandwidth() ? 2 : 4;
     _preloadQueue.splice(0, batchSize).forEach(({ cardEl, item }) =>
         _preloadItemHiRes(cardEl, item)
     );
