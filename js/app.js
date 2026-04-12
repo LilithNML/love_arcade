@@ -507,6 +507,11 @@ function migrateState(loadedStore) {
         delete merged.redeemedCodes;
     }
 
+    // v14.2 — Limpieza preventiva: no mantener DataURL heredado en estado persistido.
+    if (_isBase64Avatar(merged.userAvatar)) {
+        merged.userAvatar = null;
+    }
+
     return merged;
 }
 
@@ -585,6 +590,13 @@ const STORE_WARNING_KB = 4000;
 
 function _isBase64Avatar(value) {
     return typeof value === 'string' && value.startsWith('data:image/');
+}
+
+function _trackAvatarStorageFallback(reason, meta = {}) {
+    window.GhostAnalytics?.track(reason, {
+        component: 'avatar_upload',
+        ...meta
+    });
 }
 
 function _dataUrlToBlob(dataUrl) {
@@ -1349,15 +1361,33 @@ window.GameCenter = {
         const session = window.Sentinel?.getSession?.();
         const sbClient = window.Sentinel?.getClient?.();
         const userId = session?.user?.id;
+        const bucket = 'avatars';
 
         if (session && sbClient && userId) {
+            const path = `${userId}/profile.jpg`;
             try {
+                const { data: authData, error: authError } = await sbClient.auth.getSession();
+                if (authError) throw authError;
+                const freshSession = authData?.session;
+                if (!freshSession?.access_token) {
+                    _trackAvatarStorageFallback('storage_no_session', { user_id: userId, bucket, path });
+                    console.error('[GameCenter] Avatar cloud upload cancelado por sesión ausente/expirada:', {
+                        hasSession: false,
+                        userId,
+                        path,
+                        bucket,
+                        message: 'Missing access token',
+                        statusCode: null
+                    });
+                    await _saveAvatarLocally(dataUrl);
+                    return { success: true, remote: false, reason: 'storage_no_session' };
+                }
+
                 const sourceBlob = _dataUrlToBlob(dataUrl);
                 const compressed = await compressImage(sourceBlob, 200, 200, 0.7);
-                const path = `avatars/${userId}/profile.jpg`;
                 const { error: uploadError } = await sbClient
                     .storage
-                    .from('avatars')
+                    .from(bucket)
                     .upload(path, compressed, {
                         cacheControl: '3600',
                         upsert: true,
@@ -1365,14 +1395,31 @@ window.GameCenter = {
                     });
                 if (uploadError) throw uploadError;
 
-                const { data } = sbClient.storage.from('avatars').getPublicUrl(path);
+                const { data } = sbClient.storage.from(bucket).getPublicUrl(path);
                 if (!data?.publicUrl) throw new Error('No se pudo generar URL pública del avatar.');
                 store.userAvatar = data.publicUrl;
                 saveState({ immediateCloudSync: true });
                 applyAvatar();
                 return { success: true, remote: true, url: data.publicUrl };
             } catch (err) {
-                console.warn('[GameCenter] Avatar cloud upload falló, usando fallback local:', err?.message || err);
+                const statusCode = err?.statusCode || err?.status || null;
+                const message = err?.message || String(err);
+                const fallbackReason = Number(statusCode) === 403
+                    ? 'storage_forbidden_rls'
+                    : 'storage_network';
+                _trackAvatarStorageFallback(fallbackReason, { user_id: userId, bucket, path, status_code: statusCode });
+                console.error('[GameCenter] Error detallado al subir avatar a Supabase Storage:', {
+                    hasSession: Boolean(session),
+                    userId,
+                    path,
+                    bucket,
+                    message,
+                    name: err?.name || 'StorageError',
+                    statusCode,
+                    details: err?.details || null,
+                    hint: err?.hint || null
+                });
+                console.warn('[GameCenter] Avatar cloud upload falló, usando fallback local:', message);
             }
         }
 
@@ -2138,6 +2185,17 @@ document.addEventListener('DOMContentLoaded', () => {
         SENTINEL_TS_KEY,
     ]);
 
+    function _getCloudAvatarUrl() {
+        try {
+            const avatar = window.GameCenter?.getAvatar?.();
+            if (typeof avatar !== 'string') return null;
+            if (_isBase64Avatar(avatar)) return null;
+            return /^https?:\/\//i.test(avatar) ? avatar : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
     // ── Utilidades de UI ─────────────────────────────────────────────────────
 
     function _setStatusBadge(state) {
@@ -2218,7 +2276,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const snap = {};
         SENTINEL_WATCHED_KEYS.forEach(key => {
             const val = localStorage.getItem(key);
-            if (val !== null) snap[key] = val;
+            if (val === null) return;
+
+            // Evitar subir userAvatar dentro de game_data:
+            // el avatar cloud vive en user_profiles.avatar_url y el binario en Storage.
+            if ((key === CONFIG.stateKey || key === 'gamecenter_v6_promos') && typeof val === 'string') {
+                try {
+                    const parsed = JSON.parse(val);
+                    if (parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, 'userAvatar')) {
+                        const sanitized = { ...parsed };
+                        delete sanitized.userAvatar;
+                        snap[key] = JSON.stringify(sanitized);
+                        return;
+                    }
+                } catch (_) {
+                    // Si no es JSON válido, se conserva el valor tal cual.
+                }
+            }
+            snap[key] = val;
         });
         return snap;
     }
@@ -2270,11 +2345,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const now        = new Date().toISOString();
             const userId     = _sbSession.user.id;
             const nickname   = window.GameCenter?.getIdentity?.()?.nickname || '';
+            const avatar_url = _getCloudAvatarUrl();
 
             const { error } = await _sbClient
                 .from(SUPABASE_TABLE)
                 .upsert(
-                    { id: userId, game_data: snap, nickname, updated_at: now },
+                    { id: userId, game_data: snap, nickname, avatar_url, updated_at: now },
                     { onConflict: 'id' }
                 );
 
@@ -2378,9 +2454,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const now = new Date().toISOString();
         const userId = _sbSession.user.id;
         const nickname = window.GameCenter?.getIdentity?.()?.nickname || '';
+        const avatar_url = _getCloudAvatarUrl();
         const { error } = await _sbClient
             .from(SUPABASE_TABLE)
-            .upsert({ id: userId, game_data: mergedData, nickname, updated_at: now }, { onConflict: 'id' });
+            .upsert({ id: userId, game_data: mergedData, nickname, avatar_url, updated_at: now }, { onConflict: 'id' });
         if (error) throw error;
 
         _originalSetItem(SENTINEL_TS_KEY, now);
@@ -2415,13 +2492,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const userId = session.user.id;
             const { data, error } = await _sbClient
                 .from(SUPABASE_TABLE)
-                .select('game_data, updated_at, nickname')
+                .select('game_data, updated_at, nickname, avatar_url')
                 .eq('id', userId)
                 .maybeSingle();
             if (error) throw error;
 
             if (data?.nickname && !window.GameCenter?.hasIdentity?.()) {
                 window.GameCenter?.setIdentity?.(data.nickname, '@');
+            }
+            if (data?.avatar_url && typeof data.avatar_url === 'string') {
+                const avatar = data.avatar_url.trim();
+                if (avatar) {
+                    store.userAvatar = avatar;
+                    saveState();
+                }
             }
 
             let effectiveData = data?.game_data || {};
