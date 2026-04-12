@@ -1351,10 +1351,10 @@ window.GameCenter = {
         const userId = session?.user?.id;
 
         if (session && sbClient && userId) {
+            const path = `avatars/${userId}/profile.jpg`;
             try {
                 const sourceBlob = _dataUrlToBlob(dataUrl);
                 const compressed = await compressImage(sourceBlob, 200, 200, 0.7);
-                const path = `avatars/${userId}/profile.jpg`;
                 const { error: uploadError } = await sbClient
                     .storage
                     .from('avatars')
@@ -1372,6 +1372,14 @@ window.GameCenter = {
                 applyAvatar();
                 return { success: true, remote: true, url: data.publicUrl };
             } catch (err) {
+                console.error('[GameCenter] Error detallado al subir avatar a Supabase Storage:', {
+                    message: err?.message || String(err),
+                    name: err?.name || 'StorageError',
+                    statusCode: err?.statusCode || err?.status || null,
+                    details: err?.details || null,
+                    hint: err?.hint || null,
+                    path
+                });
                 console.warn('[GameCenter] Avatar cloud upload falló, usando fallback local:', err?.message || err);
             }
         }
@@ -2138,6 +2146,17 @@ document.addEventListener('DOMContentLoaded', () => {
         SENTINEL_TS_KEY,
     ]);
 
+    function _getCloudAvatarUrl() {
+        try {
+            const avatar = window.GameCenter?.getAvatar?.();
+            if (typeof avatar !== 'string') return null;
+            if (_isBase64Avatar(avatar)) return null;
+            return /^https?:\/\//i.test(avatar) ? avatar : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
     // ── Utilidades de UI ─────────────────────────────────────────────────────
 
     function _setStatusBadge(state) {
@@ -2218,7 +2237,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const snap = {};
         SENTINEL_WATCHED_KEYS.forEach(key => {
             const val = localStorage.getItem(key);
-            if (val !== null) snap[key] = val;
+            if (val === null) return;
+
+            // Evitar subir userAvatar dentro de game_data:
+            // el avatar cloud vive en user_profiles.avatar_url y el binario en Storage.
+            if ((key === CONFIG.stateKey || key === 'gamecenter_v6_promos') && typeof val === 'string') {
+                try {
+                    const parsed = JSON.parse(val);
+                    if (parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, 'userAvatar')) {
+                        const sanitized = { ...parsed };
+                        delete sanitized.userAvatar;
+                        snap[key] = JSON.stringify(sanitized);
+                        return;
+                    }
+                } catch (_) {
+                    // Si no es JSON válido, se conserva el valor tal cual.
+                }
+            }
+            snap[key] = val;
         });
         return snap;
     }
@@ -2270,11 +2306,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const now        = new Date().toISOString();
             const userId     = _sbSession.user.id;
             const nickname   = window.GameCenter?.getIdentity?.()?.nickname || '';
+            const avatar_url = _getCloudAvatarUrl();
 
             const { error } = await _sbClient
                 .from(SUPABASE_TABLE)
                 .upsert(
-                    { id: userId, game_data: snap, nickname, updated_at: now },
+                    { id: userId, game_data: snap, nickname, avatar_url, updated_at: now },
                     { onConflict: 'id' }
                 );
 
@@ -2378,9 +2415,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const now = new Date().toISOString();
         const userId = _sbSession.user.id;
         const nickname = window.GameCenter?.getIdentity?.()?.nickname || '';
+        const avatar_url = _getCloudAvatarUrl();
         const { error } = await _sbClient
             .from(SUPABASE_TABLE)
-            .upsert({ id: userId, game_data: mergedData, nickname, updated_at: now }, { onConflict: 'id' });
+            .upsert({ id: userId, game_data: mergedData, nickname, avatar_url, updated_at: now }, { onConflict: 'id' });
         if (error) throw error;
 
         _originalSetItem(SENTINEL_TS_KEY, now);
@@ -2415,13 +2453,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const userId = session.user.id;
             const { data, error } = await _sbClient
                 .from(SUPABASE_TABLE)
-                .select('game_data, updated_at, nickname')
+                .select('game_data, updated_at, nickname, avatar_url')
                 .eq('id', userId)
                 .maybeSingle();
             if (error) throw error;
 
             if (data?.nickname && !window.GameCenter?.hasIdentity?.()) {
                 window.GameCenter?.setIdentity?.(data.nickname, '@');
+            }
+            if (data?.avatar_url && typeof data.avatar_url === 'string') {
+                const avatar = data.avatar_url.trim();
+                if (avatar) {
+                    store.userAvatar = avatar;
+                    saveState();
+                }
             }
 
             let effectiveData = data?.game_data || {};
