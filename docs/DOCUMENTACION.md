@@ -4962,11 +4962,11 @@ Esta versión endurece la persistencia local para evitar `QuotaExceededError` y 
 | Área | Cambio |
 |---|---|
 | **Avatares** | `GameCenter.setAvatar()` ahora es asíncrona. Comprime imágenes con canvas (`200x200`, calidad `0.7`) antes de guardar/subir. |
-| **Cloud Avatar (Supabase Storage)** | Si existe sesión cloud (`Sentinel.getSession()`), el avatar se sube al bucket `avatars` en `avatars/{userId}/profile.jpg` (upsert). Se guarda URL pública en `store.userAvatar`. |
+| **Cloud Avatar (Supabase Storage)** | Si existe sesión cloud (`Sentinel.getSession()`), se valida sesión fresca (`sbClient.auth.getSession()`) y el avatar se sube al bucket `avatars` en `{userId}/profile.jpg` (ruta relativa al bucket, upsert). Se guarda URL pública en `store.userAvatar`. |
 | **Fallback local seguro** | Si no hay sesión cloud o falla la subida, el avatar se guarda como Base64 comprimido solo si queda por debajo de `100 KB`. Si supera ese límite, se rechaza con mensaje de error controlado. |
 | **Limpieza de avatar legado** | En INIT síncrono, si detecta avatar Base64 > `200 KB`, se elimina automáticamente y se registra `GhostAnalytics.track('storage_cleaned', { reason: 'avatar_too_large' })`. |
 | **Historial** | `logTransaction()` reduce retención: de 150 → 50 entradas. |
-| **Migración de estado** | `migrateState()` elimina el campo legado `redeemedCodes` para reducir payload persistido. |
+| **Migración de estado** | `migrateState()` elimina `redeemedCodes` y limpia `userAvatar` legado en DataURL para evitar payloads grandes persistidos. |
 | **Progreso por juego** | Nuevo `trimGameProgress()` limita cada arreglo `store.progress[gameId]` a las últimas 50 entradas. |
 | **Limpieza de emergencia** | Nuevo `emergencyCleanup()` ejecutado al detectar cuota excedida: limpia avatar grande, recorta historial, elimina legado y trimea progreso. Si el store sigue >4 MB, vacía historial. |
 | **Guardado resiliente** | `saveState()` maneja `QuotaExceededError` con reintento tras cleanup. Si falla de nuevo, muestra toast de error y evita freeze del flujo. |
@@ -4980,6 +4980,11 @@ Para que la subida de avatares cloud funcione en producción:
 
 1. Crear bucket público `avatars`.
 2. Configurar políticas RLS de lectura pública y escritura restringida por `auth.uid()`.
-3. Mantener la convención de ruta `avatars/{userId}/profile.jpg` para que cumpla con `storage.foldername(name)` en políticas.
+3. Mantener la convención de ruta `{userId}/profile.jpg` (objeto relativo al bucket) para que `storage.foldername(name))[1]` sea el UID y cumpla RLS.
 
 > Nota: este paso se configura en Supabase Dashboard / SQL Editor y no se automatiza desde frontend.
+
+### Nota de arquitectura (avatar y game_data)
+
+- `userAvatar` **no debe viajar** dentro de `game_data` en cloud sync.
+- El binario/archivo vive en Supabase Storage (`avatars`) y sólo se persiste la URL pública en `user_profiles.avatar_url`.
