@@ -507,6 +507,11 @@ function migrateState(loadedStore) {
         delete merged.redeemedCodes;
     }
 
+    // v14.2 — Limpieza preventiva: no mantener DataURL heredado en estado persistido.
+    if (_isBase64Avatar(merged.userAvatar)) {
+        merged.userAvatar = null;
+    }
+
     return merged;
 }
 
@@ -585,6 +590,13 @@ const STORE_WARNING_KB = 4000;
 
 function _isBase64Avatar(value) {
     return typeof value === 'string' && value.startsWith('data:image/');
+}
+
+function _trackAvatarStorageFallback(reason, meta = {}) {
+    window.GhostAnalytics?.track(reason, {
+        component: 'avatar_upload',
+        ...meta
+    });
 }
 
 function _dataUrlToBlob(dataUrl) {
@@ -1349,15 +1361,33 @@ window.GameCenter = {
         const session = window.Sentinel?.getSession?.();
         const sbClient = window.Sentinel?.getClient?.();
         const userId = session?.user?.id;
+        const bucket = 'avatars';
 
         if (session && sbClient && userId) {
-            const path = `avatars/${userId}/profile.jpg`;
+            const path = `${userId}/profile.jpg`;
             try {
+                const { data: authData, error: authError } = await sbClient.auth.getSession();
+                if (authError) throw authError;
+                const freshSession = authData?.session;
+                if (!freshSession?.access_token) {
+                    _trackAvatarStorageFallback('storage_no_session', { user_id: userId, bucket, path });
+                    console.error('[GameCenter] Avatar cloud upload cancelado por sesión ausente/expirada:', {
+                        hasSession: false,
+                        userId,
+                        path,
+                        bucket,
+                        message: 'Missing access token',
+                        statusCode: null
+                    });
+                    await _saveAvatarLocally(dataUrl);
+                    return { success: true, remote: false, reason: 'storage_no_session' };
+                }
+
                 const sourceBlob = _dataUrlToBlob(dataUrl);
                 const compressed = await compressImage(sourceBlob, 200, 200, 0.7);
                 const { error: uploadError } = await sbClient
                     .storage
-                    .from('avatars')
+                    .from(bucket)
                     .upload(path, compressed, {
                         cacheControl: '3600',
                         upsert: true,
@@ -1365,22 +1395,31 @@ window.GameCenter = {
                     });
                 if (uploadError) throw uploadError;
 
-                const { data } = sbClient.storage.from('avatars').getPublicUrl(path);
+                const { data } = sbClient.storage.from(bucket).getPublicUrl(path);
                 if (!data?.publicUrl) throw new Error('No se pudo generar URL pública del avatar.');
                 store.userAvatar = data.publicUrl;
                 saveState({ immediateCloudSync: true });
                 applyAvatar();
                 return { success: true, remote: true, url: data.publicUrl };
             } catch (err) {
+                const statusCode = err?.statusCode || err?.status || null;
+                const message = err?.message || String(err);
+                const fallbackReason = Number(statusCode) === 403
+                    ? 'storage_forbidden_rls'
+                    : 'storage_network';
+                _trackAvatarStorageFallback(fallbackReason, { user_id: userId, bucket, path, status_code: statusCode });
                 console.error('[GameCenter] Error detallado al subir avatar a Supabase Storage:', {
-                    message: err?.message || String(err),
+                    hasSession: Boolean(session),
+                    userId,
+                    path,
+                    bucket,
+                    message,
                     name: err?.name || 'StorageError',
-                    statusCode: err?.statusCode || err?.status || null,
+                    statusCode,
                     details: err?.details || null,
-                    hint: err?.hint || null,
-                    path
+                    hint: err?.hint || null
                 });
-                console.warn('[GameCenter] Avatar cloud upload falló, usando fallback local:', err?.message || err);
+                console.warn('[GameCenter] Avatar cloud upload falló, usando fallback local:', message);
             }
         }
 
