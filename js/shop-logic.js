@@ -152,7 +152,7 @@
 
 // ── Estado del catálogo (módulo privado) ──────────────────────────────────────
 let allItems     = [];
-let activeFilter = 'Todos';
+let activeFilter = 'NoObtenidos';
 let searchQuery  = '';
 let _pendingFilterFrame = null;
 let _shopDelegationBound = false;
@@ -1211,7 +1211,15 @@ function filterItems() {
     const gridEl  = document.getElementById('shop-container');
     const sorted  = [...wishlisted, ...others];
 
-    if (sorted.length === 0) {
+    if (sorted.length === 0 && activeFilter === 'NoObtenidos' && !searchQuery) {
+        const allWishlisted = allItems.filter(item =>  GameCenter.isWishlisted(item.id));
+        const allOthers     = allItems.filter(item => !GameCenter.isWishlisted(item.id));
+        renderShop([...allWishlisted, ...allOthers]);
+        gridEl.classList.remove('hidden');
+        emptyEl.classList.add('hidden');
+        countEl.textContent = 'No hay novedades pendientes';
+        countEl.classList.remove('hidden');
+    } else if (sorted.length === 0) {
         gridEl.classList.add('hidden');
         emptyEl.classList.remove('hidden');
         countEl.classList.add('hidden');
@@ -1227,8 +1235,8 @@ function filterItems() {
 
 function resetFilters() {
     document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-    document.querySelector('[data-filter="Todos"]').classList.add('active');
-    activeFilter = 'Todos';
+    document.querySelector('[data-filter="NoObtenidos"]').classList.add('active');
+    activeFilter = 'NoObtenidos';
     searchQuery  = '';
     const searchInput = document.getElementById('search-input');
     const clearBtn    = document.getElementById('search-clear');
