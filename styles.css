@@ -11,7 +11,7 @@
          costs on mockup loading state and offline fallback.
    ================================================================ */
 
-/* ── Google Fonts: Migrado a link preload en HTML para carga no bloqueante ── */
+/* ── Tipografía local: sin Google Fonts para evitar preloads inyectados/duplicados ── */
 
 /*
  * Fuentes de sistema con métricas ajustadas para reducir el "salto" visible
@@ -37,6 +37,16 @@
     size-adjust: 100%;
     ascent-override: 92%;
     descent-override: 24%;
+    line-gap-override: 0%;
+}
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: local('Courier New');
+    font-style: normal;
+    font-weight: 400 700;
+    size-adjust: 98%;
+    ascent-override: 90%;
+    descent-override: 23%;
     line-gap-override: 0%;
 }
 
