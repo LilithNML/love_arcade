@@ -50,7 +50,7 @@
 13. [Sistema de Racha (Streaks)](#13-sistema-de-racha-streaks)
 14. [Bendición Lunar](#14-bendición-lunar)
 15. [Wishlist — Funcionalidad Completa](#15-wishlist--funcionalidad-completa)
-16. [Sincronización con Archivo .txt](#16-sincronización-con-archivo-txt)
+16. [Sincronización con BackupEngine (.labak)](#16-sincronización-con-backupengine-labak)
 17. [Historial de Transacciones](#17-historial-de-transacciones)
 18. [Flujos de Usuario](#18-flujos-de-usuario)
 19. [Guía de Mantenimiento](#19-guía-de-mantenimiento)
@@ -87,8 +87,8 @@ Love Arcade es una **plataforma de recompensas sin backend** construida con HTML
 | **Wishlist** | Nuevo filtro "Mis Lista" para ver solo los ítems marcados con el corazón. |
 | **Wishlist** | Indicador de coste: muestra cuántas monedas faltan para comprar toda la lista. |
 | **Wishlist** | Los ítems en Wishlist aparecen siempre al principio de los resultados de búsqueda. |
-| **Sync** | Exportación: el código se copia al portapapeles **y** se descarga automáticamente como archivo `.txt`. No se muestra en un `<textarea>`. |
-| **Sync** | Importación: se añade `<input type="file">` con `FileReader` para cargar el archivo `.txt` sin pegar texto masivo, evitando el error de memoria en móvil. |
+| **Sync** | Exportación: migrada a archivo binario comprimido `.labak` (`gzip`) con checksum SHA-256. Se descarga automáticamente sin portapapeles. |
+| **Sync** | Importación: usa `<input type="file" accept=".labak,.gz">`, descompresión (`DecompressionStream`) y validación de integridad previa a restaurar `localStorage`. Estándar actual: `.labak`; legado compatible en importación: `.labak.gz`. |
 | **Economía** | Sin cambios. `saleMultiplier` y `cashbackRate` se mantienen intactos. |
 | **LocalStorage** | Sin cambios. La clave `gamecenter_v6_promos` permanece igual. |
 
@@ -2722,54 +2722,53 @@ store.wishlist = [3, 7, 21]  // Array de IDs numéricos
 
 ---
 
-## 16. Sincronización con Archivo .txt
+## 16. Sincronización con BackupEngine (.labak)
 
-### Flujo de exportación (v8.0)
+### Flujo de exportación (v15.0)
 
 ```
 Clic "Exportar y descargar"  →  handleExport() async
     │
     ▼
-GameCenter.exportSave()  →  workerTask({action:'export', store, salt})
+BackupEngine.exportBackup()
     │
-    ▼  [sync-worker.js calcula checksum SHA-256]
-checksum = sha256(JSON.stringify(store) + SYNC_SALT)
-código = btoa(encodeURIComponent(JSON.stringify({data: store, checksum})))
-    │
-    ▼
-1. navigator.clipboard.writeText(código)  → copiado al portapapeles
-2. new Blob([código]) → URL.createObjectURL() → descarga love-arcade-backup-YYYY-MM-DD.txt
+    ▼  [colección dinámica de localStorage + claves conocidas]
+envelope = { version, format, createdAt, source, keys, keyCount }
     │
     ▼
-Mensaje: "Código copiado al portapapeles y archivo .txt descargado."
+checksum = sha256(JSON.stringify(envelope))
+payload  = JSON.stringify({ ...envelope, checksum })
+gzip(payload) mediante CompressionStream (en worker cuando está disponible)
+    │
+    ▼
+Blob(binary/gzip) → URL.createObjectURL() → descarga LoveArcade_Backup_YYYY-MM-DD.labak
+    │
+    ▼
+Mensaje: "Copia de seguridad creada"
 ```
 
-> **Sin textarea.** En v7.5 el código se mostraba en un `<textarea>` que podía copiarse. Esto bloqueaba el hilo principal con strings muy largos. En v8.0, la operación de copia y la descarga ocurren directamente en memoria.
+> **Sin portapapeles y sin textarea.** El respaldo ya no usa texto Base64 pegable; todo el flujo es binario comprimido para reducir tamaño (especialmente en avatares serializados como Data URL).
 
-### Flujo de importación (v8.0)
+### Flujo de importación (v15.0)
 
-**Opción A — Cargar archivo:**
+**Política de compatibilidad de extensiones**
+
+- **Estándar vigente:** `*.labak` (formato recomendado para respaldos nuevos).
+- **Compatibilidad legada en importación:** `*.labak.gz` (se acepta para no romper respaldos históricos).
 
 ```
-Usuario selecciona archivo .txt  →  evento 'change' en #import-file
-    │
-    ▼
-FileReader.readAsText(file)  →  onload: textarea.value = contenido
+Usuario selecciona archivo .labak o .labak.gz  →  evento 'change' en #import-file
     │
     ▼
 Usuario hace clic en "Importar progreso"  →  handleImport() async
     │
-    ▼  [igual que antes]
-GameCenter.importSave(code)  →  workerTask({action:'import', code, salt})
+    ▼
+BackupEngine.importBackupFromFile(file)
     │
-    ▼  [sync-worker.js verifica checksum SHA-256]
-¿checksum válido? → store = migrateState(data) → saveState() → reload
+    ▼  [DecompressionStream + JSON.parse + SHA-256]
+¿checksum válido? → restaurar cada clave en localStorage → reload
 ¿inválido?        → rechazado con mensaje de error
 ```
-
-**Opción B — Pegar código manualmente:**
-
-El `<textarea id="import-input">` sigue disponible como alternativa. El botón "Importar progreso" lee su contenido y llama a `handleImport()`.
 
 ---
 
@@ -4963,11 +4962,11 @@ Esta versión endurece la persistencia local para evitar `QuotaExceededError` y 
 | Área | Cambio |
 |---|---|
 | **Avatares** | `GameCenter.setAvatar()` ahora es asíncrona. Comprime imágenes con canvas (`200x200`, calidad `0.7`) antes de guardar/subir. |
-| **Cloud Avatar (Supabase Storage)** | Si existe sesión cloud (`Sentinel.getSession()`), el avatar se sube al bucket `avatars` en `avatars/{userId}/profile.jpg` (upsert). Se guarda URL pública en `store.userAvatar`. |
+| **Cloud Avatar (Supabase Storage)** | Si existe sesión cloud (`Sentinel.getSession()`), se valida sesión fresca (`sbClient.auth.getSession()`) y el avatar se sube al bucket `avatars` en `{userId}/profile.jpg` (ruta relativa al bucket, upsert). Se guarda URL pública en `store.userAvatar`. |
 | **Fallback local seguro** | Si no hay sesión cloud o falla la subida, el avatar se guarda como Base64 comprimido solo si queda por debajo de `100 KB`. Si supera ese límite, se rechaza con mensaje de error controlado. |
 | **Limpieza de avatar legado** | En INIT síncrono, si detecta avatar Base64 > `200 KB`, se elimina automáticamente y se registra `GhostAnalytics.track('storage_cleaned', { reason: 'avatar_too_large' })`. |
 | **Historial** | `logTransaction()` reduce retención: de 150 → 50 entradas. |
-| **Migración de estado** | `migrateState()` elimina el campo legado `redeemedCodes` para reducir payload persistido. |
+| **Migración de estado** | `migrateState()` elimina `redeemedCodes` y limpia `userAvatar` legado en DataURL para evitar payloads grandes persistidos. |
 | **Progreso por juego** | Nuevo `trimGameProgress()` limita cada arreglo `store.progress[gameId]` a las últimas 50 entradas. |
 | **Limpieza de emergencia** | Nuevo `emergencyCleanup()` ejecutado al detectar cuota excedida: limpia avatar grande, recorta historial, elimina legado y trimea progreso. Si el store sigue >4 MB, vacía historial. |
 | **Guardado resiliente** | `saveState()` maneja `QuotaExceededError` con reintento tras cleanup. Si falla de nuevo, muestra toast de error y evita freeze del flujo. |
@@ -4981,6 +4980,11 @@ Para que la subida de avatares cloud funcione en producción:
 
 1. Crear bucket público `avatars`.
 2. Configurar políticas RLS de lectura pública y escritura restringida por `auth.uid()`.
-3. Mantener la convención de ruta `avatars/{userId}/profile.jpg` para que cumpla con `storage.foldername(name)` en políticas.
+3. Mantener la convención de ruta `{userId}/profile.jpg` (objeto relativo al bucket) para que `storage.foldername(name))[1]` sea el UID y cumpla RLS.
 
 > Nota: este paso se configura en Supabase Dashboard / SQL Editor y no se automatiza desde frontend.
+
+### Nota de arquitectura (avatar y game_data)
+
+- `userAvatar` **no debe viajar** dentro de `game_data` en cloud sync.
+- El binario/archivo vive en Supabase Storage (`avatars`) y sólo se persiste la URL pública en `user_profiles.avatar_url`.

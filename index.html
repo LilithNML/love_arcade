@@ -5,17 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Love Arcade</title>
 
-    <!-- ── Font preconnect: reduce FOIT/FOUT al pre-abrir la conexión con Google Fonts ── -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
     <link rel="stylesheet" href="styles.css">
-
-    <!-- Pre-load de fuentes críticas para evitar saltos visuales -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
-    </noscript>
 
     <!--
       ╔══════════════════════════════════════════════════════════════╗
@@ -660,19 +650,19 @@
                         </button>
                     </div>
                     <div class="filter-pills" id="filter-pills">
-                        <button class="pill active" data-filter="Todos">Todos</button>
-                        <button class="pill" data-filter="NoObtenidos">
+                        <button class="pill active" data-filter="NoObtenidos">
                             <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-sparkles"></use></svg> Nuevos
+                        </button>
+                        <button class="pill pill--wishlist" data-filter="Wishlist">
+                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-heart"></use></svg> Deseos
+                        </button>
+                        <button class="pill" data-filter="Mobile">
+                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-smartphone"></use></svg> Móvil
                         </button>
                         <button class="pill" data-filter="PC">
                             <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-monitor"></use></svg> PC
                         </button>
-                        <button class="pill" data-filter="Mobile">
-                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-smartphone"></use></svg> Mobile
-                        </button>
-                        <button class="pill pill--wishlist" data-filter="Wishlist">
-                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-heart"></use></svg> Lista de deseos
-                        </button>
+                        <button class="pill" data-filter="Todos">Todos</button>
                     </div>
                 </div>
 
@@ -740,7 +730,7 @@
                         </div>
                         <div>
                             <h3 class="memory-card__title">Exportar partida</h3>
-                            <p class="memory-card__sub">Genera un código de seguridad y descarga respaldo .txt</p>
+                            <p class="memory-card__sub">Genera y descarga un respaldo binario comprimido (.labak)</p>
                         </div>
                     </div>
                     <button id="btn-export" class="btn-primary" style="position:relative; z-index:1;">
@@ -757,18 +747,15 @@
                         </div>
                         <div>
                             <h3 class="memory-card__title">Importar partida</h3>
-                            <p class="memory-card__sub">Carga tu respaldo .txt o pega el código manualmente</p>
+                            <p class="memory-card__sub">Carga un archivo .labak o .labak.gz para restaurar tu progreso</p>
                         </div>
                     </div>
 
                     <label for="import-file" class="btn-ghost file-label" style="position:relative; z-index:1;">
-                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-file-up"></use></svg> Cargar archivo .txt
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-file-up"></use></svg> Seleccionar archivo .labak / .labak.gz
                     </label>
-                    <input type="file" id="import-file" accept=".txt" hidden>
+                    <input type="file" id="import-file" accept=".labak,.gz" hidden>
                     <span id="import-file-name" class="file-name-display">Ningún archivo seleccionado</span>
-
-                    <div class="sync-separator" style="position:relative; z-index:1;">o pega el código manualmente</div>
-                    <textarea id="import-input" class="sync-textarea" placeholder="Pega tu código aquí…" style="position:relative; z-index:1;"></textarea>
 
                     <button id="btn-import" class="btn-primary" style="margin-top:10px; width:100%; justify-content:center; position:relative; z-index:1; background:linear-gradient(135deg,#22d07a,#16a85e); color:#041a0a;">
                         <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-check-circle"></use></svg>
@@ -805,8 +792,11 @@
                             <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-lock"></use></svg>
                             Gestionar Cuenta
                         </button>
+                        <button id="btn-cloud-change-email" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
+                            Cambiar correo
+                        </button>
                         <button id="btn-cloud-change-password" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
-                            Cambiar Contraseña
+                            Cambiar contraseña
                         </button>
                         <button id="btn-cloud-signout" class="btn-ghost" style="font-size:0.78rem; padding:9px 14px;">
                             Cerrar sesión
@@ -1093,32 +1083,36 @@
                 <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-x"></use></svg>
             </button>
 
-            <p class="cloud-gatekeeper-kicker">Sentinel v14.0</p>
-            <h3 id="cloud-gatekeeper-title" class="modal-title cloud-gatekeeper-title">Modal de Acceso Unificado</h3>
-            <p class="cloud-gatekeeper-sub">Regístrate, inicia sesión o entra como invitad@ sin salir de la partida.</p>
+            <h3 id="cloud-gatekeeper-title" class="modal-title cloud-gatekeeper-title">Elige cómo quieres continuar</h3>
+            <p class="cloud-gatekeeper-sub">Guarda tu avance con cuenta o sigue como invitado.</p>
 
             <div class="cloud-gatekeeper-tabs" role="tablist" aria-label="Opciones de acceso">
-                <button id="gate-tab-register" class="cloud-gatekeeper-tab is-active" role="tab" aria-selected="true" data-gate-tab="register">Registro</button>
-                <button id="gate-tab-login" class="cloud-gatekeeper-tab" role="tab" aria-selected="false" data-gate-tab="login">Login</button>
+                <button id="gate-tab-register" class="cloud-gatekeeper-tab is-active" role="tab" aria-selected="true" data-gate-tab="register">Crear cuenta</button>
+                <button id="gate-tab-login" class="cloud-gatekeeper-tab" role="tab" aria-selected="false" data-gate-tab="login">Iniciar sesión</button>
             </div>
 
             <div class="cloud-gatekeeper-panels">
                 <form id="cloud-register-form" class="cloud-gatekeeper-panel is-active" data-gate-panel="register">
-                    <label class="identity-label" for="cloud-register-nickname">Nickname</label>
+                    <label class="identity-label" for="cloud-register-nickname">Nombre de jugador</label>
                     <input id="cloud-register-nickname" class="identity-input cloud-gatekeeper-input" type="text" maxlength="15" autocomplete="nickname" placeholder="ArcadeMaster" required>
 
-                    <label class="identity-label" for="cloud-register-email">Email</label>
+                    <label class="identity-label" for="cloud-register-email">Correo</label>
                     <input id="cloud-register-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
 
-                    <label class="identity-label" for="cloud-register-password">Password</label>
-                    <input id="cloud-register-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="20" placeholder="Mínimo 20 caracteres" required>
-                    <ul id="cloud-register-password-rules" class="cloud-password-rules">
-                        <li data-rule="length">20+ caracteres</li>
-                        <li data-rule="upper">Al menos una mayúscula</li>
-                        <li data-rule="lower">Al menos una minúscula</li>
-                        <li data-rule="digit">Al menos un número</li>
-                        <li data-rule="symbol">Al menos un símbolo (@$!%*?&)</li>
-                    </ul>
+                    <label class="identity-label" for="cloud-register-password">Contraseña</label>
+                    <div class="cloud-password-input-wrap">
+                        <input id="cloud-register-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="16" placeholder="perro-azul-salta-alto" required>
+                        <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-register-password" aria-label="Mostrar u ocultar password">
+                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                        </button>
+                    </div>
+                    <div class="cloud-password-strength" aria-hidden="true">
+                        <div id="cloud-register-password-strength" class="cloud-password-strength-bar"></div>
+                    </div>
+                    <p class="cloud-password-hint">Usa una frase larga y memorable. Estado óptimo: 16+ caracteres.</p>
+                    <button id="btn-generate-register-password" class="btn-ghost cloud-password-generate-btn" type="button">
+                        Generar contraseña segura
+                    </button>
 
                     <button id="btn-cloud-register" class="btn-primary cloud-gatekeeper-submit" type="submit">
                         <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-plus"></use></svg>
@@ -1127,29 +1121,57 @@
                 </form>
 
                 <form id="cloud-login-form" class="cloud-gatekeeper-panel" data-gate-panel="login" aria-hidden="true">
-                    <label class="identity-label" for="cloud-login-email">Email</label>
+                    <label class="identity-label" for="cloud-login-email">Correo</label>
                     <input id="cloud-login-email" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="tu@correo.com" required>
 
-                    <label class="identity-label" for="cloud-login-password">Password</label>
-                    <input id="cloud-login-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="current-password" placeholder="Tu password" required>
+                    <label class="identity-label" for="cloud-login-password">Contraseña</label>
+                    <div class="cloud-password-input-wrap">
+                        <input id="cloud-login-password" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="current-password" placeholder="perro-azul-salta-alto" required>
+                        <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-login-password" aria-label="Mostrar u ocultar password">
+                            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                        </button>
+                    </div>
 
                     <button id="btn-cloud-login" class="btn-primary cloud-gatekeeper-submit" type="submit">
                         <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-lock"></use></svg>
-                        Ingresar a Plataforma Cloud
+                        Iniciar sesión
                     </button>
                 </form>
             </div>
 
+            <form id="cloud-email-form" class="cloud-password-form hidden">
+                <label class="identity-label" for="cloud-change-email-input">Nuevo correo electrónico</label>
+                <input id="cloud-change-email-input" class="identity-input cloud-gatekeeper-input" type="email" autocomplete="email" placeholder="nuevo@correo.com">
+                <button id="btn-cloud-change-email-submit" class="btn-ghost cloud-gatekeeper-submit" type="button">
+                    Solicitar cambio de correo
+                </button>
+                <p id="cloud-email-change-banner" class="cloud-email-change-banner hidden" role="status" aria-live="polite">
+                    <strong>Cambio pendiente:</strong> Hemos enviado un enlace de confirmación a tu correo actual y otro al nuevo. Debes confirmar ambos para finalizar el proceso.
+                </p>
+            </form>
+
             <form id="cloud-password-form" class="cloud-password-form hidden">
+                <label class="identity-label" for="cloud-current-password-input">Contraseña actual</label>
+                <div class="cloud-password-input-wrap">
+                    <input id="cloud-current-password-input" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="current-password" minlength="16" placeholder="perro-azul-salta-alto" required>
+                    <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-current-password-input" aria-label="Mostrar u ocultar password">
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                    </button>
+                </div>
                 <label class="identity-label" for="cloud-change-password-input">Nueva contraseña</label>
-                <input id="cloud-change-password-input" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="20" placeholder="Mínimo 20 caracteres" required>
-                <ul id="cloud-change-password-rules" class="cloud-password-rules">
-                    <li data-rule="length">20+ caracteres</li>
-                    <li data-rule="upper">Al menos una mayúscula</li>
-                    <li data-rule="lower">Al menos una minúscula</li>
-                    <li data-rule="digit">Al menos un número</li>
-                    <li data-rule="symbol">Al menos un símbolo (@$!%*?&)</li>
-                </ul>
+                <div class="cloud-password-input-wrap">
+                    <input id="cloud-change-password-input" class="identity-input cloud-gatekeeper-input" type="password" autocomplete="new-password" minlength="16" placeholder="perro-azul-salta-alto" required>
+                    <button class="cloud-password-toggle" type="button" data-password-toggle="cloud-change-password-input" aria-label="Mostrar u ocultar password">
+                        <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                    </button>
+                </div>
+                <div class="cloud-password-strength" aria-hidden="true">
+                    <div id="cloud-change-password-strength" class="cloud-password-strength-bar"></div>
+                </div>
+                <p class="cloud-password-hint">Usa una frase larga y memorable. Estado óptimo: 16+ caracteres.</p>
+                <button id="btn-generate-change-password" class="btn-ghost cloud-password-generate-btn" type="button">
+                    Generar contraseña segura
+                </button>
 
                 <button id="btn-cloud-change-password-submit" class="btn-primary cloud-gatekeeper-submit" type="submit" disabled>
                     <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-shield-check"></use></svg>
@@ -1158,10 +1180,10 @@
             </form>
 
             <div class="cloud-guest-block">
-                <p class="cloud-guest-note">Modo Invitado activo: tu progreso se guarda solo en este dispositivo y puede perderse al borrar datos del navegador.</p>
+                <p class="cloud-guest-note">Como invitado, tu avance se guarda en este dispositivo.</p>
                 <button id="btn-cloud-guest" class="btn-ghost" type="button">
                     <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-monitor"></use></svg>
-                    Jugar como invitad@
+                    Continuar como invitado
                 </button>
             </div>
 
@@ -1267,6 +1289,7 @@
          ══════════════════════════════════════════════════════════ -->
     <script src="js/analytics.js"></script>     
     <script src="js/app.js"></script>
+    <script src="js/backup-engine.js"></script>
     <script src="js/shop-logic.js"></script>
     <script src="js/spa-router.js"></script>
     <script src="js/event-logic.js"></script>

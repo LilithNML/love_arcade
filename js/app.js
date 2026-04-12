@@ -353,6 +353,48 @@ function _fetchTimeSource(url, extract) {
 }
 
 /**
+ * Lee el encabezado HTTP Date del propio origen (Vercel) para tener una
+ * referencia de tiempo sin depender de CORS de terceros.
+ *
+ * @returns {Promise<number>} Timestamp en ms.
+ */
+async function _fetchServerDateHeader() {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), TIME_API_TIMEOUT);
+    try {
+        const res = await fetch('/', {
+            method: 'HEAD',
+            cache: 'no-store',
+            signal: ctrl.signal
+        });
+        const dateHeader = res.headers.get('date');
+        if (!dateHeader) throw new Error('Date header ausente');
+        const ts = new Date(dateHeader).getTime();
+        if (!Number.isFinite(ts)) throw new Error('Date header inválido');
+        return ts;
+    } finally {
+        clearTimeout(tid);
+    }
+}
+
+let _timeSyncInFlight = false;
+let _lastTimeSyncAt   = 0;
+const TIME_SYNC_MIN_INTERVAL = 30_000;
+
+function _scheduleTimeSync(delay = 0) {
+    setTimeout(() => {
+        if (_timeSyncInFlight) return;
+        if ((Date.now() - _lastTimeSyncAt) < TIME_SYNC_MIN_INTERVAL) return;
+        _timeSyncInFlight = true;
+        _syncTimeBackground()
+            .finally(() => {
+                _timeSyncInFlight = false;
+                _lastTimeSyncAt = Date.now();
+            });
+    }, delay);
+}
+
+/**
  * Sincroniza el caché de tiempo en segundo plano: consulta las APIs en
  * paralelo (Promise.any) y persiste el resultado SIN bloquear la UI.
  *
@@ -367,10 +409,7 @@ async function _syncTimeBackground() {
                 'https://timeapi.io/api/time/current/ip',
                 d => new Date(d.dateTime ?? d.datetime).getTime()
             ),
-            _fetchTimeSource(
-                'https://worldtimeapi.org/api/ip',
-                d => new Date(d.datetime).getTime()
-            )
+            _fetchServerDateHeader()
         ]);
 
         const drift    = networkTime - Date.now();
@@ -411,7 +450,7 @@ function getSyncWorker() {
  * la respuesta del worker. Múltiples llamadas concurrentes se resuelven de forma
  * independiente gracias a este id.
  *
- * @param {{ action: 'export'|'import', [key: string]: any }} payload
+ * @param {{ action: string, [key: string]: any }} payload
  * @returns {Promise<any>}
  */
 function workerTask(payload) {
@@ -429,6 +468,7 @@ function workerTask(payload) {
         worker.postMessage({ ...payload, id });
     });
 }
+window.workerTask = workerTask;
 
 // =====================================================
 // MIGRACIÓN SILENCIOSA
@@ -440,7 +480,6 @@ function migrateState(loadedStore) {
         coins:          CONFIG.initialCoins,
         progress:       { maze: [], wordsearch: [], secretWordsFound: [] },
         inventory:      {},
-        redeemedCodes:  [],   // Legado (texto plano): se conserva por historial
         redeemedHashes: [],   // v7.5: hashes SHA-256 de códigos canjeados
         history:        [],
         userAvatar:     null,
@@ -505,6 +544,11 @@ function migrateState(loadedStore) {
     // v14.1 — Limpieza de legado: eliminar lista en texto plano ya obsoleta.
     if (Object.prototype.hasOwnProperty.call(merged, 'redeemedCodes')) {
         delete merged.redeemedCodes;
+    }
+
+    // v14.2 — Limpieza preventiva: no mantener DataURL heredado en estado persistido.
+    if (_isBase64Avatar(merged.userAvatar)) {
+        merged.userAvatar = null;
     }
 
     return merged;
@@ -585,6 +629,13 @@ const STORE_WARNING_KB = 4000;
 
 function _isBase64Avatar(value) {
     return typeof value === 'string' && value.startsWith('data:image/');
+}
+
+function _trackAvatarStorageFallback(reason, meta = {}) {
+    window.GhostAnalytics?.track(reason, {
+        component: 'avatar_upload',
+        ...meta
+    });
 }
 
 function _dataUrlToBlob(dataUrl) {
@@ -1036,8 +1087,6 @@ window.GameCenter = {
 
         store.coins += reward;
         store.redeemedHashes.push(hash);
-        // Mantener compatibilidad con panel de historial antiguo
-        store.redeemedCodes.push(code);
         logTransaction('ingreso', reward, `Código canjeado`);
         saveState();
 
@@ -1351,15 +1400,33 @@ window.GameCenter = {
         const session = window.Sentinel?.getSession?.();
         const sbClient = window.Sentinel?.getClient?.();
         const userId = session?.user?.id;
+        const bucket = 'avatars';
 
         if (session && sbClient && userId) {
+            const path = `${userId}/profile.jpg`;
             try {
+                const { data: authData, error: authError } = await sbClient.auth.getSession();
+                if (authError) throw authError;
+                const freshSession = authData?.session;
+                if (!freshSession?.access_token) {
+                    _trackAvatarStorageFallback('storage_no_session', { user_id: userId, bucket, path });
+                    console.error('[GameCenter] Avatar cloud upload cancelado por sesión ausente/expirada:', {
+                        hasSession: false,
+                        userId,
+                        path,
+                        bucket,
+                        message: 'Missing access token',
+                        statusCode: null
+                    });
+                    await _saveAvatarLocally(dataUrl);
+                    return { success: true, remote: false, reason: 'storage_no_session' };
+                }
+
                 const sourceBlob = _dataUrlToBlob(dataUrl);
                 const compressed = await compressImage(sourceBlob, 200, 200, 0.7);
-                const path = `avatars/${userId}/profile.jpg`;
                 const { error: uploadError } = await sbClient
                     .storage
-                    .from('avatars')
+                    .from(bucket)
                     .upload(path, compressed, {
                         cacheControl: '3600',
                         upsert: true,
@@ -1367,14 +1434,31 @@ window.GameCenter = {
                     });
                 if (uploadError) throw uploadError;
 
-                const { data } = sbClient.storage.from('avatars').getPublicUrl(path);
+                const { data } = sbClient.storage.from(bucket).getPublicUrl(path);
                 if (!data?.publicUrl) throw new Error('No se pudo generar URL pública del avatar.');
                 store.userAvatar = data.publicUrl;
                 saveState({ immediateCloudSync: true });
                 applyAvatar();
                 return { success: true, remote: true, url: data.publicUrl };
             } catch (err) {
-                console.warn('[GameCenter] Avatar cloud upload falló, usando fallback local:', err?.message || err);
+                const statusCode = err?.statusCode || err?.status || null;
+                const message = err?.message || String(err);
+                const fallbackReason = Number(statusCode) === 403
+                    ? 'storage_forbidden_rls'
+                    : 'storage_network';
+                _trackAvatarStorageFallback(fallbackReason, { user_id: userId, bucket, path, status_code: statusCode });
+                console.error('[GameCenter] Error detallado al subir avatar a Supabase Storage:', {
+                    hasSession: Boolean(session),
+                    userId,
+                    path,
+                    bucket,
+                    message,
+                    name: err?.name || 'StorageError',
+                    statusCode,
+                    details: err?.details || null,
+                    hint: err?.hint || null
+                });
+                console.warn('[GameCenter] Avatar cloud upload falló, usando fallback local:', message);
             }
         }
 
@@ -1954,29 +2038,55 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cada segundo que la pestaña esté visible se suma 1 al contador de playtime.
     // El guardado en localStorage se realiza cada 60 s para no saturar el disco.
     let _missionSaveTimer = 0;
-    setInterval(() => {
-        if (document.visibilityState !== 'visible') return;
-        window.GameCenter.incrementMissionStat('playtime', 1);
-        _missionSaveTimer++;
+    let _playtimeTicker = null;
+    let _visibleStartedAt = document.visibilityState === 'visible' ? Date.now() : 0;
+
+    const flushVisiblePlaytime = () => {
+        if (!_visibleStartedAt) return;
+        const elapsedSec = Math.floor((Date.now() - _visibleStartedAt) / 1000);
+        if (elapsedSec <= 0) return;
+        window.GameCenter.incrementMissionStat('playtime', elapsedSec);
+        _visibleStartedAt += elapsedSec * 1000;
+        _missionSaveTimer += elapsedSec;
         if (_missionSaveTimer >= 60) {
             _missionSaveTimer = 0;
-            saveState(); // Persistir playtime acumulado cada minuto
+            saveState(); // Persistir playtime acumulado por lotes
         }
-    }, 1_000);
+    };
+
+    const startPlaytimeTicker = () => {
+        if (_playtimeTicker) return;
+        _visibleStartedAt = Date.now();
+        _playtimeTicker = setInterval(flushVisiblePlaytime, 15_000);
+    };
+
+    const stopPlaytimeTicker = () => {
+        flushVisiblePlaytime();
+        clearInterval(_playtimeTicker);
+        _playtimeTicker = null;
+        _visibleStartedAt = 0;
+    };
+
+    if (document.visibilityState === 'visible') startPlaytimeTicker();
 
     // ── Background time sync (v9.6) ───────────────────────────────────────
     // Se lanza 800 ms después del DOMContentLoaded para no competir con el
     // primer paint. El resultado se almacena en TIME_CACHE_KEY y será leído
     // por claimDaily() de forma síncrona, sin espera de red en el reclamo.
-    setTimeout(_syncTimeBackground, 800);
+    _scheduleTimeSync(800);
 
     // Actualizar el caché cuando el usuario vuelve a la pestaña
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') _syncTimeBackground();
+        if (document.visibilityState === 'visible') {
+            startPlaytimeTicker();
+            _scheduleTimeSync(250);
+        } else {
+            stopPlaytimeTicker();
+        }
     });
 
     // Refresco periódico cada 30 min por si la app permanece abierta mucho tiempo
-    setInterval(_syncTimeBackground, 30 * 60 * 1000);
+    setInterval(() => _scheduleTimeSync(), 30 * 60 * 1000);
 
     // Avatar upload — delegado único
     document.addEventListener('change', async (e) => {
@@ -2121,6 +2231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let _syncTimer  = null;   // Timer de debounce
     let _scheduledSyncPriority = null; // 'high' | 'passive' | null
     let _isSyncing  = false;  // Mutex de subida activa
+    let _isRestoringSession = false; // Evita sobrescrituras durante hidratación inicial
     let _hasUnsyncedChanges = false; // Dirty flag local (incluye cambios cross-tab)
     const HIGH_PRIORITY_DEBOUNCE_MS = 1_000;
     const PASSIVE_PRIORITY_DEBOUNCE_MS = 60_000;
@@ -2138,6 +2249,17 @@ document.addEventListener('DOMContentLoaded', () => {
         'LUMINA_gameState',
         SENTINEL_TS_KEY,
     ]);
+
+    function _getCloudAvatarUrl() {
+        try {
+            const avatar = window.GameCenter?.getAvatar?.();
+            if (typeof avatar !== 'string') return null;
+            if (_isBase64Avatar(avatar)) return null;
+            return /^https?:\/\//i.test(avatar) ? avatar : null;
+        } catch (_) {
+            return null;
+        }
+    }
 
     // ── Utilidades de UI ─────────────────────────────────────────────────────
 
@@ -2219,7 +2341,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const snap = {};
         SENTINEL_WATCHED_KEYS.forEach(key => {
             const val = localStorage.getItem(key);
-            if (val !== null) snap[key] = val;
+            if (val === null) return;
+
+            // Evitar subir userAvatar dentro de game_data:
+            // el avatar cloud vive en user_profiles.avatar_url y el binario en Storage.
+            if ((key === CONFIG.stateKey || key === 'gamecenter_v6_promos') && typeof val === 'string') {
+                try {
+                    const parsed = JSON.parse(val);
+                    if (parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, 'userAvatar')) {
+                        const sanitized = { ...parsed };
+                        delete sanitized.userAvatar;
+                        snap[key] = JSON.stringify(sanitized);
+                        return;
+                    }
+                } catch (_) {
+                    // Si no es JSON válido, se conserva el valor tal cual.
+                }
+            }
+            snap[key] = val;
         });
         return snap;
     }
@@ -2261,7 +2400,7 @@ document.addEventListener('DOMContentLoaded', () => {
      * Guarda la marca de tiempo local del envío para Last Write Wins.
      */
     async function _sentinelSync() {
-        if (!_sbClient || !_sbSession) return;
+        if (!_sbClient || !_sbSession || _isRestoringSession) return;
         if (_isSyncing) return; // Evitar doble subida simultánea
         _isSyncing = true;
         _setStatusBadge('syncing');
@@ -2271,11 +2410,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const now        = new Date().toISOString();
             const userId     = _sbSession.user.id;
             const nickname   = window.GameCenter?.getIdentity?.()?.nickname || '';
+            const avatar_url = _getCloudAvatarUrl();
 
             const { error } = await _sbClient
                 .from(SUPABASE_TABLE)
                 .upsert(
-                    { id: userId, game_data: snap, nickname, updated_at: now },
+                    { id: userId, game_data: snap, nickname, avatar_url, updated_at: now },
                     { onConflict: 'id' }
                 );
 
@@ -2311,7 +2451,7 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {number} [delay=HIGH_PRIORITY_DEBOUNCE_MS]
      */
     function _sentinelScheduleSync(delay = HIGH_PRIORITY_DEBOUNCE_MS) {
-        if (!_sbSession) return;
+        if (!_sbSession || _isRestoringSession) return;
         clearTimeout(_syncTimer);
         if (document.hidden) {
             _sentinelSync();
@@ -2379,9 +2519,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const now = new Date().toISOString();
         const userId = _sbSession.user.id;
         const nickname = window.GameCenter?.getIdentity?.()?.nickname || '';
+        const avatar_url = _getCloudAvatarUrl();
         const { error } = await _sbClient
             .from(SUPABASE_TABLE)
-            .upsert({ id: userId, game_data: mergedData, nickname, updated_at: now }, { onConflict: 'id' });
+            .upsert({ id: userId, game_data: mergedData, nickname, avatar_url, updated_at: now }, { onConflict: 'id' });
         if (error) throw error;
 
         _originalSetItem(SENTINEL_TS_KEY, now);
@@ -2408,6 +2549,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         _sbSession = session;
+        _isRestoringSession = true;
         _setSessionEmail(session.user?.email || '');
         _setStatusBadge('connected');
 
@@ -2415,13 +2557,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const userId = session.user.id;
             const { data, error } = await _sbClient
                 .from(SUPABASE_TABLE)
-                .select('game_data, updated_at, nickname')
+                .select('game_data, updated_at, nickname, avatar_url')
                 .eq('id', userId)
                 .maybeSingle();
             if (error) throw error;
 
             if (data?.nickname && !window.GameCenter?.hasIdentity?.()) {
                 window.GameCenter?.setIdentity?.(data.nickname, '@');
+            }
+            if (data?.avatar_url && typeof data.avatar_url === 'string') {
+                const avatar = data.avatar_url.trim();
+                if (avatar) {
+                    store.userAvatar = avatar;
+                    saveState();
+                }
             }
 
             let effectiveData = data?.game_data || {};
@@ -2461,6 +2610,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('[Sentinel] Error al procesar auth change:', err);
             _setStatusBadge('error');
             _setSyncMsg('No se pudo sincronizar al iniciar sesión.', true);
+        } finally {
+            _isRestoringSession = false;
+            if (_sbSession && _hasUnsyncedChanges) {
+                _sentinelScheduleSync(PASSIVE_PRIORITY_DEBOUNCE_MS);
+            }
         }
     }
 
@@ -2479,7 +2633,7 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem = function interceptedSetItem(key, value) {
         const prevValue = localStorage.getItem(key);
         _originalSetItem(key, value);
-        if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession) {
+        if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession && !_isRestoringSession) {
             _hasUnsyncedChanges = true;
             _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
             _sentinelScheduleSyncForKey(key, prevValue, value);
@@ -2498,7 +2652,7 @@ document.addEventListener('DOMContentLoaded', () => {
         _rehydrateHubStoreFromDisk();
         _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
         _hasUnsyncedChanges = true;
-        if (!_sbSession) return; // Invitado o sesión no restaurada → ignorar sync cloud
+        if (!_sbSession || _isRestoringSession) return; // Invitado o sesión no restaurada → ignorar sync cloud
         console.log(`[Sentinel] Cambio detectado en pestaña externa (${event.key}). Sincronizando...`);
         _sentinelScheduleSyncForKey(event.key, event.oldValue, event.newValue);
     });
@@ -2507,6 +2661,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function _handleSignOut() {
         _sbSession = null;
+        _isRestoringSession = false;
         _hasUnsyncedChanges = false;
         _setStatusBadge('inactive');
         _setSessionEmail('');
@@ -2555,7 +2710,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 4. Recuperar sesión existente (para recargas de página)
         const { data: { session } } = await _sbClient.auth.getSession();
-        if (session) _handleAuthChange('INITIAL_SESSION', session);
+        if (session && !_sbSession) _handleAuthChange('INITIAL_SESSION', session);
     }
 
     // ── Listeners de UI ──────────────────────────────────────────────────────
@@ -2566,110 +2721,164 @@ document.addEventListener('DOMContentLoaded', () => {
         const gateMsgEl = document.getElementById('cloud-gatekeeper-msg');
         const gateTabs = Array.from(document.querySelectorAll('[data-gate-tab]'));
         const gatePanels = Array.from(document.querySelectorAll('[data-gate-panel]'));
+        const gateTabsWrap = gateModal?.querySelector('.cloud-gatekeeper-tabs');
+        const emailForm = document.getElementById('cloud-email-form');
         const passwordForm = document.getElementById('cloud-password-form');
         const registerForm = document.getElementById('cloud-register-form');
         const loginForm = document.getElementById('cloud-login-form');
         const registerSubmitBtn = document.getElementById('btn-cloud-register');
         const changePasswordSubmitBtn = document.getElementById('btn-cloud-change-password-submit');
+        const emailBanner = document.getElementById('cloud-email-change-banner');
         let gateLocked = false;
 
-        const PASSWORD_SYMBOL_REGEX = /[@$!%*?&]/;
-        const evaluatePasswordRules = (value) => ({
-            length: value.length >= 20,
-            upper: /[A-Z]/.test(value),
-            lower: /[a-z]/.test(value),
-            digit: /\d/.test(value),
-            symbol: PASSWORD_SYMBOL_REGEX.test(value),
-        });
-
-        const bindPasswordValidation = (inputId, listId, submitBtn) => {
+        const PASSPHRASE_MIN_LENGTH = 16;
+        const secureChars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789-_.!@#$%^&*+=';
+        const createPassphraseStrengthUpdater = (inputId, barId, submitBtn) => {
             const input = document.getElementById(inputId);
-            const list = document.getElementById(listId);
-            if (!input || !list || !submitBtn) return () => false;
+            const bar = document.getElementById(barId);
+            if (!input || !bar || !submitBtn) return () => false;
 
             const refresh = () => {
-                const rules = evaluatePasswordRules(input.value || '');
-                let allValid = true;
-                list.querySelectorAll('li[data-rule]').forEach(item => {
-                    const key = item.dataset.rule;
-                    const valid = Boolean(rules[key]);
-                    item.classList.toggle('is-valid', valid);
-                    allValid = allValid && valid;
-                });
-                submitBtn.disabled = !allValid;
-                return allValid;
+                const length = (input.value || '').length;
+                const ratio = Math.max(0, Math.min(1, length / PASSPHRASE_MIN_LENGTH));
+                bar.style.width = `${Math.round(ratio * 100)}%`;
+                if (ratio < 0.5) bar.style.background = 'linear-gradient(90deg, #f56565, #ed8936)';
+                else if (ratio < 1) bar.style.background = 'linear-gradient(90deg, #ed8936, #f6e05e)';
+                else bar.style.background = 'linear-gradient(90deg, #84f08f, #39ff88)';
+                submitBtn.disabled = length < PASSPHRASE_MIN_LENGTH;
+                return length >= PASSPHRASE_MIN_LENGTH;
             };
 
             input.addEventListener('input', refresh);
             refresh();
             return refresh;
         };
+        const generateSecurePassword = (length = 24) => {
+            const values = new Uint32Array(length);
+            window.crypto.getRandomValues(values);
+            return Array.from(values, (value) => secureChars[value % secureChars.length]).join('');
+        };
+        const bindPasswordGenerator = (buttonId, inputId, refreshFn) => {
+            const button = document.getElementById(buttonId);
+            const input = document.getElementById(inputId);
+            if (!button || !input) return;
+            button.addEventListener('click', async () => {
+                const generated = generateSecurePassword();
+                input.type = 'text';
+                input.value = generated;
+                refreshFn?.();
+                window.setTimeout(() => {
+                    if (input.value === generated) input.type = 'password';
+                }, 10000);
+                try {
+                    await navigator.clipboard.writeText(generated);
+                    _showStorageToast('Contraseña copiada. Por favor, asegúrate de guardarla en un lugar seguro (como un gestor de contraseñas).', 'warning');
+                } catch (_) {
+                    _showStorageToast('Se generó una contraseña segura, pero no se pudo copiar automáticamente al portapapeles.', 'warning');
+                }
+            });
+        };
+        const bindPasswordToggle = () => {
+            document.querySelectorAll('[data-password-toggle]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const input = document.getElementById(btn.dataset.passwordToggle || '');
+                    if (!input) return;
+                    input.type = input.type === 'password' ? 'text' : 'password';
+                });
+            });
+        };
+        bindPasswordToggle();
+
+        const simplifyGateError = (rawMsg = '') => {
+            const msg = String(rawMsg || '').toLowerCase();
+            if (!msg) return 'No se pudo completar la acción. Inténtalo de nuevo.';
+            if (msg.includes('invalid login credentials')) return 'Correo o contraseña incorrectos.';
+            if (msg.includes('email not confirmed')) return 'Revisa tu correo y confirma tu cuenta para continuar.';
+            if (msg.includes('user already registered')) return 'Ese correo ya tiene una cuenta.';
+            if (msg.includes('password should be at least')) return 'Tu contraseña es demasiado corta.';
+            if (msg.includes('network') || msg.includes('fetch')) return 'Sin conexión. Revisa internet e inténtalo de nuevo.';
+            if (msg.includes('rate limit') || msg.includes('too many requests')) return 'Demasiados intentos. Espera un momento y vuelve a intentar.';
+            return 'No se pudo completar la acción. Inténtalo de nuevo.';
+        };
 
         const setGateMsg = (msg, isError = false) => {
             if (!gateMsgEl) return;
-            gateMsgEl.textContent = msg || '';
+            const cleanMsg = isError ? simplifyGateError(msg) : String(msg || '');
+            gateMsgEl.textContent = cleanMsg;
             gateMsgEl.style.color = isError ? 'var(--error, #fc8181)' : '#68d391';
         };
 
-        const setPasswordMode = (active) => {
-            passwordForm?.classList.toggle('hidden', !active);
-            if (active) {
-                gatePanels.forEach(panel => {
-                    panel.classList.remove('is-active');
-                    panel.setAttribute('aria-hidden', 'true');
-                });
-                gateTabs.forEach(tab => {
-                    tab.classList.remove('is-active');
-                    tab.setAttribute('aria-selected', 'false');
-                });
-            }
+        const setFormEnabled = (formEl, enabled) => {
+            if (!formEl) return;
+            formEl.querySelectorAll('input, button, select, textarea').forEach((control) => {
+                control.disabled = !enabled;
+            });
         };
 
-        const switchGateTab = (name) => {
-            setPasswordMode(false);
+        const resetGateFeedback = () => {
+            setGateMsg('');
+            emailBanner?.classList.add('hidden');
+        };
+
+        const renderGateMode = (mode) => {
+            const selectedMode = mode || 'register';
+            const isRegister = selectedMode === 'register';
+            const isLogin = selectedMode === 'login';
+            const isChangeEmail = selectedMode === 'change-email';
+            const isChangePassword = selectedMode === 'change-password';
+            const hasTabMode = isRegister || isLogin;
+
+            resetGateFeedback();
+            gateTabsWrap?.classList.toggle('hidden', !hasTabMode);
             gateTabs.forEach(tab => {
-                const active = tab.dataset.gateTab === name;
+                const active = hasTabMode && tab.dataset.gateTab === selectedMode;
                 tab.classList.toggle('is-active', active);
                 tab.setAttribute('aria-selected', String(active));
             });
             gatePanels.forEach(panel => {
-                const active = panel.dataset.gatePanel === name;
+                const active = panel.dataset.gatePanel === selectedMode;
                 panel.classList.toggle('is-active', active);
                 panel.setAttribute('aria-hidden', String(!active));
+                setFormEnabled(panel, active);
             });
+            emailForm?.classList.toggle('hidden', !isChangeEmail);
+            passwordForm?.classList.toggle('hidden', !isChangePassword);
+            setFormEnabled(emailForm, isChangeEmail);
+            setFormEnabled(passwordForm, isChangePassword);
+        };
+
+        const switchGateTab = (name) => {
+            renderGateMode(name);
         };
 
         gateTabs.forEach(tab => tab.addEventListener('click', () => switchGateTab(tab.dataset.gateTab)));
 
-        const openGate = ({ tab = 'register', locked = false, passwordMode = false } = {}) => {
+        const openGate = ({ mode = 'register', locked = false } = {}) => {
             gateLocked = locked;
             gateModal?.classList.remove('hidden');
             gateBox?.classList.toggle('is-locked', gateLocked);
-            setGateMsg('');
-            if (passwordMode) {
-                setPasswordMode(true);
-            } else {
-                switchGateTab(tab);
-            }
+            renderGateMode(mode);
         };
 
         const btnOpenGate = document.getElementById('btn-cloud-open-gatekeeper');
         btnOpenGate?.addEventListener('click', () => {
-            openGate({ tab: _sbSession ? 'login' : 'register' });
+            openGate({ mode: _sbSession ? 'login' : 'register' });
         });
 
         const closeGate = () => {
             if (gateLocked) return;
             gateModal?.classList.add('hidden');
-            setPasswordMode(false);
+            renderGateMode('register');
         };
         document.getElementById('cloud-gatekeeper-close')?.addEventListener('click', closeGate);
         gateModal?.addEventListener('click', (e) => {
             if (e.target === gateModal && !gateLocked) closeGate();
         });
 
-        const validateRegisterPassword = bindPasswordValidation('cloud-register-password', 'cloud-register-password-rules', registerSubmitBtn);
-        const validateChangePassword = bindPasswordValidation('cloud-change-password-input', 'cloud-change-password-rules', changePasswordSubmitBtn);
+        const validateRegisterPassword = createPassphraseStrengthUpdater('cloud-register-password', 'cloud-register-password-strength', registerSubmitBtn);
+        const validateChangePassword = createPassphraseStrengthUpdater('cloud-change-password-input', 'cloud-change-password-strength', changePasswordSubmitBtn);
+        bindPasswordGenerator('btn-generate-register-password', 'cloud-register-password', validateRegisterPassword);
+        bindPasswordGenerator('btn-generate-change-password', 'cloud-change-password-input', validateChangePassword);
 
         registerForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -2678,10 +2887,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const email = document.getElementById('cloud-register-email')?.value?.trim();
             const password = document.getElementById('cloud-register-password')?.value || '';
             const nickname = document.getElementById('cloud-register-nickname')?.value?.trim();
-            if (!email || !password || !nickname) return setGateMsg('Completa nickname, email y password.', true);
-            if (!validateRegisterPassword()) return setGateMsg('La contraseña no cumple los requisitos de seguridad.', true);
+            if (!email || !password || !nickname) return setGateMsg('Completa nombre, correo y contraseña.', true);
+            if (!validateRegisterPassword()) return setGateMsg('Tu contraseña es demasiado corta.', true);
 
-            setGateMsg('Creando cuenta en Plataforma Cloud…');
+            setGateMsg('Creando tu cuenta…');
             try {
                 const { error } = await _sbClient.auth.signUp({
                     email,
@@ -2690,10 +2899,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 if (error) throw error;
                 _setGuestMode(false);
-                setGateMsg('Cuenta creada. Revisa tu correo para confirmar si aplica.');
-                _setLoginMsg('Registro cloud completado ✓');
+                setGateMsg('Cuenta creada. Revisa tu correo para confirmarla.');
+                _setLoginMsg('Cuenta creada correctamente.');
             } catch (err) {
-                setGateMsg(`Error: ${err.message}`, true);
+                setGateMsg(err?.message, true);
             }
         });
 
@@ -2703,33 +2912,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const email = document.getElementById('cloud-login-email')?.value?.trim();
             const password = document.getElementById('cloud-login-password')?.value || '';
-            if (!email || !password) return setGateMsg('Completa email y password.', true);
+            if (!email || !password) return setGateMsg('Completa correo y contraseña.', true);
 
             setGateMsg('Iniciando sesión…');
             try {
                 const { error } = await _sbClient.auth.signInWithPassword({ email, password });
                 if (error) throw error;
-                setGateMsg('Sesión iniciada ✓');
-                _setLoginMsg(`Cloud activo para ${email}`);
+                setGateMsg('¡Listo! Iniciaste sesión.');
+                _setLoginMsg(`Sesión iniciada para ${email}.`);
                 closeGate();
             } catch (err) {
-                setGateMsg(`Error: ${err.message}`, true);
+                setGateMsg(err?.message, true);
+            }
+        });
+
+        document.getElementById('btn-cloud-change-email-submit')?.addEventListener('click', async () => {
+            if (!_sbClient || !_sbSession) return setGateMsg('Debes iniciar sesión para cambiar tu correo.', true);
+            const newEmail = document.getElementById('cloud-change-email-input')?.value?.trim();
+            if (!newEmail) return setGateMsg('Ingresa un nuevo correo para continuar.', true);
+            try {
+                const { error } = await _sbClient.auth.updateUser({ email: newEmail });
+                if (error) throw error;
+                emailBanner?.classList.remove('hidden');
+                setGateMsg('Solicitud enviada. Revisa ambos correos para confirmar el cambio.');
+            } catch (err) {
+                setGateMsg(err?.message, true);
             }
         });
 
         passwordForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!_sbClient || !_sbSession) return setGateMsg('Debes iniciar sesión para cambiar tu contraseña.', true);
-            if (!validateChangePassword()) return setGateMsg('La contraseña no cumple los requisitos de seguridad.', true);
+            if (!validateChangePassword()) return setGateMsg('Tu contraseña es demasiado corta.', true);
 
+            const currentPassword = document.getElementById('cloud-current-password-input')?.value || '';
             const password = document.getElementById('cloud-change-password-input')?.value || '';
+            if (!currentPassword) return setGateMsg('Debes ingresar tu contraseña actual.', true);
             try {
+                const email = _sbSession.user?.email || '';
+                const { error: authError } = await _sbClient.auth.signInWithPassword({ email, password: currentPassword });
+                if (authError) {
+                    setGateMsg('La contraseña actual es incorrecta. Verifícala antes de continuar.', true);
+                    return;
+                }
                 const { error } = await _sbClient.auth.updateUser({ password });
                 if (error) throw error;
-                setGateMsg('Contraseña actualizada con éxito ✓');
+                setGateMsg('Contraseña actualizada.');
                 setTimeout(() => closeGate(), 700);
             } catch (err) {
-                setGateMsg(`Error: ${err.message}`, true);
+                setGateMsg(err?.message, true);
             }
         });
 
@@ -2739,8 +2970,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.GameCenter?.setIdentity?.('Invitad@', '@');
             }
             _setAccountStateLabel(false);
-            setGateMsg('Modo invitad@ activado. Tu progreso es volátil.', false);
-            _setLoginMsg('Jugando como invitad@ (progreso local volátil).');
+            setGateMsg('Estás jugando como invitado.');
+            _setLoginMsg('Jugando como invitado.');
             gateLocked = false;
             gateBox?.classList.remove('is-locked');
             closeGate();
@@ -2748,11 +2979,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('btn-cloud-change-password')?.addEventListener('click', () => {
             if (!_sbSession) {
-                openGate({ tab: 'login' });
+                openGate({ mode: 'login' });
                 setGateMsg('Inicia sesión para poder cambiar tu contraseña.', true);
                 return;
             }
-            openGate({ passwordMode: true });
+            openGate({ mode: 'change-password' });
+        });
+
+        document.getElementById('btn-cloud-change-email')?.addEventListener('click', () => {
+            if (!_sbSession) {
+                openGate({ mode: 'login' });
+                setGateMsg('Inicia sesión para poder cambiar tu correo.', true);
+                return;
+            }
+            openGate({ mode: 'change-email' });
         });
 
         // ── Cerrar sesión ────────────────────────────────────────────────────
@@ -2803,7 +3043,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const hasLocalIdentity = window.GameCenter?.hasIdentity?.();
         if (!hasLocalIdentity && !_sbSession) {
-            openGate({ locked: true, tab: 'register' });
+            openGate({ locked: true, mode: 'register' });
         }
     });
 
