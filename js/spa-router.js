@@ -91,26 +91,31 @@
         currentView = viewId;
         
         _syncNavHighlight(viewId);
-        window.GameCenter?.syncUI?.();
-        
-        if (anchor) {
-            requestAnimationFrame(() => {
+
+        // Fase 2 (next frame): operaciones no críticas del primer frame.
+        requestAnimationFrame(() => {
+            window.GameCenter?.syncUI?.();
+
+            if (anchor) {
                 const target = document.getElementById(anchor);
                 if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            });
-        }
-        
-        // [v9.6] onLeave: notificar a la vista que se abandona antes de activar la nueva.
-        // ShopView.onLeave() desconecta el IntersectionObserver de precarga para liberar
-        // recursos cuando el catálogo no es visible.
-        if (viewId === 'shop') window.HomeView?.onLeave?.();
-        if (viewId === 'home') window.ShopView?.onLeave?.();
-        // [v10.0] EventView lifecycle
-        if (viewId !== 'events') window.EventView?.onLeave?.();
-        
-        if (viewId === 'home') window.HomeView?.refresh?.();
-        if (viewId === 'shop') window.ShopView?.onEnter?.();
-        if (viewId === 'events') window.EventView?.onEnter?.();
+            }
+
+            // Fase 3 (task separado): callbacks potencialmente pesados.
+            setTimeout(() => {
+                // [v9.6] onLeave: notificar a la vista que se abandona antes de activar la nueva.
+                // ShopView.onLeave() desconecta el IntersectionObserver de precarga para liberar
+                // recursos cuando el catálogo no es visible.
+                if (viewId === 'shop') window.HomeView?.onLeave?.();
+                if (viewId === 'home') window.ShopView?.onLeave?.();
+                // [v10.0] EventView lifecycle
+                if (viewId !== 'events') window.EventView?.onLeave?.();
+
+                if (viewId === 'home') window.HomeView?.refresh?.();
+                if (viewId === 'shop') window.ShopView?.onEnter?.();
+                if (viewId === 'events') window.EventView?.onEnter?.();
+            }, 0);
+        });
     }
     
     // ── API pública ───────────────────────────────────────────────────────────
@@ -163,7 +168,8 @@
                 return;
             }
             
-            navigateTo(viewId, anchor);
+            // Separar la navegación del mismo task del click para reducir INP.
+            setTimeout(() => navigateTo(viewId, anchor), 0);
         });
     }
     

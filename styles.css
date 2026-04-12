@@ -11,7 +11,7 @@
          costs on mockup loading state and offline fallback.
    ================================================================ */
 
-/* ── Google Fonts: Migrado a link preload en HTML para carga no bloqueante ── */
+/* ── Tipografía local: sin Google Fonts para evitar preloads inyectados/duplicados ── */
 
 /*
  * Fuentes de sistema con métricas ajustadas para reducir el "salto" visible
@@ -37,6 +37,16 @@
     size-adjust: 100%;
     ascent-override: 92%;
     descent-override: 24%;
+    line-gap-override: 0%;
+}
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: local('Courier New');
+    font-style: normal;
+    font-weight: 400 700;
+    size-adjust: 98%;
+    ascent-override: 90%;
+    descent-override: 23%;
     line-gap-override: 0%;
 }
 
@@ -724,6 +734,39 @@ body::before {
     color: var(--accent);
     background: var(--accent-soft);
     transform: scale(1.12);
+}
+
+.hud-cloud-sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(99, 179, 237, 0.35);
+    background: rgba(99, 179, 237, 0.08);
+    color: #63b3ed;
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1;
+    opacity: 0;
+    transform: translateY(2px);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.hud-cloud-sync-indicator.is-active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.hud-cloud-sync-indicator.is-pulse {
+    animation: cloudSyncPulse 0.8s ease-in-out 2;
+}
+
+@keyframes cloudSyncPulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(99, 179, 237, 0); }
+    50%      { box-shadow: 0 0 14px rgba(99, 179, 237, 0.45); }
 }
 .hud-status {
     font-size: 0.72rem;
@@ -1722,6 +1765,11 @@ body::before {
     background: rgba(20,10,10,0.97);
     border: 1px solid rgba(255,66,102,0.35);
     color: var(--error);
+}
+.toast--warning {
+    background: rgba(20, 10, 0, 0.97);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    color: #f59e0b;
 }
 
 /* ================================================================
@@ -3618,6 +3666,191 @@ svg { stroke-width: 2; }
     z-index: 2;
 }
 .modal-close-btn:hover { background: rgba(255,255,255,0.14); }
+
+/* ── Cloud Gatekeeper modal — Sentinel v14.0 ───────────────────────────── */
+.cloud-gatekeeper-modal-box {
+    max-width: 430px;
+    width: min(92vw, 430px);
+    border: 1px solid rgba(99, 179, 237, 0.35);
+}
+
+.cloud-gatekeeper-kicker {
+    margin: 0 0 8px;
+    color: #63b3ed;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    font-size: 0.64rem;
+    font-weight: 700;
+}
+
+.cloud-gatekeeper-title {
+    font-family: var(--font-display);
+    font-size: 1.08rem;
+    margin-bottom: 8px;
+}
+
+.cloud-gatekeeper-sub {
+    margin: 0 0 18px;
+    color: var(--text-low);
+    font-size: 0.77rem;
+    line-height: 1.45;
+}
+
+.cloud-gatekeeper-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.cloud-gatekeeper-tab {
+    border: 1px solid var(--border-mid);
+    background: var(--solid-surface-base);
+    color: var(--text-low);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.cloud-gatekeeper-tab.is-active {
+    border-color: var(--accent-border);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.cloud-gatekeeper-panels {
+    position: relative;
+}
+
+.cloud-gatekeeper-panel {
+    display: none;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.cloud-gatekeeper-panel.is-active {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.cloud-gatekeeper-input {
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+}
+
+.cloud-gatekeeper-submit {
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+    font-family: var(--font-display);
+    font-weight: 800;
+}
+
+.cloud-guest-block {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-mid);
+}
+
+.cloud-guest-note {
+    margin: 0 0 10px;
+    color: var(--text-low);
+    font-size: 0.72rem;
+    line-height: 1.45;
+}
+
+#btn-cloud-guest {
+    width: 100%;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 700;
+}
+
+.cloud-gatekeeper-msg {
+    min-height: 18px;
+    margin-top: 12px;
+}
+
+.cloud-gatekeeper-modal-box.is-locked #cloud-gatekeeper-close {
+    display: none;
+}
+
+.cloud-password-form {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-mid);
+}
+
+.cloud-password-input-wrap {
+    position: relative;
+}
+
+.cloud-password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid rgba(113, 128, 150, 0.35);
+    background: rgba(17, 24, 39, 0.82);
+    color: var(--text-low);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.cloud-password-toggle:hover {
+    color: var(--text-main);
+}
+
+.cloud-password-strength {
+    height: 7px;
+    border-radius: 99px;
+    background: rgba(113, 128, 150, 0.2);
+    overflow: hidden;
+    margin: 8px 0 6px;
+}
+
+.cloud-password-strength-bar {
+    width: 0%;
+    height: 100%;
+    border-radius: 99px;
+    transition: width .18s ease, background .25s ease;
+    background: linear-gradient(90deg, #f56565, #f6e05e);
+}
+
+.cloud-password-hint {
+    margin: 0 0 8px;
+    color: var(--text-low);
+    font-size: 0.67rem;
+    line-height: 1.4;
+}
+
+.cloud-password-generate-btn {
+    width: 100%;
+    justify-content: center;
+    margin-bottom: 10px;
+    font-size: 0.75rem;
+}
+
+.cloud-email-change-banner {
+    margin: 8px 0 12px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(99, 179, 237, 0.4);
+    background: rgba(66, 153, 225, 0.14);
+    color: #cfe9ff;
+    font-size: 0.69rem;
+    line-height: 1.45;
+}
 
 /* ── Reduce motion ───────────────────────────────────────────────────────── */
 

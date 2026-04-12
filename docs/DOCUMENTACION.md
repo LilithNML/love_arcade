@@ -1,5 +1,5 @@
 # 📚 Documentación Técnica — Love Arcade
-### Plataforma de Recompensas · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v11.1 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
+### Plataforma de Recompensas · v14.0 Gatekeeper Security & UX Refactor · v13.0 Sentinel Cloud Sync · v12.1 Body Parser Hardening · v12.0 Telegram Proxy & Secure Telemetry · v11.0 Meta-Gameplay & Event Engine · v10.0 LTE Events · Shadow-Gate · Hardening & Error Detection · Ghost Analytics v12.1 · Word Hunt Progression Metrics · Mobile Performance Pass · CDN Offline Resilience
 
 ---
 
@@ -32,6 +32,11 @@
 2y. [Novedades en v11.5 — Performance & Accessibility Audit](#2y-novedades-en-v115--performance--accessibility-audit)
 2z. [Novedades en Ghost Analytics v11.0 — Doble Candado (Anti-Bot + Human Gate)](#2z-novedades-en-ghost-analytics-v110--doble-candado-anti-bot--human-gate)
 2aa. [Novedades en v11.1 — Word Hunt: Métricas de Progresión](#2aa-novedades-en-v111--word-hunt-métricas-de-progresión)
+2ab. [Novedades en v12.0 — Infraestructura de Telemetría Segura (Telegram Proxy)](#2ab-novedades-en-v120--infraestructura-de-telemetría-segura-telegram-proxy)
+2ac. [Novedades en v12.1 — Body Parser Hardening (Bugfix)](#2ac-novedades-en-v121--body-parser-hardening-bugfix)
+2ad. [Novedades en v13.0 — Sentinel Cloud Sync (Supabase)](#2ad-novedades-en-v130--sentinel-cloud-sync-supabase)
+2ae. [Novedades en v14.0 — Gatekeeper Security & UX Refactor](#2ae-novedades-en-v140--gatekeeper-security--ux-refactor)
+2af. [Novedades en v14.1 — Gestión robusta de cuota localStorage y avatares](#2af-novedades-en-v141--gestión-robusta-de-cuota-localstorage-y-avatares)
 3. [Arquitectura del Proyecto](#3-arquitectura-del-proyecto)
 4. [Estructura de Archivos](#4-estructura-de-archivos)
 5. [app.js — El Motor](#5-appjs--el-motor)
@@ -45,7 +50,7 @@
 13. [Sistema de Racha (Streaks)](#13-sistema-de-racha-streaks)
 14. [Bendición Lunar](#14-bendición-lunar)
 15. [Wishlist — Funcionalidad Completa](#15-wishlist--funcionalidad-completa)
-16. [Sincronización con Archivo .txt](#16-sincronización-con-archivo-txt)
+16. [Sincronización con BackupEngine (.labak)](#16-sincronización-con-backupengine-labak)
 17. [Historial de Transacciones](#17-historial-de-transacciones)
 18. [Flujos de Usuario](#18-flujos-de-usuario)
 19. [Guía de Mantenimiento](#19-guía-de-mantenimiento)
@@ -82,8 +87,8 @@ Love Arcade es una **plataforma de recompensas sin backend** construida con HTML
 | **Wishlist** | Nuevo filtro "Mis Lista" para ver solo los ítems marcados con el corazón. |
 | **Wishlist** | Indicador de coste: muestra cuántas monedas faltan para comprar toda la lista. |
 | **Wishlist** | Los ítems en Wishlist aparecen siempre al principio de los resultados de búsqueda. |
-| **Sync** | Exportación: el código se copia al portapapeles **y** se descarga automáticamente como archivo `.txt`. No se muestra en un `<textarea>`. |
-| **Sync** | Importación: se añade `<input type="file">` con `FileReader` para cargar el archivo `.txt` sin pegar texto masivo, evitando el error de memoria en móvil. |
+| **Sync** | Exportación: migrada a archivo binario comprimido `.labak` (`gzip`) con checksum SHA-256. Se descarga automáticamente sin portapapeles. |
+| **Sync** | Importación: usa `<input type="file" accept=".labak,.gz">`, descompresión (`DecompressionStream`) y validación de integridad previa a restaurar `localStorage`. Estándar actual: `.labak`; legado compatible en importación: `.labak.gz`. |
 | **Economía** | Sin cambios. `saleMultiplier` y `cashbackRate` se mantienen intactos. |
 | **LocalStorage** | Sin cambios. La clave `gamecenter_v6_promos` permanece igual. |
 
@@ -2717,54 +2722,53 @@ store.wishlist = [3, 7, 21]  // Array de IDs numéricos
 
 ---
 
-## 16. Sincronización con Archivo .txt
+## 16. Sincronización con BackupEngine (.labak)
 
-### Flujo de exportación (v8.0)
+### Flujo de exportación (v15.0)
 
 ```
 Clic "Exportar y descargar"  →  handleExport() async
     │
     ▼
-GameCenter.exportSave()  →  workerTask({action:'export', store, salt})
+BackupEngine.exportBackup()
     │
-    ▼  [sync-worker.js calcula checksum SHA-256]
-checksum = sha256(JSON.stringify(store) + SYNC_SALT)
-código = btoa(encodeURIComponent(JSON.stringify({data: store, checksum})))
-    │
-    ▼
-1. navigator.clipboard.writeText(código)  → copiado al portapapeles
-2. new Blob([código]) → URL.createObjectURL() → descarga love-arcade-backup-YYYY-MM-DD.txt
+    ▼  [colección dinámica de localStorage + claves conocidas]
+envelope = { version, format, createdAt, source, keys, keyCount }
     │
     ▼
-Mensaje: "Código copiado al portapapeles y archivo .txt descargado."
+checksum = sha256(JSON.stringify(envelope))
+payload  = JSON.stringify({ ...envelope, checksum })
+gzip(payload) mediante CompressionStream (en worker cuando está disponible)
+    │
+    ▼
+Blob(binary/gzip) → URL.createObjectURL() → descarga LoveArcade_Backup_YYYY-MM-DD.labak
+    │
+    ▼
+Mensaje: "Copia de seguridad creada"
 ```
 
-> **Sin textarea.** En v7.5 el código se mostraba en un `<textarea>` que podía copiarse. Esto bloqueaba el hilo principal con strings muy largos. En v8.0, la operación de copia y la descarga ocurren directamente en memoria.
+> **Sin portapapeles y sin textarea.** El respaldo ya no usa texto Base64 pegable; todo el flujo es binario comprimido para reducir tamaño (especialmente en avatares serializados como Data URL).
 
-### Flujo de importación (v8.0)
+### Flujo de importación (v15.0)
 
-**Opción A — Cargar archivo:**
+**Política de compatibilidad de extensiones**
+
+- **Estándar vigente:** `*.labak` (formato recomendado para respaldos nuevos).
+- **Compatibilidad legada en importación:** `*.labak.gz` (se acepta para no romper respaldos históricos).
 
 ```
-Usuario selecciona archivo .txt  →  evento 'change' en #import-file
-    │
-    ▼
-FileReader.readAsText(file)  →  onload: textarea.value = contenido
+Usuario selecciona archivo .labak o .labak.gz  →  evento 'change' en #import-file
     │
     ▼
 Usuario hace clic en "Importar progreso"  →  handleImport() async
     │
-    ▼  [igual que antes]
-GameCenter.importSave(code)  →  workerTask({action:'import', code, salt})
+    ▼
+BackupEngine.importBackupFromFile(file)
     │
-    ▼  [sync-worker.js verifica checksum SHA-256]
-¿checksum válido? → store = migrateState(data) → saveState() → reload
+    ▼  [DecompressionStream + JSON.parse + SHA-256]
+¿checksum válido? → restaurar cada clave en localStorage → reload
 ¿inválido?        → rechazado con mensaje de error
 ```
-
-**Opción B — Pegar código manualmente:**
-
-El `<textarea id="import-input">` sigue disponible como alternativa. El botón "Importar progreso" lee su contenido y llama a `handleImport()`.
 
 ---
 
@@ -4405,5 +4409,582 @@ sessionStorage.removeItem('la_ws_alert_last_remaining');
 
 ---
 
-*Love Arcade · Documentación técnica v11.1 + Ghost Analytics v11.1 (Doble Candado + Word Hunt Progression Metrics)*
-*Arquitectura: vanilla JS + localStorage · Sin backend · Compatible con GitHub Pages*
+## 2ab. Novedades en v12.0 — Infraestructura de Telemetría Segura (Telegram Proxy)
+
+### Contexto y motivación
+
+Hasta v11.1, Ghost Analytics enviaba los eventos directamente a un Webhook de Discord desde el navegador. El token del Webhook, aunque ofuscado con XOR en el array `_r`, era recuperable desde DevTools. Adicionalmente, el frontend construía los embeds completos, mezclando la lógica de presentación con la de captura.
+
+v12.0 resuelve ambos problemas mediante una **Función Serverless en Vercel** que actúa como proxy hacia la API de Telegram.
+
+---
+
+### Nuevos archivos
+
+| Archivo | Tipo | Descripción |
+|---|---|---|
+| `api/report.js` | **Nuevo** | Proxy Serverless. Único punto de contacto con la API de Telegram. Gestiona seguridad de origen, sanitización, clasificación en Topics y formateo HTML. |
+| `js/analytics.js` | **Modificado** | Versión bumped a v12.0. Eliminado el array XOR `_r` y `_endpoint()`. Nuevo `_PROXY_ENDPOINT`, `_EVENT_TYPE_MAP` y `_resolveEventType()`. `_send()` refactorizado para el nuevo contrato de datos. |
+| `.env` | **Nuevo** | Variables de entorno para desarrollo local (ignorado en Git). |
+| `DOCUMENTACION.md` | **Modificado** | Sección §2ab añadida. ToC y header actualizados a v12.0. |
+
+---
+
+### Arquitectura del nuevo flujo
+
+```
+Navegador (js/analytics.js)
+        │
+        │  POST /api/report
+        │  { type, user, event, data }
+        ▼
+Vercel Serverless (api/report.js)
+        │  Validación de método + origen
+        │  Sanitización de nickname
+        │  Construcción del mensaje HTML
+        │  Resolución del Topic (thread_id)
+        │
+        │  POST api.telegram.org/bot{TOKEN}/sendMessage
+        ▼
+Telegram (Topic correcto del grupo)
+```
+
+---
+
+### Backend — `api/report.js`
+
+#### Gestión de hilos (Topics)
+
+| Tipo de evento  | `message_thread_id` | Emoji | Topic          |
+|---|---|---|---|
+| `analytics`   | `2` | 📈 | Analíticas |
+| `achievement` | `3` | 🏆 | Logros     |
+| `bug`         | `4` | 🚨 Bugs       |
+
+#### Validación de método
+Cualquier petición que no sea `POST` recibe `HTTP 405 Method Not Allowed`. Esto previene que crawlers indexen el endpoint.
+
+#### Seguridad de origen
+El header `origin` (o `referer` como fallback) debe contener el valor de `process.env.PRODUCTION_DOMAIN`. Las peticiones de orígenes no autorizados reciben `HTTP 403 Forbidden`. Si `PRODUCTION_DOMAIN` no está definido, la validación se omite para compatibilidad con las preview deployments de Vercel.
+
+#### Sanitización contra inyecciones HTML
+El nickname y los valores de `data` pasan por la función interna `sanitize()`, que escapa `& < > " '` antes de insertarlos en el mensaje HTML de Telegram. Esto previene que un nickname malicioso como `<b>hack</b>` altere el formato del mensaje.
+
+#### Construcción del mensaje (modo HTML)
+El mensaje se formatea con etiquetas `<b>`, `<i>` y `<code>` soportadas por la API de Telegram:
+
+```
+📈 OPEN GAME
+
+👤 Usuario: Solecito
+📌 Tipo:    analytics
+
+📋 Datos:
+  juego: puzzle-15
+
+🕐 Servidor: 2025-11-03T14:22:01.004Z
+Love Arcade · Ghost Analytics v12.0
+```
+
+Un **timestamp de servidor** se inyecta automáticamente en cada mensaje, independiente del timestamp del cliente. Permite detectar eventos retardados por la cola del Human Gate.
+
+#### Error handling silencioso
+Si la API de Telegram devuelve un error (rate limit, Topic eliminado, bot baneado…), la función serverless:
+1. Loguea el error en la consola de Vercel (visible en el dashboard de logs).
+2. Devuelve `HTTP 500` al frontend con un cuerpo genérico (`{ error: "Upstream error" }`).
+3. El frontend registra el warning en consola pero **no interrumpe el juego**.
+
+#### Variables de entorno
+
+| Variable              | Descripción |
+|---|---|
+| `TELEGRAM_BOT_TOKEN`  | Token del bot obtenido vía @BotFather. Nunca expuesto al cliente. |
+| `TELEGRAM_CHAT_ID`    | ID del grupo/canal destino (negativo para grupos supergrupo). |
+| `PRODUCTION_DOMAIN`   | Dominio de producción (ej: `love-arcade.vercel.app`). Usado para validar el origen. |
+
+---
+
+### Frontend — `js/analytics.js` (v12.0)
+
+#### Eliminaciones
+- **Array `_r`**: la ofuscación XOR del Webhook de Discord ha sido eliminada por completa. Ya no hay credenciales en el bundle del cliente.
+- **Función `_endpoint()`**: reemplazada por la constante `_PROXY_ENDPOINT = '/api/report'`.
+- **`EVENT_COLORS`**: los colores de embed de Discord ya no son necesarios. El formateo visual es responsabilidad del proxy.
+
+#### Nuevo contrato de datos (Payload ligero)
+
+```json
+{
+  "type":  "analytics | bug | achievement",
+  "user":  "Solecito",
+  "event": "open_game",
+  "data":  { "juego": "puzzle-15" }
+}
+```
+
+El campo `user` es inyectado automáticamente por `_send()` — nunca debe pasarse en el objeto `meta` de `track()`.
+
+#### Clasificación de eventos (`_EVENT_TYPE_MAP`)
+
+| Evento                      | Tipo           | Topic destino |
+|---|---|---|
+| `detected_error`            | `bug`          | 🚨 Bugs       |
+| `invalid_promo_code`        | `bug`          | 🚨 Bugs       |
+| `wordsearch_content_alert`  | `bug`          | 🚨 Bugs       |
+| `buy_item`                  | `achievement`  | 🏆 Logros     |
+| `redeem_code`               | `achievement`  | 🏆 Logros     |
+| `daily_bonus`               | `achievement`  | 🏆 Logros     |
+| `view_preview`              | `analytics`    | 📈 Analíticas |
+| `click_download`            | `analytics`    | 📈 Analíticas |
+| `open_game`                 | `analytics`    | 📈 Analíticas |
+| `insufficient_funds`        | `analytics`    | 📈 Analíticas |
+| `wishlist_add`              | `analytics`    | 📈 Analíticas |
+| `user_snapshot`             | `analytics`    | 📈 Analíticas |
+| `sync_export`               | `analytics`    | 📈 Analíticas |
+
+Los eventos no listados en `_EVENT_TYPE_MAP` caen en `"analytics"` por defecto.
+
+#### Sin cambios en la lógica de seguridad
+El Doble Candado (Shadow-Gate + Anti-Localhost + Anti-Bot + Human Gate), el Nickname Poller y la `_pendingQueue` se mantienen **exactamente igual**. Solo la capa de transporte ha cambiado.
+
+---
+
+### Configuración de Vercel
+
+#### Variables de entorno en producción
+Desde el dashboard de Vercel → **Settings → Environment Variables**:
+
+```
+TELEGRAM_BOT_TOKEN   = 123456789:ABCdef...
+TELEGRAM_CHAT_ID     = -1001234567890
+PRODUCTION_DOMAIN    = love-arcade.vercel.app
+```
+
+#### Archivo `.env` para desarrollo local
+
+```bash
+# .env  (en la raíz del proyecto — añadir a .gitignore)
+TELEGRAM_BOT_TOKEN=123456789:ABCdef...
+TELEGRAM_CHAT_ID=-1001234567890
+PRODUCTION_DOMAIN=love-arcade.vercel.app
+```
+
+> **Importante:** aunque el proxy está desplegado, `js/analytics.js` aborta en localhost por el Anti-Localhost (Candado 1A). Las funciones serverless sí pueden probarse localmente con `vercel dev`, pero el frontend no les enviará eventos.
+
+---
+
+### Diagnóstico desde DevTools
+
+```javascript
+// Verificar estado del módulo (incluye la ruta del Proxy):
+window.GhostAnalytics.status()
+
+// Enviar evento de prueba al Proxy (aparece en el Topic de Analíticas):
+window.GhostAnalytics.test()
+
+// Activar logs detallados:
+window.GhostAnalytics.debug(true)
+// → Cada fetch muestra el payload exacto enviado al proxy
+```
+
+---
+
+### Resumen de cambios por archivo (v12.0)
+
+| Archivo | Tipo | Cambios clave |
+|---|---|---|
+| `api/report.js` | **Nuevo** | Función serverless completa. Validación de método, seguridad de origen, mapeo de Topics, sanitización HTML, construcción del mensaje, envío a Telegram, error handling silencioso. |
+| `js/analytics.js` | **Modificado** | v12.0. Eliminados `_r`, `_endpoint()`, `EVENT_COLORS`. Añadidos `_PROXY_ENDPOINT`, `_EVENT_TYPE_MAP`, `_resolveEventType()`. `_send()` refactorizado para payload `{ type, user, event, data }`. `test()` actualizado. Mensajes de consola actualizados. |
+| `DOCUMENTACION.md` | **Modificado** | Sección §2ab añadida. ToC actualizado. Header actualizado a v12.0. |
+
+---
+
+## 2ac. Novedades en v12.1 — Body Parser Hardening (Bugfix)
+
+### Problema
+
+Tras el despliegue de v12.0, los mensajes de Telegram mostraban valores por defecto (`UNKNOWN`, `desconocido`, `Sin metadatos adicionales`) en lugar de los datos reales del evento.
+
+**Causa raíz:** `req.body` llegaba como `undefined` en determinados escenarios del runtime de Vercel. El campo `type`, `user`, `event` y `data` no se podían desestructurar, por lo que caían en sus valores de fallback.
+
+Los escenarios que reproducen el problema son:
+
+| Escenario | Estado de `req.body` |
+|---|---|
+| Función en **cold start** | `undefined` |
+| Request con `keepalive: true` (fetch del frontend) | `undefined` o `Buffer` |
+| `Content-Type` no reconocido por el runtime | `string` crudo |
+| Body parser declarado implícitamente (v12.0) | Comportamiento no garantizado entre entornos |
+
+El frontend (`js/analytics.js`) enviaba el payload correctamente con `Content-Type: application/json`. El error era **exclusivamente del lado del servidor**.
+
+---
+
+### Solución
+
+Dos cambios quirúrgicos en `api/report.js`, sin afectar el resto de la lógica:
+
+#### 1. Declaración explícita del body parser (`export const config`)
+
+```javascript
+export const config = {
+    api: {
+        bodyParser: {
+            sizeLimit: '16kb',
+        },
+    },
+};
+```
+
+Fuerza a Vercel a activar el parser JSON en **todos** los entornos: producción, preview deployments y `vercel dev`. Sin esta declaración, Vercel aplica un valor por defecto que no garantiza el estado de `req.body` en todos los escenarios de runtime.
+
+El límite de `16kb` es suficiente para cualquier payload de analíticas y previene abusos con bodies gigantes.
+
+#### 2. Helper defensivo `_parseBody(req)`
+
+Actúa como red de seguridad independientemente de `export const config`, cubriendo los cuatro estados posibles de `req.body`:
+
+| Caso | Estado de `req.body` | Acción del helper |
+|---|---|---|
+| **A** | Objeto plano (parseado por Vercel) | Se usa directamente — camino nominal |
+| **B** | `string` | `JSON.parse()` directo |
+| **C** | `Buffer` | `.toString('utf8')` + `JSON.parse()` |
+| **D** | `undefined` | Lectura del raw stream con `req.on('data')` |
+
+En cualquier fallo de parseo (JSON malformado, stream vacío) el helper devuelve `{}` para que los defaults del destructuring entren en juego de forma controlada.
+
+```javascript
+// En el handler — sustitución de la línea anterior:
+//   const { type, user, event, data } = req.body || {};
+//
+// Por la nueva llamada defensiva:
+const body = await _parseBody(req);
+const { type = 'analytics', user = 'desconocido', event = 'unknown', data = {} } = body;
+```
+
+---
+
+### Sin cambios en el frontend
+
+`js/analytics.js` no requería modificaciones. La función `_send()` ya enviaba el payload correcto:
+
+```javascript
+fetch(_PROXY_ENDPOINT, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ type, user, event, data }),
+    keepalive: true,
+});
+```
+
+El problema era exclusivamente la recepción del body en el servidor.
+
+---
+
+### Diagnóstico para verificar el fix
+
+Tras el despliegue de v12.1, ejecutar desde DevTools en producción:
+
+```javascript
+window.GhostAnalytics.test()
+```
+
+El mensaje en el Topic de Analíticas debe mostrar:
+- **Usuario:** el nickname real (no `desconocido`)
+- **Evento:** `GHOST TEST [TEST]` (no `UNKNOWN`)
+- **Datos:** `fuente: GhostAnalytics.test()` (no `Sin metadatos adicionales`)
+
+Si los valores siguen siendo los defaults, revisar los logs de la función serverless en Vercel → **Deployments → Functions → report** para confirmar que la nueva versión está desplegada.
+
+---
+
+### Resumen de cambios por archivo (v12.1)
+
+| Archivo | Tipo | Cambios clave |
+|---|---|---|
+| `api/report.js` | **Modificado** | v12.1. Añadido `export const config` con `bodyParser: { sizeLimit: '16kb' }`. Nuevo helper privado `_parseBody(req)` con cobertura de los cuatro estados posibles de `req.body`. Sustitución de `req.body \|\| {}` por `await _parseBody(req)` en el paso 5. Footer del mensaje de Telegram actualizado a v12.1. |
+| `DOCUMENTACION.md` | **Modificado** | Sección §2ac añadida. ToC actualizado. Header actualizado a v12.1. |
+
+---
+
+*Love Arcade · Documentación técnica v13.0 + Ghost Analytics v12.1 (Sentinel Cloud Sync · Body Parser Hardening · Telegram Proxy · Doble Candado · Word Hunt Progression Metrics)*
+*Arquitectura: vanilla JS + Vercel Serverless + Supabase (Auth + PostgreSQL JSONB) · Compatible con GitHub Pages (frontend) + Vercel (proxy + serverless)*
+---
+
+## 2ad. Novedades en v13.0 — Sentinel Cloud Sync (Supabase)
+
+### Visión General
+
+La v13.0 introduce la **capa de persistencia en la nube** de Love Arcade mediante el **Patrón Sentinel (Observador)**. El progreso del usuario ahora es **portable entre dispositivos** sin modificar el código de ningún minijuego.
+
+---
+
+### Arquitectura — El Patrón "Sentinel"
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  DOMINIO COMPARTIDO (mismo origen — todos los juegos)                │
+│                                                                      │
+│  Word Hunt ─┐                                                        │
+│  Rompecabez ─┤  localStorage.setItem() ──► StorageInterceptor       │
+│  2048 Lumina ─┤  (claves vigiladas)          (en js/app.js)          │
+│  Space Shoot ─┤                                     │                │
+│  Ollin Smash ─┤                               debounce 12 s          │
+│  Jungle Dash ─┤                                     │                │
+│  Dodger ─────┘                               _sentinelSync()         │
+│                                                     │                │
+│  gamecenter_v6_promos (Hub) ─────────────────►  Supabase            │
+│                                                  (JSONB upsert)      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+El Sentinel vive **exclusivamente en `js/app.js`** como una IIFE (`SentinelCloudSync`). Dado que todos los minijuegos corren bajo el mismo dominio (subcarpetas), comparten el localStorage del Hub. El Sentinel intercepta `localStorage.setItem`, detecta escrituras a claves críticas y orquesta la subida a Supabase sin que ningún juego lo sepa.
+
+---
+
+### Mapa de Claves Vigiladas
+
+| Juego | Claves sincronizadas |
+|---|---|
+| Hub Principal | `gamecenter_v6_promos` |
+| Word Hunt | `la_ws_completedLevels`, `la_ws_state` |
+| Rompecabezas | `puz_arcade_progress`, `puz_arcade_unlocked` |
+| 2048 Lumina | `LUMINA_bestScore`, `LUMINA_gameState` |
+| Space Shooter | `la_shooter_highscore`, `la_shooter_settings` |
+| Ollin Smash | `OS_highscore` |
+| Jungle Dash | `JD_highscore`, `JD_muted` |
+| Dodger | `dodger_highscore`, `dodger_skin`, `dodger_muted` |
+
+---
+
+### Infraestructura — Supabase
+
+#### Variables de entorno (Vercel Dashboard → Settings → Environment Variables)
+
+| Variable | Descripción |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto en Supabase (ej: `https://abc.supabase.co`) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Llave API pública (Anon). Segura en cliente gracias a RLS. |
+
+> **Nota de seguridad:** El Anon Key de Supabase está diseñado para ser público. La seguridad real la provee la política de Row Level Security (RLS) de la base de datos, que garantiza que cada usuario solo pueda leer y escribir su propio perfil.
+
+#### Esquema SQL — ejecutar UNA VEZ en el editor de Supabase
+
+```sql
+-- Tabla de perfiles de usuario con JSONB para el snapshot de progreso
+CREATE TABLE user_profiles (
+  id          UUID REFERENCES auth.users PRIMARY KEY,
+  game_data   JSONB NOT NULL DEFAULT '{}',
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Row Level Security: cada usuario solo accede a su propio registro
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "own_select" ON user_profiles
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "own_insert" ON user_profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "own_update" ON user_profiles
+  FOR UPDATE USING (auth.uid() = id);
+```
+
+---
+
+### Flujo de Autenticación — Magic Link
+
+1. El usuario navega a **Tienda → Sincronizar → Sincronización en la Nube**.
+2. Ingresa su correo y pulsa **Enviar Magic Link**.
+3. Supabase envía un email con el enlace de autenticación.
+4. El usuario hace clic en el enlace → el navegador redirige al hub con el token en el URL hash.
+5. `onAuthStateChange` detecta el evento `SIGNED_IN`.
+6. El Sentinel ejecuta `_sentinelLoad()`: descarga el perfil y aplica **Last Write Wins**.
+
+```
+Usuario → escribe email → btn-cloud-login
+    → supabase.auth.signInWithOtp({ email })
+        → email enviado
+            → usuario hace clic en enlace
+                → onAuthStateChange('SIGNED_IN')
+                    → _sentinelLoad()
+                        → comparar updated_at (nube vs local)
+                            → aplicar el más reciente
+```
+
+---
+
+### Resolución de Conflictos — Last Write Wins (LWW)
+
+La estrategia **Last Write Wins** se basa en el campo `updated_at` de la tabla `user_profiles`:
+
+| Escenario | Acción |
+|---|---|
+| Perfil en nube no existe | Subir snapshot local inmediatamente |
+| `updated_at` nube > timestamp local | Aplicar snapshot de nube al localStorage |
+| Timestamp local ≥ `updated_at` nube | Subir snapshot local a la nube |
+
+El timestamp local se almacena en la clave `love_arcade_sentinel_ts` (separada del store principal para no contaminar checksums de exportación).
+
+---
+
+### StorageInterceptor — Debounce Sync
+
+```javascript
+// El setItem original se preserva para uso interno del Sentinel
+const _originalSetItem = localStorage.setItem.bind(localStorage);
+
+// Interceptor instalado globalmente
+localStorage.setItem = function(key, value) {
+    _originalSetItem(key, value);                    // siempre escribe
+    if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession) {
+        _sentinelScheduleSync();                     // dispara debounce
+    }
+};
+```
+
+**Debounce de 12 segundos:** tras la última escritura a una clave vigilada, el Sentinel espera 12 s de inactividad antes de subir. Esto agrupa múltiples cambios rápidos (ej: partida rápida con varias escrituras) en una sola llamada a Supabase.
+
+**Claves no vigiladas** (ej: `love_arcade_time_cache`, `love_arcade_last_recipient`) pasan por el interceptor sin disparar sync, preservando la eficiencia.
+
+---
+
+### Endpoint Serverless — `api/client-config.js`
+
+```
+GET /api/client-config
+→ { supabaseUrl: string, supabaseKey: string }
+```
+
+Funciona como proxy seguro para las variables de entorno. El cliente nunca las ve en el código fuente del repositorio. Si las variables no están configuradas, devuelve strings vacíos y el Sentinel se desactiva en modo degradado.
+
+**Cache-Control:** `no-store` para evitar que el CDN de Vercel cachee credenciales.
+
+---
+
+### Evento Personalizado — `la:cloudsynced`
+
+Cuando el Sentinel aplica un snapshot de la nube al localStorage, dispara:
+
+```javascript
+document.dispatchEvent(new CustomEvent('la:cloudsynced', {
+  detail: { source: 'cloud' }
+}));
+```
+
+Los módulos que necesiten reaccionar a una restauración de progreso (ej: `shop-logic.js`, `event-logic.js`) pueden escuchar este evento sin acoplamiento directo con el Sentinel.
+
+---
+
+### API de Diagnóstico
+
+Disponible en DevTools (`Console`) tras la inicialización:
+
+```javascript
+window.Sentinel.getStatus()
+// → { hasClient: true, hasSession: true }
+
+window.Sentinel.syncNow()
+// Fuerza sincronización inmediata ignorando el debounce
+
+window.Sentinel.getSession()
+// → objeto de sesión de Supabase (user.id, user.email, etc.)
+```
+
+---
+
+### Resumen de Cambios por Archivo (v13.0)
+
+| Archivo | Tipo | Cambios clave |
+|---|---|---|
+| `index.html` | **Modificado** | CDN de `@supabase/supabase-js@2` en `<head>`. Card "Sincronización en la Nube" en `#tab-sync`. Panel de login (email + Magic Link) y panel de sesión (estado, sync manual, cerrar sesión). Comentario de orden de scripts actualizado. |
+| `js/app.js` | **Modificado** | IIFE `SentinelCloudSync` añadida al final. Incluye: `SENTINEL_WATCHED_KEYS`, `StorageInterceptor`, `_buildSnapshot()`, `_applySnapshot()`, `_sentinelSync()`, `_sentinelLoad()`, `_sentinelScheduleSync()`, `_handleSignIn()`, `_handleSignOut()`, listeners de UI, `_sentinelInit()`, `window.Sentinel` API pública. |
+| `api/client-config.js` | **Nuevo** | Función serverless Vercel. Expone `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` al cliente. Cache-Control: no-store. Bodyparser desactivado (GET-only). |
+| `vercel.json` | **Modificado** | Header `Content-Type: application/json` y `Cache-Control: no-store` para rutas `/api/*`. Sin cambios en rewrites (la regla `/api/(.*)` existente cubre el nuevo endpoint). |
+| `DOCUMENTACION.md` | **Modificado** | Sección §2ad añadida. ToC actualizado. Header actualizado a v13.0. |
+
+---
+
+*Love Arcade · Documentación técnica v13.0 + Ghost Analytics v12.1 (Sentinel Cloud Sync · Body Parser Hardening · Telegram Proxy · Doble Candado · Word Hunt Progression Metrics)*
+
+---
+
+## 2ae. Novedades en v14.0 — Gatekeeper Security & UX Refactor
+
+La v14.0 mueve el acceso cloud desde la zona de tienda a un **flujo de entrada automático** y endurece la seguridad de credenciales con una política de contraseña de nivel consola.
+
+### Cambios clave
+
+| Área | Cambio |
+|---|---|
+| **Entrada automática** | Al cargar (`DOMContentLoaded`), si no hay sesión cloud y no hay identidad local, se abre automáticamente el **Modal de Acceso Unificado** y se bloquea el acceso hasta elegir registro/login o entrar como invitad@. |
+| **Modo Invitado** | El botón "Invitado" activa estado guest, permite entrar al hub y deja mensaje explícito de progreso volátil. |
+| **Dashboard en Tienda** | La tarjeta de nube pasa a ser un panel de cuenta: estado (`En línea` / `Invitado`), última sincronización (`updated_at`) y acciones de gestión (`Cambiar Contraseña`, `Cerrar Sesión`). |
+| **Contraseñas reforzadas** | Registro y cambio de contraseña exigen: mínimo 20 caracteres, mayúscula, minúscula, dígito y símbolo (`@$!%*?&`). |
+| **Validación en vivo** | Reglas visuales bajo el input cambian de rojo a verde en tiempo real y bloquean submit hasta cumplir el 100% de requisitos. |
+| **Sentinel v14** | El `upsert` mantiene el esquema de `user_profiles` y ahora persiste `id`, `game_data`, `nickname`, y `updated_at` para alimentar dashboard y trigger metadata-flow. |
+| **Consistencia multi-dispositivo** | `SentinelCloudSync` aplica estrategia **Last Write Wins** comparando `updated_at` cloud vs marca local (`SENTINEL_TS_KEY`), evitando sobreescritura con snapshots antiguos. |
+| **Persistencia rápida** | Debounce de sync reducido a 1 s + sincronización inmediata en operaciones críticas de monedas (`completeLevel`, `addCoins`, `buyItem`, `spendCoins`). |
+| **Reintento asíncrono de sesión** | Si una escritura crítica ocurre antes de restaurar sesión Supabase en una pestaña de juego, se programa reintento diferido de sync inmediato (500 ms, hasta 3 intentos) para evitar pérdidas silenciosas. |
+| **Bridge cross-tab (`storage`)** | El Hub escucha el evento global `storage`: cuando otra pestaña (juego) modifica una clave vigilada y hay sesión activa, el Sentinel programa sync con debounce de 1 s. |
+| **Memoria del Hub en caliente** | Ante cambios cross-tab se rehidrata el `store` en memoria desde `localStorage` para que HUD/saldo no queden desactualizados hasta la próxima interacción. |
+| **Marca de tiempo local robusta** | Cambios detectados por `storage` actualizan `love_arcade_sentinel_ts` local, evitando falsos empates de timestamp contra nube en recargas posteriores. |
+| **Navegador en segundo plano** | Si la pestaña está oculta, el scheduler evita depender de `setTimeout` throttled y fuerza sync en `visibilitychange/pagehide` cuando hay cambios pendientes. |
+| **Sentinel v14.5 (prioridades)** | Claves críticas (monedas/progreso/configuración) sincronizan en ~1 s; claves pasivas (playtime/estado incremental) usan ventana de 60 s o flush al salir/minimizar. |
+
+### Contrato Supabase respetado (v14)
+
+```sql
+public.user_profiles (
+  id uuid primary key,
+  updated_at timestamptz,
+  game_data jsonb,
+  nickname text
+)
+```
+
+### Flujo de autenticación actualizado
+
+1. `DOMContentLoaded` evalúa identidad local y sesión cloud.
+2. Si falta ambas, se abre Gatekeeper en modo bloqueado.
+3. Registro/Login habilitan sesión cloud (con `nickname` en `signUp.options.data`).
+4. Invitado desbloquea acceso local y mantiene estado volátil.
+5. Sentinel sincroniza con debounce de 1 s y actualiza `updated_at` para dashboard.
+*Arquitectura: vanilla JS + Vercel Serverless + Supabase (Auth + PostgreSQL JSONB) · Compatible con GitHub Pages (frontend) + Vercel (proxy + serverless)*
+
+## 2af. Novedades en v14.1 — Gestión robusta de cuota localStorage y avatares
+
+Esta versión endurece la persistencia local para evitar `QuotaExceededError` y proteger el progreso del jugador cuando el almacenamiento del navegador está cerca del límite (5–10 MB según navegador/dispositivo).
+
+### Cambios clave
+
+| Área | Cambio |
+|---|---|
+| **Avatares** | `GameCenter.setAvatar()` ahora es asíncrona. Comprime imágenes con canvas (`200x200`, calidad `0.7`) antes de guardar/subir. |
+| **Cloud Avatar (Supabase Storage)** | Si existe sesión cloud (`Sentinel.getSession()`), se valida sesión fresca (`sbClient.auth.getSession()`) y el avatar se sube al bucket `avatars` en `{userId}/profile.jpg` (ruta relativa al bucket, upsert). Se guarda URL pública en `store.userAvatar`. |
+| **Fallback local seguro** | Si no hay sesión cloud o falla la subida, el avatar se guarda como Base64 comprimido solo si queda por debajo de `100 KB`. Si supera ese límite, se rechaza con mensaje de error controlado. |
+| **Limpieza de avatar legado** | En INIT síncrono, si detecta avatar Base64 > `200 KB`, se elimina automáticamente y se registra `GhostAnalytics.track('storage_cleaned', { reason: 'avatar_too_large' })`. |
+| **Historial** | `logTransaction()` reduce retención: de 150 → 50 entradas. |
+| **Migración de estado** | `migrateState()` elimina `redeemedCodes` y limpia `userAvatar` legado en DataURL para evitar payloads grandes persistidos. |
+| **Progreso por juego** | Nuevo `trimGameProgress()` limita cada arreglo `store.progress[gameId]` a las últimas 50 entradas. |
+| **Limpieza de emergencia** | Nuevo `emergencyCleanup()` ejecutado al detectar cuota excedida: limpia avatar grande, recorta historial, elimina legado y trimea progreso. Si el store sigue >4 MB, vacía historial. |
+| **Guardado resiliente** | `saveState()` maneja `QuotaExceededError` con reintento tras cleanup. Si falla de nuevo, muestra toast de error y evita freeze del flujo. |
+| **Monitoreo de tamaño** | Nuevo `checkStorageSize()` registra `storage_warning` cuando el store supera 4000 KB y muestra recomendación al usuario para exportar partida. |
+| **Toasts de warning** | Se añade soporte visual para `toast--warning` en `shop-logic.js` y `styles.css`. |
+| **Analytics** | `analytics.js` incorpora eventos `storage_cleaned` (🧹) y `storage_warning` (⚠️), ambos clasificados como tipo `bug`. |
+
+### Requisito manual en Supabase (importante)
+
+Para que la subida de avatares cloud funcione en producción:
+
+1. Crear bucket público `avatars`.
+2. Configurar políticas RLS de lectura pública y escritura restringida por `auth.uid()`.
+3. Mantener la convención de ruta `{userId}/profile.jpg` (objeto relativo al bucket) para que `storage.foldername(name))[1]` sea el UID y cumpla RLS.
+
+> Nota: este paso se configura en Supabase Dashboard / SQL Editor y no se automatiza desde frontend.
+
+### Nota de arquitectura (avatar y game_data)
+
+- `userAvatar` **no debe viajar** dentro de `game_data` en cloud sync.
+- El binario/archivo vive en Supabase Storage (`avatars`) y sólo se persiste la URL pública en `user_profiles.avatar_url`.

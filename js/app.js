@@ -353,6 +353,48 @@ function _fetchTimeSource(url, extract) {
 }
 
 /**
+ * Lee el encabezado HTTP Date del propio origen (Vercel) para tener una
+ * referencia de tiempo sin depender de CORS de terceros.
+ *
+ * @returns {Promise<number>} Timestamp en ms.
+ */
+async function _fetchServerDateHeader() {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), TIME_API_TIMEOUT);
+    try {
+        const res = await fetch('/', {
+            method: 'HEAD',
+            cache: 'no-store',
+            signal: ctrl.signal
+        });
+        const dateHeader = res.headers.get('date');
+        if (!dateHeader) throw new Error('Date header ausente');
+        const ts = new Date(dateHeader).getTime();
+        if (!Number.isFinite(ts)) throw new Error('Date header inválido');
+        return ts;
+    } finally {
+        clearTimeout(tid);
+    }
+}
+
+let _timeSyncInFlight = false;
+let _lastTimeSyncAt   = 0;
+const TIME_SYNC_MIN_INTERVAL = 30_000;
+
+function _scheduleTimeSync(delay = 0) {
+    setTimeout(() => {
+        if (_timeSyncInFlight) return;
+        if ((Date.now() - _lastTimeSyncAt) < TIME_SYNC_MIN_INTERVAL) return;
+        _timeSyncInFlight = true;
+        _syncTimeBackground()
+            .finally(() => {
+                _timeSyncInFlight = false;
+                _lastTimeSyncAt = Date.now();
+            });
+    }, delay);
+}
+
+/**
  * Sincroniza el caché de tiempo en segundo plano: consulta las APIs en
  * paralelo (Promise.any) y persiste el resultado SIN bloquear la UI.
  *
@@ -367,10 +409,7 @@ async function _syncTimeBackground() {
                 'https://timeapi.io/api/time/current/ip',
                 d => new Date(d.dateTime ?? d.datetime).getTime()
             ),
-            _fetchTimeSource(
-                'https://worldtimeapi.org/api/ip',
-                d => new Date(d.datetime).getTime()
-            )
+            _fetchServerDateHeader()
         ]);
 
         const drift    = networkTime - Date.now();
@@ -411,7 +450,7 @@ function getSyncWorker() {
  * la respuesta del worker. Múltiples llamadas concurrentes se resuelven de forma
  * independiente gracias a este id.
  *
- * @param {{ action: 'export'|'import', [key: string]: any }} payload
+ * @param {{ action: string, [key: string]: any }} payload
  * @returns {Promise<any>}
  */
 function workerTask(payload) {
@@ -429,6 +468,7 @@ function workerTask(payload) {
         worker.postMessage({ ...payload, id });
     });
 }
+window.workerTask = workerTask;
 
 // =====================================================
 // MIGRACIÓN SILENCIOSA
@@ -440,7 +480,6 @@ function migrateState(loadedStore) {
         coins:          CONFIG.initialCoins,
         progress:       { maze: [], wordsearch: [], secretWordsFound: [] },
         inventory:      {},
-        redeemedCodes:  [],   // Legado (texto plano): se conserva por historial
         redeemedHashes: [],   // v7.5: hashes SHA-256 de códigos canjeados
         history:        [],
         userAvatar:     null,
@@ -501,6 +540,16 @@ function migrateState(loadedStore) {
     if (typeof merged.missions.playtime     !== 'number') merged.missions.playtime     = 0;
     if (typeof merged.missions.games_played !== 'number') merged.missions.games_played = 0;
     if (!Array.isArray(merged.missions.claimed))          merged.missions.claimed      = [];
+
+    // v14.1 — Limpieza de legado: eliminar lista en texto plano ya obsoleta.
+    if (Object.prototype.hasOwnProperty.call(merged, 'redeemedCodes')) {
+        delete merged.redeemedCodes;
+    }
+
+    // v14.2 — Limpieza preventiva: no mantener DataURL heredado en estado persistido.
+    if (_isBase64Avatar(merged.userAvatar)) {
+        merged.userAvatar = null;
+    }
 
     return merged;
 }
@@ -567,10 +616,169 @@ function animateValue(elements, start, end, duration = 650) {
 function logTransaction(tipo, cantidad, motivo) {
     if (!Array.isArray(store.history)) store.history = [];
     store.history.push({ tipo, cantidad, motivo, fecha: Date.now() });
-    // Limitar a las últimas 150 entradas para no inflar el localStorage
-    if (store.history.length > 150) {
-        store.history = store.history.slice(-150);
+    // Limitar a las últimas 50 entradas para no inflar el localStorage
+    if (store.history.length > 50) {
+        store.history = store.history.slice(-50);
     }
+}
+
+const KB = 1024;
+const AVATAR_MAX_LOCAL_KB = 100;
+const AVATAR_CLEANUP_KB = 200;
+const STORE_WARNING_KB = 4000;
+
+function _isBase64Avatar(value) {
+    return typeof value === 'string' && value.startsWith('data:image/');
+}
+
+function _trackAvatarStorageFallback(reason, meta = {}) {
+    window.GhostAnalytics?.track(reason, {
+        component: 'avatar_upload',
+        ...meta
+    });
+}
+
+function _dataUrlToBlob(dataUrl) {
+    const [meta, base64] = String(dataUrl).split(',');
+    if (!meta || !base64) throw new Error('Formato de imagen inválido.');
+    const match = /data:(.*?);base64/.exec(meta);
+    const mime = match?.[1] || 'image/jpeg';
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+}
+
+function _blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+function compressImage(blob, maxWidth = 200, maxHeight = 200, quality = 0.7) {
+    return new Promise((resolve, reject) => {
+        try {
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+                const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+                const width = Math.max(1, Math.round(img.width * scale));
+                const height = Math.max(1, Math.round(img.height * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    URL.revokeObjectURL(url);
+                    reject(new Error('No se pudo comprimir la imagen.'));
+                    return;
+                }
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob((compressed) => {
+                    URL.revokeObjectURL(url);
+                    if (!compressed) {
+                        reject(new Error('No se pudo comprimir la imagen.'));
+                        return;
+                    }
+                    resolve(compressed);
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                reject(new Error('No se pudo procesar la imagen.'));
+            };
+            img.src = url;
+        } catch (err) {
+            reject(err);
+        }
+    });
+}
+
+function trimGameProgress() {
+    if (!store.progress || typeof store.progress !== 'object') return false;
+    let changed = false;
+    Object.keys(store.progress).forEach((gameId) => {
+        if (!Array.isArray(store.progress[gameId])) return;
+        if (store.progress[gameId].length > 50) {
+            store.progress[gameId] = store.progress[gameId].slice(-50);
+            changed = true;
+        }
+    });
+    return changed;
+}
+
+function _showStorageToast(message, type = 'warning') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast--${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('toast--visible'));
+    setTimeout(() => {
+        toast.classList.remove('toast--visible');
+        setTimeout(() => toast.remove(), 400);
+    }, 5200);
+}
+
+function emergencyCleanup() {
+    let changed = false;
+
+    if (_isBase64Avatar(store.userAvatar) && store.userAvatar.length > (AVATAR_CLEANUP_KB * KB)) {
+        store.userAvatar = null;
+        changed = true;
+    }
+
+    if (Array.isArray(store.history) && store.history.length > 30) {
+        store.history = store.history.slice(-30);
+        changed = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(store, 'redeemedCodes')) {
+        delete store.redeemedCodes;
+        changed = true;
+    }
+
+    if (trimGameProgress()) changed = true;
+
+    const serialized = JSON.stringify(store);
+    if (serialized.length > (4 * 1024 * 1024) && Array.isArray(store.history) && store.history.length) {
+        store.history = [];
+        changed = true;
+    }
+
+    return changed;
+}
+
+function checkStorageSize() {
+    try {
+        const sizeKB = JSON.stringify(store).length / KB;
+        if (sizeKB > STORE_WARNING_KB) {
+            window.GhostAnalytics?.track('storage_warning', { size_kb: Math.round(sizeKB) });
+            _showStorageToast(
+                'Tu progreso está cerca del límite de almacenamiento. Exporta tu partida y contacta soporte.',
+                'warning'
+            );
+            return sizeKB;
+        }
+        return sizeKB;
+    } catch (_) {
+        return 0;
+    }
+}
+
+async function _saveAvatarLocally(dataUrl) {
+    const sourceBlob = _dataUrlToBlob(dataUrl);
+    const compressed = await compressImage(sourceBlob, 200, 200, 0.7);
+    const finalDataUrl = await _blobToDataUrl(compressed);
+    const sizeKB = finalDataUrl.length / KB;
+    if (sizeKB > AVATAR_MAX_LOCAL_KB) {
+        throw new Error('Imagen demasiado grande. Usa una foto de menos de 100 KB.');
+    }
+    store.userAvatar = finalDataUrl;
+    saveState({ immediateCloudSync: true });
+    applyAvatar();
 }
 
 // =====================================================
@@ -614,7 +822,7 @@ window.GameCenter = {
             `Nivel ${levelId} completado · ${gameId}` +
             (finalAmount !== rewardAmount ? ' [multiplicador activo]' : '')
         );
-        saveState();
+        saveState({ immediateCloudSync: true });
 
         // [v11.0] Incrementar estadísticas diarias de misiones.
         window.GameCenter.incrementMissionStat('games_played', 1);
@@ -660,7 +868,7 @@ window.GameCenter = {
             logTransaction('ingreso', cashback, `Cashback: ${itemData.name}`);
         }
 
-        saveState();
+        saveState({ immediateCloudSync: true });
         return { success: true, finalPrice, cashback };
     },
 
@@ -679,7 +887,7 @@ window.GameCenter = {
         if (store.coins < n) return { success: false, reason: 'insufficient', coins: store.coins };
         store.coins -= n;
         logTransaction('gasto', n, motivo);
-        saveState();
+        saveState({ immediateCloudSync: true });
         return { success: true, coins: store.coins };
     },
 
@@ -702,7 +910,7 @@ window.GameCenter = {
         if (!Number.isFinite(n) || n <= 0) return { success: false, coins: store.coins };
         store.coins += n;
         logTransaction('ingreso', n, motivo);
-        saveState();
+        saveState({ immediateCloudSync: true });
         return { success: true, coins: store.coins };
     },
 
@@ -879,8 +1087,6 @@ window.GameCenter = {
 
         store.coins += reward;
         store.redeemedHashes.push(hash);
-        // Mantener compatibilidad con panel de historial antiguo
-        store.redeemedCodes.push(code);
         logTransaction('ingreso', reward, `Código canjeado`);
         saveState();
 
@@ -1190,7 +1396,75 @@ window.GameCenter = {
 
     // ── AVATAR ───────────────────────────────────────────────────────────────
 
-    setAvatar: (dataUrl) => { store.userAvatar = dataUrl; saveState(); applyAvatar(); },
+    setAvatar: async (dataUrl) => {
+        const session = window.Sentinel?.getSession?.();
+        const sbClient = window.Sentinel?.getClient?.();
+        const userId = session?.user?.id;
+        const bucket = 'avatars';
+
+        if (session && sbClient && userId) {
+            const path = `${userId}/profile.jpg`;
+            try {
+                const { data: authData, error: authError } = await sbClient.auth.getSession();
+                if (authError) throw authError;
+                const freshSession = authData?.session;
+                if (!freshSession?.access_token) {
+                    _trackAvatarStorageFallback('storage_no_session', { user_id: userId, bucket, path });
+                    console.error('[GameCenter] Avatar cloud upload cancelado por sesión ausente/expirada:', {
+                        hasSession: false,
+                        userId,
+                        path,
+                        bucket,
+                        message: 'Missing access token',
+                        statusCode: null
+                    });
+                    await _saveAvatarLocally(dataUrl);
+                    return { success: true, remote: false, reason: 'storage_no_session' };
+                }
+
+                const sourceBlob = _dataUrlToBlob(dataUrl);
+                const compressed = await compressImage(sourceBlob, 200, 200, 0.7);
+                const { error: uploadError } = await sbClient
+                    .storage
+                    .from(bucket)
+                    .upload(path, compressed, {
+                        cacheControl: '3600',
+                        upsert: true,
+                        contentType: 'image/jpeg'
+                    });
+                if (uploadError) throw uploadError;
+
+                const { data } = sbClient.storage.from(bucket).getPublicUrl(path);
+                if (!data?.publicUrl) throw new Error('No se pudo generar URL pública del avatar.');
+                store.userAvatar = data.publicUrl;
+                saveState({ immediateCloudSync: true });
+                applyAvatar();
+                return { success: true, remote: true, url: data.publicUrl };
+            } catch (err) {
+                const statusCode = err?.statusCode || err?.status || null;
+                const message = err?.message || String(err);
+                const fallbackReason = Number(statusCode) === 403
+                    ? 'storage_forbidden_rls'
+                    : 'storage_network';
+                _trackAvatarStorageFallback(fallbackReason, { user_id: userId, bucket, path, status_code: statusCode });
+                console.error('[GameCenter] Error detallado al subir avatar a Supabase Storage:', {
+                    hasSession: Boolean(session),
+                    userId,
+                    path,
+                    bucket,
+                    message,
+                    name: err?.name || 'StorageError',
+                    statusCode,
+                    details: err?.details || null,
+                    hint: err?.hint || null
+                });
+                console.warn('[GameCenter] Avatar cloud upload falló, usando fallback local:', message);
+            }
+        }
+
+        await _saveAvatarLocally(dataUrl);
+        return { success: true, remote: false };
+    },
     getAvatar: ()        => store.userAvatar,
 
     // Alias de compatibilidad — mantenido por si juegos externos llaman a activateMoonBlessing().
@@ -1379,9 +1653,87 @@ window.MailHelper = {
 // FUNCIONES INTERNAS
 // =====================================================
 
-function saveState() {
-    localStorage.setItem(CONFIG.stateKey, JSON.stringify(store));
+let _pendingSyncRetries = 0;
+let _cloudSyncRetryTimer = null;
+const MAX_SYNC_RETRIES = 3;
+const SYNC_RETRY_DELAY = 500;
+
+function _scheduleImmediateCloudRetry() {
+    if (_pendingSyncRetries >= MAX_SYNC_RETRIES) return;
+    if (_cloudSyncRetryTimer) return;
+    _pendingSyncRetries += 1;
+    _cloudSyncRetryTimer = setTimeout(() => {
+        _cloudSyncRetryTimer = null;
+        _syncCloudIfNeeded(true);
+    }, SYNC_RETRY_DELAY);
+}
+
+function _syncCloudIfNeeded(immediate = false) {
+    const sentinel = window.Sentinel;
+    if (!sentinel?.getStatus) {
+        if (immediate) _scheduleImmediateCloudRetry();
+        return;
+    }
+    try {
+        const status = sentinel.getStatus();
+        if (status?.hasSession) {
+            _pendingSyncRetries = 0;
+            if (_cloudSyncRetryTimer) {
+                clearTimeout(_cloudSyncRetryTimer);
+                _cloudSyncRetryTimer = null;
+            }
+            if (immediate && sentinel.syncNow) sentinel.syncNow();
+            return;
+        }
+        if (immediate) _scheduleImmediateCloudRetry();
+    } catch (_) {}
+}
+
+document.addEventListener('la:cloud-authenticated', () => {
+    if (_pendingSyncRetries > 0) _syncCloudIfNeeded(true);
+});
+
+function saveState(options = {}) {
+    const { immediateCloudSync = false } = options;
+    let payload = JSON.stringify(store);
+    if (payload.length > (STORE_WARNING_KB * KB)) {
+        trimGameProgress();
+        payload = JSON.stringify(store);
+    }
+
+    try {
+        localStorage.setItem(CONFIG.stateKey, payload);
+    } catch (e) {
+        if (e?.name === 'QuotaExceededError') {
+            const changed = emergencyCleanup();
+            try {
+                localStorage.setItem(CONFIG.stateKey, JSON.stringify(store));
+                window.GhostAnalytics?.track('storage_cleaned', {
+                    reason: 'quota_exceeded',
+                    cleaned: changed
+                });
+            } catch (retryError) {
+                console.error('GameCenter: No se pudo guardar estado tras cleanup', retryError);
+                _showStorageToast(
+                    'No se puede guardar el progreso. Exporta tu partida y borra datos del sitio.',
+                    'error'
+                );
+                if (Array.isArray(store.history) && store.history.length) {
+                    store.history = [];
+                    try {
+                        localStorage.setItem(CONFIG.stateKey, JSON.stringify(store));
+                    } catch (_) {}
+                }
+                return;
+            }
+        } else {
+            throw e;
+        }
+    }
+
     updateUI();
+    _syncCloudIfNeeded(immediateCloudSync);
+    checkStorageSize();
 }
 
 /**
@@ -1610,6 +1962,12 @@ window.revealUI = revealUI;
 //    añade la clase theme-{key} al <body> y actualiza los botones de ajustes.
 applyTheme(store.theme || 'violet');
 
+if (_isBase64Avatar(store.userAvatar) && store.userAvatar.length > (AVATAR_CLEANUP_KB * KB)) {
+    store.userAvatar = null;
+    window.GhostAnalytics?.track('storage_cleaned', { reason: 'avatar_too_large' });
+    saveState();
+}
+
 // 2. SALDO — escribe el valor formateado síncronamente.
 //    El .coin-badge tiene opacity:0 por CSS; nunca pintará el "0" del HTML.
 _displayedCoins = store.coins;
@@ -1680,38 +2038,68 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cada segundo que la pestaña esté visible se suma 1 al contador de playtime.
     // El guardado en localStorage se realiza cada 60 s para no saturar el disco.
     let _missionSaveTimer = 0;
-    setInterval(() => {
-        if (document.visibilityState !== 'visible') return;
-        window.GameCenter.incrementMissionStat('playtime', 1);
-        _missionSaveTimer++;
+    let _playtimeTicker = null;
+    let _visibleStartedAt = document.visibilityState === 'visible' ? Date.now() : 0;
+
+    const flushVisiblePlaytime = () => {
+        if (!_visibleStartedAt) return;
+        const elapsedSec = Math.floor((Date.now() - _visibleStartedAt) / 1000);
+        if (elapsedSec <= 0) return;
+        window.GameCenter.incrementMissionStat('playtime', elapsedSec);
+        _visibleStartedAt += elapsedSec * 1000;
+        _missionSaveTimer += elapsedSec;
         if (_missionSaveTimer >= 60) {
             _missionSaveTimer = 0;
-            saveState(); // Persistir playtime acumulado cada minuto
+            saveState(); // Persistir playtime acumulado por lotes
         }
-    }, 1_000);
+    };
+
+    const startPlaytimeTicker = () => {
+        if (_playtimeTicker) return;
+        _visibleStartedAt = Date.now();
+        _playtimeTicker = setInterval(flushVisiblePlaytime, 15_000);
+    };
+
+    const stopPlaytimeTicker = () => {
+        flushVisiblePlaytime();
+        clearInterval(_playtimeTicker);
+        _playtimeTicker = null;
+        _visibleStartedAt = 0;
+    };
+
+    if (document.visibilityState === 'visible') startPlaytimeTicker();
 
     // ── Background time sync (v9.6) ───────────────────────────────────────
     // Se lanza 800 ms después del DOMContentLoaded para no competir con el
     // primer paint. El resultado se almacena en TIME_CACHE_KEY y será leído
     // por claimDaily() de forma síncrona, sin espera de red en el reclamo.
-    setTimeout(_syncTimeBackground, 800);
+    _scheduleTimeSync(800);
 
     // Actualizar el caché cuando el usuario vuelve a la pestaña
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') _syncTimeBackground();
+        if (document.visibilityState === 'visible') {
+            startPlaytimeTicker();
+            _scheduleTimeSync(250);
+        } else {
+            stopPlaytimeTicker();
+        }
     });
 
     // Refresco periódico cada 30 min por si la app permanece abierta mucho tiempo
-    setInterval(_syncTimeBackground, 30 * 60 * 1000);
+    setInterval(() => _scheduleTimeSync(), 30 * 60 * 1000);
 
     // Avatar upload — delegado único
-    document.addEventListener('change', (e) => {
+    document.addEventListener('change', async (e) => {
         if (e.target.id === 'avatar-upload' || e.target.id === 'avatar-upload-hud') {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = (evt) => {
-                window.GameCenter.setAvatar(evt.target.result);
+            reader.onload = async (evt) => {
+                try {
+                    await window.GameCenter.setAvatar(evt.target.result);
+                } catch (err) {
+                    _showStorageToast(err?.message || 'No se pudo guardar el avatar.', 'error');
+                }
             };
             reader.readAsDataURL(file);
         }
@@ -1761,3 +2149,921 @@ document.addEventListener('DOMContentLoaded', () => {
     // La Bendición Lunar es un elemento de la vista Tienda; su handler vive
     // exclusivamente en shop-logic.js para evitar el doble-registro de eventos.
 });
+// =====================================================
+// ☁️  SENTINEL CLOUD SYNC — v14.0
+// ─────────────────────────────────────────────────────────────────────────────
+// Arquitectura: Patrón "Sentinel" (Observador)
+//
+// El Sentinel actúa como una capa de persistencia en la nube que espeja el
+// localStorage sin modificar el código de los juegos. Todos los minijuegos
+// corren bajo el mismo origen (subcarpetas), por lo que comparten acceso al
+// mismo localStorage. El Sentinel observa cambios en las claves críticas,
+// los empaqueta en un objeto JSONB y los sube a Supabase con debounce.
+//
+// Flujo principal:
+//  1. init: obtiene credenciales de /api/client-config → crea cliente Supabase
+//  2. onAuthStateChange: detecta sesión activa (Email/Password)
+//     → al SIGNED_IN: descarga perfil de la nube y aplica Last Write Wins
+//  3. StorageInterceptor: intercepta localStorage.setItem para claves vigiladas
+//     → dispara _sentinelScheduleSync() con debounce de 3 s
+//  4. _sentinelSync(): sube snapshot de todas las claves vigiladas a Supabase
+//
+// Resolución de conflictos — Last Write Wins (timestamp):
+//  · Al iniciar sesión se compara updated_at de la BD con la marca local.
+//  · Si la nube es más reciente, se sobreescribe el localStorage local.
+//  · Si el local es más reciente (o igual), la nube se actualiza al subir.
+//
+// Claves vigiladas (SENTINEL_WATCHED_KEYS):
+//  Hub:            gamecenter_v6_promos
+//  Word Hunt:      la_ws_completedLevels, la_ws_state
+//  Rompecabezas:   puz_arcade_progress, puz_arcade_unlocked
+//  2048 Lumina:    LUMINA_bestScore, LUMINA_gameState
+//  Space Shooter:  la_shooter_highscore, la_shooter_settings
+//  Ollin Smash:    OS_highscore
+//  Jungle Dash:    JD_highscore, JD_muted
+//  Dodger:         dodger_highscore, dodger_skin, dodger_muted
+//
+// Supabase SQL (ejecutar una sola vez en el editor de Supabase):
+// ─────────────────────────────────────────────────────────────────────────────
+//  create table user_profiles (
+//    id          uuid references auth.users primary key,
+//    game_data   jsonb not null default '{}',
+//    updated_at  timestamptz not null default now()
+//  );
+//  alter table user_profiles enable row level security;
+//  create policy "own_select" on user_profiles for select  using (auth.uid()=id);
+//  create policy "own_insert" on user_profiles for insert  with check (auth.uid()=id);
+//  create policy "own_update" on user_profiles for update  using (auth.uid()=id);
+// =====================================================
+
+(function SentinelCloudSync() {
+    'use strict';
+
+    // ── Claves a observar y sincronizar ──────────────────────────────────────
+    const SENTINEL_WATCHED_KEYS = new Set([
+        'gamecenter_v6_promos',    // Hub principal — monedas, inventario, racha
+        'la_ws_completedLevels',   // Word Hunt — niveles completados
+        'la_ws_state',             // Word Hunt — estado de sesión
+        'puz_arcade_progress',     // Rompecabezas — progreso
+        'puz_arcade_unlocked',     // Rompecabezas — niveles desbloqueados
+        'LUMINA_bestScore',        // 2048 Lumina — mejor puntuación
+        'LUMINA_gameState',        // 2048 Lumina — estado de partida
+        'la_shooter_highscore',    // Space Shooter — récord
+        'la_shooter_settings',     // Space Shooter — configuración
+        'OS_highscore',            // Ollin Smash — récord
+        'JD_highscore',            // Jungle Dash — récord
+        'JD_muted',                // Jungle Dash — silencio
+        'dodger_highscore',        // Dodger — récord
+        'dodger_skin',             // Dodger — skin activa
+        'dodger_muted',            // Dodger — silencio
+    ]);
+
+    // Clave del registro de marca de tiempo local (para Last Write Wins)
+    const SENTINEL_TS_KEY = 'love_arcade_sentinel_ts';
+    const SENTINEL_GUEST_KEY = 'love_arcade_guest_mode';
+
+    // Tabla de Supabase
+    const SUPABASE_TABLE = 'user_profiles';
+
+    // Estado interno del Sentinel
+    let _sbClient   = null;   // Cliente Supabase inicializado
+    let _sbSession  = null;   // Sesión de usuario activa
+    let _syncTimer  = null;   // Timer de debounce
+    let _scheduledSyncPriority = null; // 'high' | 'passive' | null
+    let _isSyncing  = false;  // Mutex de subida activa
+    let _isRestoringSession = false; // Evita sobrescrituras durante hidratación inicial
+    let _hasUnsyncedChanges = false; // Dirty flag local (incluye cambios cross-tab)
+    const HIGH_PRIORITY_DEBOUNCE_MS = 1_000;
+    const PASSIVE_PRIORITY_DEBOUNCE_MS = 60_000;
+
+    const HIGH_PRIORITY_KEYS = new Set([
+        CONFIG.stateKey,              // gamecenter_v6_promos
+        'gamecenter_v6_promos',
+        'love_arcade_inventory',
+        'LUMINA_bestScore',
+        'love_arcade_settings',
+    ]);
+
+    const PASSIVE_PRIORITY_KEYS = new Set([
+        'love_arcade_missions',
+        'LUMINA_gameState',
+        SENTINEL_TS_KEY,
+    ]);
+
+    function _getCloudAvatarUrl() {
+        try {
+            const avatar = window.GameCenter?.getAvatar?.();
+            if (typeof avatar !== 'string') return null;
+            if (_isBase64Avatar(avatar)) return null;
+            return /^https?:\/\//i.test(avatar) ? avatar : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    // ── Utilidades de UI ─────────────────────────────────────────────────────
+
+    function _setStatusBadge(state) {
+        const dot  = document.getElementById('cloud-status-dot');
+        const text = document.getElementById('cloud-status-text');
+        const badge = document.getElementById('cloud-status-badge');
+        if (!dot || !text) return;
+
+        const STATES = {
+            inactive:  { color: 'var(--text-low)',  label: 'Inactivo' },
+            connected: { color: '#63b3ed',           label: 'Conectado' },
+            syncing:   { color: '#f6ad55',           label: 'Sincronizando…' },
+            synced:    { color: '#68d391',           label: 'Sincronizado' },
+            error:     { color: '#fc8181',           label: 'Error' },
+        };
+        const s = STATES[state] || STATES.inactive;
+        dot.style.background = s.color;
+        text.textContent     = s.label;
+        if (badge) badge.style.color = s.color;
+    }
+
+    function _setLoginMsg(msg, isError = false) {
+        const el = document.getElementById('cloud-login-msg');
+        if (!el) return;
+        el.textContent  = msg;
+        el.style.color  = isError ? 'var(--error, #fc8181)' : '#68d391';
+    }
+
+    function _setSyncMsg(msg, isError = false) {
+        const el = document.getElementById('cloud-sync-msg');
+        if (!el) return;
+        el.textContent = msg;
+        el.style.color = isError ? 'var(--error, #fc8181)' : '#68d391';
+    }
+
+    function _setLastSyncLabel(isoStr) {
+        const el = document.getElementById('cloud-last-sync');
+        if (!el) return;
+        if (!isoStr) {
+            el.textContent = 'Última sincronización: —-';
+            return;
+        }
+        const d = new Date(isoStr);
+        el.textContent = `Última sincronización: ${d.toLocaleString('es-MX', {
+            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+        })}`;
+    }
+
+    function _setAccountStateLabel(isOnline) {
+        const el = document.getElementById('cloud-account-state');
+        if (!el) return;
+        el.textContent = isOnline ? 'Estado: En línea' : 'Estado: Invitado';
+        el.style.color = isOnline ? '#68d391' : 'var(--text-low)';
+    }
+
+    function _setSessionEmail(email) {
+        const el = document.getElementById('cloud-session-email');
+        if (el) el.textContent = email || '';
+    }
+
+    function _setGuestMode(active) {
+        if (active) _originalSetItem(SENTINEL_GUEST_KEY, '1');
+        else localStorage.removeItem(SENTINEL_GUEST_KEY);
+    }
+
+    function _isGuestMode() {
+        return localStorage.getItem(SENTINEL_GUEST_KEY) === '1';
+    }
+
+    // ── Snapshot — lectura/escritura del estado vigilado ─────────────────────
+
+    /**
+     * Lee todas las claves vigiladas del localStorage y las empaqueta
+     * en un objeto plano { key: value_string }.
+     * El valor se almacena como string (igual que localStorage).
+     */
+    function _buildSnapshot() {
+        const snap = {};
+        SENTINEL_WATCHED_KEYS.forEach(key => {
+            const val = localStorage.getItem(key);
+            if (val === null) return;
+
+            // Evitar subir userAvatar dentro de game_data:
+            // el avatar cloud vive en user_profiles.avatar_url y el binario en Storage.
+            if ((key === CONFIG.stateKey || key === 'gamecenter_v6_promos') && typeof val === 'string') {
+                try {
+                    const parsed = JSON.parse(val);
+                    if (parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, 'userAvatar')) {
+                        const sanitized = { ...parsed };
+                        delete sanitized.userAvatar;
+                        snap[key] = JSON.stringify(sanitized);
+                        return;
+                    }
+                } catch (_) {
+                    // Si no es JSON válido, se conserva el valor tal cual.
+                }
+            }
+            snap[key] = val;
+        });
+        return snap;
+    }
+
+    /**
+     * Escribe un snapshot (recibido de la nube) en el localStorage local.
+     * Solo toca las claves que están en SENTINEL_WATCHED_KEYS y que
+     * están presentes en el snapshot. No borra claves ausentes.
+     *
+     * IMPORTANTE: usa el setItem ORIGINAL (pre-interceptor) para no
+     * disparar el debounce mientras aplicamos datos de la nube.
+     */
+    function _applySnapshot(snap) {
+        if (!snap || typeof snap !== 'object') return;
+        SENTINEL_WATCHED_KEYS.forEach(key => {
+            if (Object.prototype.hasOwnProperty.call(snap, key) && snap[key] !== null) {
+                _originalSetItem(key, snap[key]);
+            }
+        });
+        _rehydrateHubStoreFromDisk();
+        // Emitir evento para que los módulos sepan que el store fue reemplazado
+        document.dispatchEvent(new CustomEvent('la:cloudsynced', { detail: { source: 'cloud' } }));
+    }
+
+    function _rehydrateHubStoreFromDisk() {
+        try {
+            const raw = localStorage.getItem(CONFIG.stateKey);
+            if (raw) {
+                store = migrateState(JSON.parse(raw));
+                window.GameCenter?.syncUI?.();
+            }
+        } catch (_) {}
+    }
+
+    // ── Sincronización hacia la nube ──────────────────────────────────────────
+
+    /**
+     * Sube el snapshot actual a Supabase (upsert).
+     * Guarda la marca de tiempo local del envío para Last Write Wins.
+     */
+    async function _sentinelSync() {
+        if (!_sbClient || !_sbSession || _isRestoringSession) return;
+        if (_isSyncing) return; // Evitar doble subida simultánea
+        _isSyncing = true;
+        _setStatusBadge('syncing');
+
+        try {
+            const snap       = _buildSnapshot();
+            const now        = new Date().toISOString();
+            const userId     = _sbSession.user.id;
+            const nickname   = window.GameCenter?.getIdentity?.()?.nickname || '';
+            const avatar_url = _getCloudAvatarUrl();
+
+            const { error } = await _sbClient
+                .from(SUPABASE_TABLE)
+                .upsert(
+                    { id: userId, game_data: snap, nickname, avatar_url, updated_at: now },
+                    { onConflict: 'id' }
+                );
+
+            if (error) throw error;
+
+            // Guardar marca de tiempo local
+            _originalSetItem(SENTINEL_TS_KEY, now);
+            _setStatusBadge('synced');
+            _setSyncMsg('¡Progreso guardado en la nube! ✓');
+            _setLastSyncLabel(now);
+            _hasUnsyncedChanges = false;
+            document.dispatchEvent(new CustomEvent('la:synced', {
+                detail: { at: now, source: 'sentinel-upsert' }
+            }));
+
+            // Limpiar mensaje tras 4 s
+            setTimeout(() => _setSyncMsg(''), 4_000);
+        } catch (err) {
+            console.error('[Sentinel] Error al sincronizar:', err);
+            _setStatusBadge('error');
+            _setSyncMsg('Error al sincronizar. Reintentando…', true);
+            // Reintentar en 30 s
+            setTimeout(() => _sentinelScheduleSync(0), 30_000);
+        } finally {
+            _isSyncing = false;
+        }
+    }
+
+    /**
+     * Programa una sincronización con debounce.
+     * Cada llamada reinicia el timer; la subida ocurre sólo cuando el
+     * usuario lleva `delay` ms sin escribir en localStorage.
+     * @param {number} [delay=HIGH_PRIORITY_DEBOUNCE_MS]
+     */
+    function _sentinelScheduleSync(delay = HIGH_PRIORITY_DEBOUNCE_MS) {
+        if (!_sbSession || _isRestoringSession) return;
+        clearTimeout(_syncTimer);
+        if (document.hidden) {
+            _sentinelSync();
+            return;
+        }
+        _scheduledSyncPriority = delay <= HIGH_PRIORITY_DEBOUNCE_MS ? 'high' : 'passive';
+        _syncTimer = setTimeout(() => {
+            _syncTimer = null;
+            _scheduledSyncPriority = null;
+            _sentinelSync();
+        }, delay);
+    }
+
+    function _isMissionsOnlyDelta(prevRaw, nextRaw) {
+        try {
+            if (!prevRaw || !nextRaw) return false;
+            const prev = migrateState(JSON.parse(prevRaw));
+            const next = migrateState(JSON.parse(nextRaw));
+            const prevM = prev?.missions || {};
+            const nextM = next?.missions || {};
+            const missionsChanged = JSON.stringify(prevM) !== JSON.stringify(nextM);
+            if (!missionsChanged) return false;
+            prev.missions = { ...prevM, playtime: 0, games_played: 0 };
+            next.missions = { ...nextM, playtime: 0, games_played: 0 };
+            return JSON.stringify(prev) === JSON.stringify(next);
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function _resolveSyncPriority(key, prevValue, nextValue) {
+        if ((key === CONFIG.stateKey || key === 'gamecenter_v6_promos') && _isMissionsOnlyDelta(prevValue, nextValue)) {
+            return 'passive';
+        }
+        if (HIGH_PRIORITY_KEYS.has(key)) return 'high';
+        if (PASSIVE_PRIORITY_KEYS.has(key)) return 'passive';
+        return 'passive'; // resto de claves vigiladas
+    }
+
+    function _sentinelScheduleSyncForKey(key, prevValue = null, nextValue = null) {
+        if (!_sbSession) return;
+        const priority = _resolveSyncPriority(key, prevValue, nextValue);
+        if (priority === 'high') {
+            _sentinelScheduleSync(HIGH_PRIORITY_DEBOUNCE_MS);
+            return;
+        }
+        // Prioridad pasiva: sólo programar si no hay sync pendiente.
+        if (_syncTimer) return;
+        _sentinelScheduleSync(PASSIVE_PRIORITY_DEBOUNCE_MS);
+    }
+
+    // ── Carga/merge desde la nube — Sentinel v14.0 ──────────────────────────
+
+    async function _migrateGuestData(cloudData = {}) {
+        if (!_sbClient || !_sbSession) return cloudData || {};
+
+        const localGuestData = _buildSnapshot();
+        const hasGuestProgress = Object.keys(localGuestData).length > 0;
+        if (!hasGuestProgress) {
+            _setGuestMode(false);
+            return cloudData || {};
+        }
+
+        const mergedData = { ...(cloudData || {}), ...localGuestData };
+        const now = new Date().toISOString();
+        const userId = _sbSession.user.id;
+        const nickname = window.GameCenter?.getIdentity?.()?.nickname || '';
+        const avatar_url = _getCloudAvatarUrl();
+        const { error } = await _sbClient
+            .from(SUPABASE_TABLE)
+            .upsert({ id: userId, game_data: mergedData, nickname, avatar_url, updated_at: now }, { onConflict: 'id' });
+        if (error) throw error;
+
+        _originalSetItem(SENTINEL_TS_KEY, now);
+        _setGuestMode(false);
+        _hasUnsyncedChanges = false;
+        _setSyncMsg('Progreso de invitad@ migrado a la nube ✓');
+        _setLastSyncLabel(now);
+        document.dispatchEvent(new CustomEvent('la:synced', {
+            detail: { at: now, source: 'guest-migration' }
+        }));
+
+        return mergedData;
+    }
+
+    async function _handleAuthChange(event, session) {
+        if (!_sbClient) return;
+
+        if (!session) {
+            _sbSession = null;
+            _setStatusBadge('inactive');
+            _setSessionEmail('');
+            clearTimeout(_syncTimer);
+            return;
+        }
+
+        _sbSession = session;
+        _isRestoringSession = true;
+        _setSessionEmail(session.user?.email || '');
+        _setStatusBadge('connected');
+
+        try {
+            const userId = session.user.id;
+            const { data, error } = await _sbClient
+                .from(SUPABASE_TABLE)
+                .select('game_data, updated_at, nickname, avatar_url')
+                .eq('id', userId)
+                .maybeSingle();
+            if (error) throw error;
+
+            if (data?.nickname && !window.GameCenter?.hasIdentity?.()) {
+                window.GameCenter?.setIdentity?.(data.nickname, '@');
+            }
+            if (data?.avatar_url && typeof data.avatar_url === 'string') {
+                const avatar = data.avatar_url.trim();
+                if (avatar) {
+                    store.userAvatar = avatar;
+                    saveState();
+                }
+            }
+
+            let effectiveData = data?.game_data || {};
+            if (_isGuestMode() && event === 'SIGNED_IN') {
+                effectiveData = await _migrateGuestData(effectiveData);
+            }
+
+            const localRawTs = localStorage.getItem(SENTINEL_TS_KEY);
+            const _safeTs = (iso) => {
+                const t = iso ? new Date(iso).getTime() : 0;
+                return Number.isFinite(t) ? t : 0;
+            };
+            const localTime = _safeTs(localRawTs);
+            const cloudTime = _safeTs(data?.updated_at);
+            const localSnapshot = _buildSnapshot();
+            const hasLocalSnapshot = Object.keys(localSnapshot).length > 0;
+            const hasCloudSnapshot = effectiveData && Object.keys(effectiveData).length > 0;
+            const snapshotsDiffer = hasLocalSnapshot && hasCloudSnapshot
+                && JSON.stringify(localSnapshot) !== JSON.stringify(effectiveData);
+
+            if (hasCloudSnapshot && cloudTime > localTime) {
+                _applySnapshot(effectiveData);
+                _originalSetItem(SENTINEL_TS_KEY, data.updated_at);
+                _setLastSyncLabel(data.updated_at);
+                _setSyncMsg('Progreso cloud restaurado (más reciente) ✓');
+                setTimeout(() => _setSyncMsg(''), 4_000);
+            } else if (hasLocalSnapshot && (!hasCloudSnapshot || localTime > cloudTime || (localTime === cloudTime && snapshotsDiffer))) {
+                await _sentinelSync();
+            } else if (hasCloudSnapshot) {
+                _setLastSyncLabel(data?.updated_at || localRawTs);
+            }
+
+            _setAccountStateLabel(true);
+            _setStatusBadge('synced');
+            document.dispatchEvent(new CustomEvent('la:cloud-authenticated'));
+        } catch (err) {
+            console.error('[Sentinel] Error al procesar auth change:', err);
+            _setStatusBadge('error');
+            _setSyncMsg('No se pudo sincronizar al iniciar sesión.', true);
+        } finally {
+            _isRestoringSession = false;
+            if (_sbSession && _hasUnsyncedChanges) {
+                _sentinelScheduleSync(PASSIVE_PRIORITY_DEBOUNCE_MS);
+            }
+        }
+    }
+
+    // ── StorageInterceptor ────────────────────────────────────────────────────
+
+    // Referencia al setItem ORIGINAL antes de ser interceptado.
+    // Se usa en _applySnapshot() para evitar re-disparar el debounce.
+    const _originalSetItem = localStorage.setItem.bind(localStorage);
+
+    /**
+     * Intercepta localStorage.setItem.
+     * Si la clave pertenece a SENTINEL_WATCHED_KEYS y hay sesión activa,
+     * programa una sincronización con debounce.
+     * El valor se escribe normalmente en localStorage independientemente.
+     */
+    localStorage.setItem = function interceptedSetItem(key, value) {
+        const prevValue = localStorage.getItem(key);
+        _originalSetItem(key, value);
+        if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession && !_isRestoringSession) {
+            _hasUnsyncedChanges = true;
+            _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
+            _sentinelScheduleSyncForKey(key, prevValue, value);
+        }
+    };
+
+    // ── Cross-tab bridge: detectar writes desde otras pestañas ───────────────
+    // El evento 'storage' NO se dispara en la pestaña que ejecuta setItem,
+    // sólo en el resto de pestañas del mismo origen (ej: Hub abierto + juego).
+    window.addEventListener('storage', (event) => {
+        if (!event?.key) return;
+        if (event.key === CONFIG.stateKey) {
+            _rehydrateHubStoreFromDisk();
+        }
+        if (!SENTINEL_WATCHED_KEYS.has(event.key)) return;
+        _rehydrateHubStoreFromDisk();
+        _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
+        _hasUnsyncedChanges = true;
+        if (!_sbSession || _isRestoringSession) return; // Invitado o sesión no restaurada → ignorar sync cloud
+        console.log(`[Sentinel] Cambio detectado en pestaña externa (${event.key}). Sincronizando...`);
+        _sentinelScheduleSyncForKey(event.key, event.oldValue, event.newValue);
+    });
+
+    // ── Autenticación — onAuthStateChange ────────────────────────────────────
+
+    function _handleSignOut() {
+        _sbSession = null;
+        _isRestoringSession = false;
+        _hasUnsyncedChanges = false;
+        _setStatusBadge('inactive');
+        _setSessionEmail('');
+        _setAccountStateLabel(false);
+        clearTimeout(_syncTimer);
+        document.dispatchEvent(new CustomEvent('la:cloud-signedout'));
+    }
+
+    // ── Inicialización ────────────────────────────────────────────────────────
+
+    async function _sentinelInit() {
+        // 1. Obtener credenciales desde el proxy seguro
+        let supabaseUrl, supabaseKey;
+        try {
+            const res = await fetch('/api/client-config', { cache: 'no-store' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const cfg = await res.json();
+            supabaseUrl = cfg.supabaseUrl;
+            supabaseKey = cfg.supabaseKey;
+        } catch (err) {
+            console.warn('[Sentinel] No se pudieron obtener credenciales de nube:', err.message);
+            return; // Degradación elegante — funciona sin nube
+        }
+
+        if (!supabaseUrl || !supabaseKey) {
+            console.warn('[Sentinel] Variables de entorno de Supabase no configuradas en Vercel.');
+            return;
+        }
+
+        // 2. Crear cliente Supabase
+        try {
+            _sbClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+        } catch (err) {
+            console.error('[Sentinel] Error creando cliente Supabase:', err);
+            return;
+        }
+
+        // 3. Escuchar cambios de sesión
+        _sbClient.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_OUT') {
+                _handleSignOut();
+                return;
+            }
+            _handleAuthChange(event, session);
+        });
+
+        // 4. Recuperar sesión existente (para recargas de página)
+        const { data: { session } } = await _sbClient.auth.getSession();
+        if (session && !_sbSession) _handleAuthChange('INITIAL_SESSION', session);
+    }
+
+    // ── Listeners de UI ──────────────────────────────────────────────────────
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const gateModal = document.getElementById('cloud-gatekeeper-modal');
+        const gateBox = gateModal?.querySelector('.cloud-gatekeeper-modal-box');
+        const gateMsgEl = document.getElementById('cloud-gatekeeper-msg');
+        const gateTabs = Array.from(document.querySelectorAll('[data-gate-tab]'));
+        const gatePanels = Array.from(document.querySelectorAll('[data-gate-panel]'));
+        const gateTabsWrap = gateModal?.querySelector('.cloud-gatekeeper-tabs');
+        const emailForm = document.getElementById('cloud-email-form');
+        const passwordForm = document.getElementById('cloud-password-form');
+        const registerForm = document.getElementById('cloud-register-form');
+        const loginForm = document.getElementById('cloud-login-form');
+        const registerSubmitBtn = document.getElementById('btn-cloud-register');
+        const changePasswordSubmitBtn = document.getElementById('btn-cloud-change-password-submit');
+        const emailBanner = document.getElementById('cloud-email-change-banner');
+        let gateLocked = false;
+
+        const PASSPHRASE_MIN_LENGTH = 16;
+        const secureChars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789-_.!@#$%^&*+=';
+        const createPassphraseStrengthUpdater = (inputId, barId, submitBtn) => {
+            const input = document.getElementById(inputId);
+            const bar = document.getElementById(barId);
+            if (!input || !bar || !submitBtn) return () => false;
+
+            const refresh = () => {
+                const length = (input.value || '').length;
+                const ratio = Math.max(0, Math.min(1, length / PASSPHRASE_MIN_LENGTH));
+                bar.style.width = `${Math.round(ratio * 100)}%`;
+                if (ratio < 0.5) bar.style.background = 'linear-gradient(90deg, #f56565, #ed8936)';
+                else if (ratio < 1) bar.style.background = 'linear-gradient(90deg, #ed8936, #f6e05e)';
+                else bar.style.background = 'linear-gradient(90deg, #84f08f, #39ff88)';
+                submitBtn.disabled = length < PASSPHRASE_MIN_LENGTH;
+                return length >= PASSPHRASE_MIN_LENGTH;
+            };
+
+            input.addEventListener('input', refresh);
+            refresh();
+            return refresh;
+        };
+        const generateSecurePassword = (length = 24) => {
+            const values = new Uint32Array(length);
+            window.crypto.getRandomValues(values);
+            return Array.from(values, (value) => secureChars[value % secureChars.length]).join('');
+        };
+        const bindPasswordGenerator = (buttonId, inputId, refreshFn) => {
+            const button = document.getElementById(buttonId);
+            const input = document.getElementById(inputId);
+            if (!button || !input) return;
+            button.addEventListener('click', async () => {
+                const generated = generateSecurePassword();
+                input.type = 'text';
+                input.value = generated;
+                refreshFn?.();
+                window.setTimeout(() => {
+                    if (input.value === generated) input.type = 'password';
+                }, 10000);
+                try {
+                    await navigator.clipboard.writeText(generated);
+                    _showStorageToast('Contraseña copiada. Por favor, asegúrate de guardarla en un lugar seguro (como un gestor de contraseñas).', 'warning');
+                } catch (_) {
+                    _showStorageToast('Se generó una contraseña segura, pero no se pudo copiar automáticamente al portapapeles.', 'warning');
+                }
+            });
+        };
+        const bindPasswordToggle = () => {
+            document.querySelectorAll('[data-password-toggle]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const input = document.getElementById(btn.dataset.passwordToggle || '');
+                    if (!input) return;
+                    input.type = input.type === 'password' ? 'text' : 'password';
+                });
+            });
+        };
+        bindPasswordToggle();
+
+        const simplifyGateError = (rawMsg = '') => {
+            const msg = String(rawMsg || '').toLowerCase();
+            if (!msg) return 'No se pudo completar la acción. Inténtalo de nuevo.';
+            if (msg.includes('invalid login credentials')) return 'Correo o contraseña incorrectos.';
+            if (msg.includes('email not confirmed')) return 'Revisa tu correo y confirma tu cuenta para continuar.';
+            if (msg.includes('user already registered')) return 'Ese correo ya tiene una cuenta.';
+            if (msg.includes('password should be at least')) return 'Tu contraseña es demasiado corta.';
+            if (msg.includes('network') || msg.includes('fetch')) return 'Sin conexión. Revisa internet e inténtalo de nuevo.';
+            if (msg.includes('rate limit') || msg.includes('too many requests')) return 'Demasiados intentos. Espera un momento y vuelve a intentar.';
+            return 'No se pudo completar la acción. Inténtalo de nuevo.';
+        };
+
+        const setGateMsg = (msg, isError = false) => {
+            if (!gateMsgEl) return;
+            const cleanMsg = isError ? simplifyGateError(msg) : String(msg || '');
+            gateMsgEl.textContent = cleanMsg;
+            gateMsgEl.style.color = isError ? 'var(--error, #fc8181)' : '#68d391';
+        };
+
+        const setFormEnabled = (formEl, enabled) => {
+            if (!formEl) return;
+            formEl.querySelectorAll('input, button, select, textarea').forEach((control) => {
+                control.disabled = !enabled;
+            });
+        };
+
+        const resetGateFeedback = () => {
+            setGateMsg('');
+            emailBanner?.classList.add('hidden');
+        };
+
+        const renderGateMode = (mode) => {
+            const selectedMode = mode || 'register';
+            const isRegister = selectedMode === 'register';
+            const isLogin = selectedMode === 'login';
+            const isChangeEmail = selectedMode === 'change-email';
+            const isChangePassword = selectedMode === 'change-password';
+            const hasTabMode = isRegister || isLogin;
+
+            resetGateFeedback();
+            gateTabsWrap?.classList.toggle('hidden', !hasTabMode);
+            gateTabs.forEach(tab => {
+                const active = hasTabMode && tab.dataset.gateTab === selectedMode;
+                tab.classList.toggle('is-active', active);
+                tab.setAttribute('aria-selected', String(active));
+            });
+            gatePanels.forEach(panel => {
+                const active = panel.dataset.gatePanel === selectedMode;
+                panel.classList.toggle('is-active', active);
+                panel.setAttribute('aria-hidden', String(!active));
+                setFormEnabled(panel, active);
+            });
+            emailForm?.classList.toggle('hidden', !isChangeEmail);
+            passwordForm?.classList.toggle('hidden', !isChangePassword);
+            setFormEnabled(emailForm, isChangeEmail);
+            setFormEnabled(passwordForm, isChangePassword);
+        };
+
+        const switchGateTab = (name) => {
+            renderGateMode(name);
+        };
+
+        gateTabs.forEach(tab => tab.addEventListener('click', () => switchGateTab(tab.dataset.gateTab)));
+
+        const openGate = ({ mode = 'register', locked = false } = {}) => {
+            gateLocked = locked;
+            gateModal?.classList.remove('hidden');
+            gateBox?.classList.toggle('is-locked', gateLocked);
+            renderGateMode(mode);
+        };
+
+        const btnOpenGate = document.getElementById('btn-cloud-open-gatekeeper');
+        btnOpenGate?.addEventListener('click', () => {
+            openGate({ mode: _sbSession ? 'login' : 'register' });
+        });
+
+        const closeGate = () => {
+            if (gateLocked) return;
+            gateModal?.classList.add('hidden');
+            renderGateMode('register');
+        };
+        document.getElementById('cloud-gatekeeper-close')?.addEventListener('click', closeGate);
+        gateModal?.addEventListener('click', (e) => {
+            if (e.target === gateModal && !gateLocked) closeGate();
+        });
+
+        const validateRegisterPassword = createPassphraseStrengthUpdater('cloud-register-password', 'cloud-register-password-strength', registerSubmitBtn);
+        const validateChangePassword = createPassphraseStrengthUpdater('cloud-change-password-input', 'cloud-change-password-strength', changePasswordSubmitBtn);
+        bindPasswordGenerator('btn-generate-register-password', 'cloud-register-password', validateRegisterPassword);
+        bindPasswordGenerator('btn-generate-change-password', 'cloud-change-password-input', validateChangePassword);
+
+        registerForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!_sbClient) return setGateMsg('Servicio no disponible. Recarga la página.', true);
+
+            const email = document.getElementById('cloud-register-email')?.value?.trim();
+            const password = document.getElementById('cloud-register-password')?.value || '';
+            const nickname = document.getElementById('cloud-register-nickname')?.value?.trim();
+            if (!email || !password || !nickname) return setGateMsg('Completa nombre, correo y contraseña.', true);
+            if (!validateRegisterPassword()) return setGateMsg('Tu contraseña es demasiado corta.', true);
+
+            setGateMsg('Creando tu cuenta…');
+            try {
+                const { error } = await _sbClient.auth.signUp({
+                    email,
+                    password,
+                    options: { data: { nickname } }
+                });
+                if (error) throw error;
+                _setGuestMode(false);
+                setGateMsg('Cuenta creada. Revisa tu correo para confirmarla.');
+                _setLoginMsg('Cuenta creada correctamente.');
+            } catch (err) {
+                setGateMsg(err?.message, true);
+            }
+        });
+
+        loginForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!_sbClient) return setGateMsg('Servicio no disponible. Recarga la página.', true);
+
+            const email = document.getElementById('cloud-login-email')?.value?.trim();
+            const password = document.getElementById('cloud-login-password')?.value || '';
+            if (!email || !password) return setGateMsg('Completa correo y contraseña.', true);
+
+            setGateMsg('Iniciando sesión…');
+            try {
+                const { error } = await _sbClient.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+                setGateMsg('¡Listo! Iniciaste sesión.');
+                _setLoginMsg(`Sesión iniciada para ${email}.`);
+                closeGate();
+            } catch (err) {
+                setGateMsg(err?.message, true);
+            }
+        });
+
+        document.getElementById('btn-cloud-change-email-submit')?.addEventListener('click', async () => {
+            if (!_sbClient || !_sbSession) return setGateMsg('Debes iniciar sesión para cambiar tu correo.', true);
+            const newEmail = document.getElementById('cloud-change-email-input')?.value?.trim();
+            if (!newEmail) return setGateMsg('Ingresa un nuevo correo para continuar.', true);
+            try {
+                const { error } = await _sbClient.auth.updateUser({ email: newEmail });
+                if (error) throw error;
+                emailBanner?.classList.remove('hidden');
+                setGateMsg('Solicitud enviada. Revisa ambos correos para confirmar el cambio.');
+            } catch (err) {
+                setGateMsg(err?.message, true);
+            }
+        });
+
+        passwordForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!_sbClient || !_sbSession) return setGateMsg('Debes iniciar sesión para cambiar tu contraseña.', true);
+            if (!validateChangePassword()) return setGateMsg('Tu contraseña es demasiado corta.', true);
+
+            const currentPassword = document.getElementById('cloud-current-password-input')?.value || '';
+            const password = document.getElementById('cloud-change-password-input')?.value || '';
+            if (!currentPassword) return setGateMsg('Debes ingresar tu contraseña actual.', true);
+            try {
+                const email = _sbSession.user?.email || '';
+                const { error: authError } = await _sbClient.auth.signInWithPassword({ email, password: currentPassword });
+                if (authError) {
+                    setGateMsg('La contraseña actual es incorrecta. Verifícala antes de continuar.', true);
+                    return;
+                }
+                const { error } = await _sbClient.auth.updateUser({ password });
+                if (error) throw error;
+                setGateMsg('Contraseña actualizada.');
+                setTimeout(() => closeGate(), 700);
+            } catch (err) {
+                setGateMsg(err?.message, true);
+            }
+        });
+
+        document.getElementById('btn-cloud-guest')?.addEventListener('click', () => {
+            _setGuestMode(true);
+            if (!window.GameCenter?.hasIdentity?.()) {
+                window.GameCenter?.setIdentity?.('Invitad@', '@');
+            }
+            _setAccountStateLabel(false);
+            setGateMsg('Estás jugando como invitado.');
+            _setLoginMsg('Jugando como invitado.');
+            gateLocked = false;
+            gateBox?.classList.remove('is-locked');
+            closeGate();
+        });
+
+        document.getElementById('btn-cloud-change-password')?.addEventListener('click', () => {
+            if (!_sbSession) {
+                openGate({ mode: 'login' });
+                setGateMsg('Inicia sesión para poder cambiar tu contraseña.', true);
+                return;
+            }
+            openGate({ mode: 'change-password' });
+        });
+
+        document.getElementById('btn-cloud-change-email')?.addEventListener('click', () => {
+            if (!_sbSession) {
+                openGate({ mode: 'login' });
+                setGateMsg('Inicia sesión para poder cambiar tu correo.', true);
+                return;
+            }
+            openGate({ mode: 'change-email' });
+        });
+
+        // ── Cerrar sesión ────────────────────────────────────────────────────
+        const btnSignOut = document.getElementById('btn-cloud-signout');
+        if (btnSignOut) {
+            btnSignOut.addEventListener('click', async () => {
+                if (!_sbClient) return;
+                await _sbClient.auth.signOut();
+                // _handleSignOut() es llamado por onAuthStateChange
+            });
+        }
+
+        const cloudIndicator = document.getElementById('cloud-sync-indicator')
+            || document.getElementById('hud-cloud-sync-indicator');
+        if (cloudIndicator) {
+            document.addEventListener('la:synced', () => {
+                cloudIndicator.classList.add('is-active', 'is-pulse');
+                setTimeout(() => cloudIndicator.classList.remove('is-pulse'), 1800);
+            });
+        }
+
+        window.addEventListener('pagehide', () => {
+            if (!_sbSession || !_hasUnsyncedChanges) return;
+            clearTimeout(_syncTimer);
+            _sentinelSync();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (!_sbSession || !_hasUnsyncedChanges) return;
+            clearTimeout(_syncTimer);
+            _sentinelSync();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden || !_sbSession || !_hasUnsyncedChanges) return;
+            clearTimeout(_syncTimer);
+            _sentinelSync();
+        });
+
+        document.addEventListener('la:cloud-authenticated', () => {
+            gateLocked = false;
+            gateBox?.classList.remove('is-locked');
+            closeGate();
+        });
+
+        _setLastSyncLabel(localStorage.getItem(SENTINEL_TS_KEY));
+        _setAccountStateLabel(Boolean(_sbSession));
+
+        const hasLocalIdentity = window.GameCenter?.hasIdentity?.();
+        if (!hasLocalIdentity && !_sbSession) {
+            openGate({ locked: true, mode: 'register' });
+        }
+    });
+
+    // ── Arranque ─────────────────────────────────────────────────────────────
+    // Se ejecuta en background sin bloquear el INIT síncrono de app.js.
+    // El fetch a /api/client-config se lanza ANTES del DOMContentLoaded
+    // para que las credenciales estén listas cuando el usuario navegue
+    // a la pestaña de Sincronizar.
+    _sentinelInit().catch(err => {
+        console.error('[Sentinel] Error en inicialización:', err);
+    });
+
+    // Exponer API mínima para diagnóstico en DevTools
+    // Nota: para subir avatares desde el frontend debe existir el bucket público `avatars`
+    // con políticas RLS apropiadas configuradas manualmente en Supabase.
+    window.Sentinel = {
+        syncNow:    () => _sentinelSync(),
+        getSession: () => _sbSession,
+        getClient:  () => _sbClient,
+        getStatus:  () => ({ hasClient: !!_sbClient, hasSession: !!_sbSession }),
+    };
+
+})(); // fin IIFE SentinelCloudSync
