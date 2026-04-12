@@ -154,6 +154,16 @@
 let allItems     = [];
 let activeFilter = 'Todos';
 let searchQuery  = '';
+let _pendingFilterFrame = null;
+let _shopDelegationBound = false;
+
+function scheduleFilterItems() {
+    if (_pendingFilterFrame !== null) cancelAnimationFrame(_pendingFilterFrame);
+    _pendingFilterFrame = requestAnimationFrame(() => {
+        _pendingFilterFrame = null;
+        filterItems();
+    });
+}
 
 // ── Handler de contextmenu para el mockup stage ──────────────────────────────
 // Guardado como variable de módulo (no como propiedad del nodo DOM) para evitar
@@ -1224,7 +1234,7 @@ function resetFilters() {
     const clearBtn    = document.getElementById('search-clear');
     if (searchInput) searchInput.value = '';
     if (clearBtn)    clearBtn.classList.add('hidden');
-    filterItems();
+    scheduleFilterItems();
 }
 // Exponer globalmente (compatible con onclick="resetFilters()" en el HTML)
 window.resetFilters = resetFilters;
@@ -1285,6 +1295,8 @@ function renderShop(items) {
     const container = document.getElementById('shop-container');
     container.innerHTML = '';
     if (!items.length) return;
+
+    const frag = document.createDocumentFragment();
 
     items.forEach(item => {
         const bought     = GameCenter.getBoughtCount(item.id);
@@ -1357,49 +1369,9 @@ function renderShop(items) {
                 ${actionHTML}
             </div>`;
 
-        container.appendChild(card);
+        frag.appendChild(card);
     });
-
-    // Wishlist listeners
-    container.querySelectorAll('.wishlist-btn').forEach(btn => {
-        btn.addEventListener('click', e => {
-            e.stopPropagation();
-            const id    = parseInt(btn.dataset.id, 10);
-            const isNow = GameCenter.toggleWishlist(id);
-            btn.classList.toggle('wishlist-btn--active', isNow);
-            btn.title = isNow ? 'Quitar de lista' : 'Agregar a lista de deseos';
-            btn.innerHTML = '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>';
-            updateWishlistCost();
-            // [v9.9.2] Solo trackear al AGREGAR (isNow === true), no al quitar.
-            // Permite detectar qué wallpapers generan más interés sin registrar
-            // cada toggle como un evento distinto.
-            if (isNow) {
-                const item = allItems.find(i => i.id === id);
-                window.GhostAnalytics?.track('wishlist_add', {
-                    wallpaper: item?.name || `id:${id}`,
-                    precio:    item?.price ?? '?'
-                });
-            }
-        });
-    });
-
-    // Preview listeners
-    container.querySelectorAll('.shop-preview-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const item = allItems.find(i => i.id === parseInt(btn.dataset.id, 10));
-            if (item) openPreviewModal(item);
-        });
-    });
-
-    // Buy listeners
-    container.querySelectorAll('.shop-buy-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            try {
-                const item = JSON.parse(btn.dataset.item.replace(/&#39;/g, "'"));
-                await initiatePurchase(item, btn);
-            } catch (e) { console.error('Error parsing item', e); }
-        });
-    });
+    container.appendChild(frag);
 
     // Scope al container del catálogo.
     // @perf ADVERTENCIA: renderShop destruye y reconstruye el DOM completo en cada
@@ -1412,6 +1384,51 @@ function renderShop(items) {
     // a nodos huérfanos. _initPreloadObserver() lo desconecta y crea uno nuevo
     // observando únicamente los cards con .shop-preview-btn (no comprados).
     _initPreloadObserver(container, items);
+}
+
+function _bindShopContainerDelegation() {
+    if (_shopDelegationBound) return;
+    const container = document.getElementById('shop-container');
+    if (!container) return;
+    _shopDelegationBound = true;
+
+    container.addEventListener('click', async (e) => {
+        const wishlistBtn = e.target.closest('.wishlist-btn');
+        if (wishlistBtn) {
+            e.stopPropagation();
+            const id    = parseInt(wishlistBtn.dataset.id, 10);
+            const isNow = GameCenter.toggleWishlist(id);
+            wishlistBtn.classList.toggle('wishlist-btn--active', isNow);
+            wishlistBtn.title = isNow ? 'Quitar de lista' : 'Agregar a lista de deseos';
+            wishlistBtn.innerHTML = '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>';
+            updateWishlistCost();
+            if (isNow) {
+                const item = allItems.find(i => i.id === id);
+                window.GhostAnalytics?.track('wishlist_add', {
+                    wallpaper: item?.name || `id:${id}`,
+                    precio:    item?.price ?? '?'
+                });
+            }
+            return;
+        }
+
+        const previewBtn = e.target.closest('.shop-preview-btn');
+        if (previewBtn) {
+            const item = allItems.find(i => i.id === parseInt(previewBtn.dataset.id, 10));
+            if (item) openPreviewModal(item);
+            return;
+        }
+
+        const buyBtn = e.target.closest('.shop-buy-btn');
+        if (buyBtn) {
+            try {
+                const item = JSON.parse(buyBtn.dataset.item.replace(/&#39;/g, "'"));
+                await initiatePurchase(item, buyBtn);
+            } catch (err) {
+                console.error('Error parsing item', err);
+            }
+        }
+    });
 }
 
 // ── Render: Biblioteca ────────────────────────────────────────────────────────
@@ -2094,6 +2111,7 @@ function loadCatalog() {
 
 // ── DOMContentLoaded — Registro de event listeners (una sola vez) ─────────────
 document.addEventListener('DOMContentLoaded', () => {
+    _bindShopContainerDelegation();
 
     // Inicializar banner y economía al cargar
     initSaleBanner();
@@ -2169,7 +2187,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearBtn     = document.getElementById('search-clear');
     const debouncedFilter = window.debounce(() => {
         searchQuery = searchInput.value.trim().toLowerCase();
-        filterItems();
+        scheduleFilterItems();
     }, 300);
 
     searchInput.addEventListener('input', () => {
@@ -2177,11 +2195,12 @@ document.addEventListener('DOMContentLoaded', () => {
         debouncedFilter();
     });
     clearBtn.addEventListener('click', () => {
+        if (!searchInput.value && !searchQuery) return;
         searchInput.value = '';
         searchQuery       = '';
         clearBtn.classList.add('hidden');
-        filterItems();
-        searchInput.focus();
+        scheduleFilterItems();
+        requestAnimationFrame(() => searchInput.focus({ preventScroll: true }));
     });
 
     // Botón "Ver todo el catálogo" en el estado vacío de filtros
@@ -2191,10 +2210,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Filter pills
     document.querySelectorAll('.pill').forEach(pill => {
         pill.addEventListener('click', () => {
+            if (activeFilter === pill.dataset.filter) return;
             document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
             pill.classList.add('active');
             activeFilter = pill.dataset.filter;
-            filterItems();
+            scheduleFilterItems();
         });
     });
 
