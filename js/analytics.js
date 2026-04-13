@@ -532,6 +532,80 @@
     /** Intervalo mínimo entre eventos con la misma clave (ms). */
     const RATE_LIMIT_MS = 3000;
 
+    /** Configuración de resiliencia de transporte (reintentos + timeout). */
+    const _SEND_MAX_ATTEMPTS = 3;
+    const _SEND_TIMEOUT_MS = 2500;
+    const _SEND_BACKOFF_BASE_MS = 350;
+
+    /** Dedupe por bucket temporal: event + meta + bucket. */
+    const _DEDUPE_BUCKET_MS = 10_000;
+    const _dedupeLedger = new Set();
+
+    /** Persistencia temporal de fallos transitorios (sessionStorage). */
+    const _FAILED_QUEUE_KEY = 'ghost_failed_queue_v1';
+    let _failedQueue = [];
+
+    function _sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function _bucketTs(ts) {
+        return Math.floor(ts / _DEDUPE_BUCKET_MS) * _DEDUPE_BUCKET_MS;
+    }
+
+    function _buildDedupeKey(event, meta, bucketStart) {
+        return `${event}|${JSON.stringify(meta || {})}|${bucketStart}`;
+    }
+
+    function _loadFailedQueue() {
+        try {
+            const raw = sessionStorage.getItem(_FAILED_QUEUE_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    function _saveFailedQueue() {
+        try {
+            sessionStorage.setItem(_FAILED_QUEUE_KEY, JSON.stringify(_failedQueue.slice(-50)));
+        } catch (_) { /* sessionStorage puede no estar disponible */ }
+    }
+
+    function _enqueueFailed(job) {
+        if (_failedQueue.some(item => item.dedupeKey === job.dedupeKey)) return;
+        _failedQueue.push(job);
+        _saveFailedQueue();
+    }
+
+    async function _flushFailedQueue() {
+        if (!_failedQueue.length) return;
+        const snapshot = _failedQueue.slice();
+        _failedQueue = [];
+        _saveFailedQueue();
+
+        for (const job of snapshot) {
+            if (_dedupeLedger.has(job.dedupeKey)) continue;
+            const result = await _send(job.event, job.meta, job.nickname, job.isTest, {
+                bucketStart: job.bucketStart,
+                ignoreDedupe: true,
+            });
+            if (!result.ok && result.classification !== 'http_4xx') {
+                _enqueueFailed(job);
+            }
+        }
+    }
+
+    // Restaurar cola persistida y reintentar en puntos seguros de ciclo de vida.
+    _failedQueue = _loadFailedQueue();
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') _flushFailedQueue();
+    });
+    window.addEventListener('pageshow', () => { _flushFailedQueue(); });
+    window.addEventListener('online', () => { _flushFailedQueue(); });
+
     // ── Emojis identificadores por evento (para logs de consola) ──────────────
 
     const EVENT_EMOJIS = {
@@ -589,7 +663,15 @@
      * @param {string}      nickname  Nickname resuelto del jugador.
      * @param {boolean}     [isTest=false]  Omite el rate limiter en test().
      */
-    function _send(event, meta, nickname, isTest) {
+    async function _send(event, meta, nickname, isTest, options) {
+        const opts = options || {};
+        const bucketStart = opts.bucketStart || _bucketTs(Date.now());
+        const dedupeKey = _buildDedupeKey(event, meta, bucketStart);
+        if (!opts.ignoreDedupe && _dedupeLedger.has(dedupeKey)) {
+            _log('🔁 Dedupe activo — evento omitido:', event, dedupeKey);
+            return { ok: true, deduped: true, dedupeKey };
+        }
+
         const emoji = EVENT_EMOJIS[event] || '📊';
         _log('→ Enviando al Proxy:', emoji, event, meta || '');
 
@@ -601,44 +683,106 @@
             data:  meta && Object.keys(meta).length ? meta : {},
         };
 
-        // keepalive: true — el request sobrevive a navegaciones de página
-        const promise = fetch(_PROXY_ENDPOINT, {
-            method:    'POST',
-            headers:   { 'Content-Type': 'application/json' },
-            body:      JSON.stringify(payload),
-            keepalive: true,
-        });
+        const attemptSend = async (attempt) => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort('timeout'), _SEND_TIMEOUT_MS);
+            const startedAt = performance.now();
+            let timedOut = false;
+            try {
+                // keepalive: true — el request sobrevive a navegaciones de página
+                const promise = fetch(_PROXY_ENDPOINT, {
+                    method:    'POST',
+                    headers:   { 'Content-Type': 'application/json' },
+                    body:      JSON.stringify(payload),
+                    keepalive: true,
+                    signal: controller.signal,
+                });
 
-        // Registrar en WeakSet ANTES de encadenar then/catch para que el
-        // handler de unhandledrejection pueda identificarlo como propio.
-        _pendingFetches.add(promise);
+                // Registrar en WeakSet ANTES de encadenar then/catch para que el
+                // handler de unhandledrejection pueda identificarlo como propio.
+                _pendingFetches.add(promise);
+                const res = await promise;
 
-        promise
-            .then(res => {
                 if (res.ok) {
+                    const elapsedMs = Math.round(performance.now() - startedAt);
                     _log('✅ Entregado al Proxy:', event, `(HTTP ${res.status})`);
-                } else {
-                    // El proxy devuelve 4xx/5xx — puede ser un error de Telegram upstream
-                    console.warn(
-                        '[GhostAnalytics] Proxy respondió HTTP', res.status,
-                        '— Evento:', event,
-                        '| Revisa los logs de la función serverless en Vercel.'
-                    );
+                    _dedupeLedger.add(dedupeKey);
+                    return {
+                        ok: true,
+                        status: res.status,
+                        attempts: attempt + 1,
+                        latencyMs: elapsedMs,
+                        dedupeKey,
+                        classification: 'ok',
+                    };
                 }
-            })
-            .catch(err => {
-                // Error de red (sin conexión, CORS, timeout). Siempre visible en
-                // consola para que sea diagnosticable, nunca silenciado.
-                console.error(
-                    '[GhostAnalytics] ❌ Error de red al enviar "' + event + '":',
-                    err.message,
-                    '\n  Posibles causas:',
-                    '\n  · Sin conexión a internet',
-                    '\n  · La función serverless /api/report no está desplegada',
-                    '\n  · CSP del servidor bloquea peticiones internas',
-                    '\n  → Ejecuta window.GhostAnalytics.test() para diagnosticar.'
-                );
-            });
+
+                if (res.status >= 500 && attempt < (_SEND_MAX_ATTEMPTS - 1)) {
+                    const backoff = _SEND_BACKOFF_BASE_MS * (2 ** attempt);
+                    console.warn('[GhostAnalytics] Proxy HTTP 5xx:', res.status, '| Reintento en', backoff, 'ms | Evento:', event);
+                    await _sleep(backoff);
+                    return attemptSend(attempt + 1);
+                }
+
+                if (res.status >= 400 && res.status <= 499) {
+                    console.warn(
+                        '[GhostAnalytics] ❗ Proxy HTTP 4xx:', res.status,
+                        '— Evento:', event,
+                        '| Error lógico / payload inválido (sin reintentos).'
+                    );
+                    return {
+                        ok: false,
+                        status: res.status,
+                        attempts: attempt + 1,
+                        classification: 'http_4xx',
+                        error: `HTTP ${res.status}`,
+                        dedupeKey,
+                    };
+                }
+
+                console.warn('[GhostAnalytics] ❗ Proxy HTTP 5xx:', res.status, '| Evento:', event, '| Sin más reintentos.');
+                _enqueueFailed({ event, meta, nickname, isTest, bucketStart, dedupeKey });
+                return {
+                    ok: false,
+                    status: res.status,
+                    attempts: attempt + 1,
+                    classification: 'http_5xx',
+                    error: `HTTP ${res.status}`,
+                    dedupeKey,
+                };
+            } catch (err) {
+                timedOut = err?.name === 'AbortError';
+                const offline = navigator.onLine === false;
+                const cause = timedOut
+                    ? 'timeout'
+                    : (offline ? 'offline' : 'network');
+                const humanReason = timedOut
+                    ? 'Timeout agotado'
+                    : (offline ? 'Red caída' : 'Fallo de red');
+
+                if (attempt < (_SEND_MAX_ATTEMPTS - 1)) {
+                    const backoff = _SEND_BACKOFF_BASE_MS * (2 ** attempt);
+                    console.warn(`[GhostAnalytics] ${humanReason} — reintento en ${backoff} ms | Evento:`, event);
+                    await _sleep(backoff);
+                    return attemptSend(attempt + 1);
+                }
+
+                console.error(`[GhostAnalytics] ❌ ${humanReason} al enviar "${event}":`, err?.message || String(err));
+                _enqueueFailed({ event, meta, nickname, isTest, bucketStart, dedupeKey });
+                return {
+                    ok: false,
+                    status: null,
+                    attempts: attempt + 1,
+                    classification: cause,
+                    error: err?.message || String(err),
+                    dedupeKey,
+                };
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        };
+
+        return attemptSend(0);
     }
 
     // ── API pública ───────────────────────────────────────────────────────────
@@ -740,7 +884,7 @@
                 '— test() bloqueado. Esta sesión está excluida de las analíticas.',
                 '\n  Para desactivar: sessionStorage.removeItem(\'ghost_ignore\') y recarga.'
             );
-            return;
+            return Promise.resolve({ ok: false, blocked: 'shadow_gate', endpoint: _PROXY_ENDPOINT });
         }
 
         if (_isLocalhost()) {
@@ -750,7 +894,7 @@
                 '— test() bloqueado. El Proxy no se activa en entornos locales.',
                 '\n  Despliega en producción y abre con el token de Shadow-Gate para probar.'
             );
-            return;
+            return Promise.resolve({ ok: false, blocked: 'localhost', endpoint: _PROXY_ENDPOINT });
         }
 
         if (_isBot()) {
@@ -760,18 +904,29 @@
                 '— test() bloqueado.',
                 '\n  UA:', navigator.userAgent
             );
-            return;
+            return Promise.resolve({ ok: false, blocked: 'bot', endpoint: _PROXY_ENDPOINT });
         }
 
         const nickname = _getNickname() || '(sin nickname)';
         console.log('[GhostAnalytics] Enviando evento de prueba al Proxy…');
-        _send(
+        return _send(
             'open_game',
             { juego: '✅ TEST — Proxy activo y módulo cargado correctamente' },
             nickname,
             /* isTest= */ true
-        );
-        console.log('[GhostAnalytics] Petición enviada. Revisa el Topic de Analíticas en Telegram.');
+        ).then(result => {
+            const diagnostic = {
+                ok: result.ok,
+                endpoint: _PROXY_ENDPOINT,
+                status: result.status ?? null,
+                attempts: result.attempts,
+                latencyMs: result.latencyMs ?? null,
+                error: result.error ?? null,
+                classification: result.classification,
+            };
+            console.log('[GhostAnalytics] Diagnóstico test():', diagnostic);
+            return diagnostic;
+        });
     }
 
     /**
