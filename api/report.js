@@ -1,5 +1,5 @@
 /**
- * api/report.js — Love Arcade v12.1
+ * api/report.js — Love Arcade v12.2
  * ─────────────────────────────────────────────────────────────────────────────
  * Proxy Serverless para Telemetría Segura — Vercel Edge Function
  *
@@ -42,6 +42,8 @@
  *     timestamp de servidor para contrastar con el del cliente.
  *  5. Entregar el mensaje a la API de Telegram y devolver un estado 500
  *     silencioso al frontend si la API upstream falla, sin interrumpir el juego.
+ *  6. Mostrar en diagnóstico interno ambas marcas temporales:
+ *     client_event_ts (momento del evento) y servidor (momento de envío).
  *
  * VARIABLES DE ENTORNO REQUERIDAS (Vercel → Settings → Environment Variables):
  *   TELEGRAM_BOT_TOKEN   Token del bot obtenido vía @BotFather.
@@ -59,6 +61,7 @@
  *     "type":  "analytics" | "bug" | "achievement",
  *     "user":  "nickname_desde_storage",
  *     "event": "nombre_del_evento",
+ *     "client_event_ts": 1710000000000,      ← instante del evento en cliente (epoch ms)
  *     "data":  { "clave": "valor", ... }   ← detalles técnicos opcionales
  *   }
  *
@@ -217,6 +220,7 @@ export default async function handler(req, res) {
         type  = 'analytics',
         user  = 'desconocido',
         event = 'unknown',
+        client_event_ts = null,
         data  = {},
     } = body;
 
@@ -248,11 +252,17 @@ export default async function handler(req, res) {
 
     // ── 7. Timestamp del servidor ─────────────────────────────────────────────
     //
-    // Permite contrastar la hora del servidor con el `timestamp` del cliente
-    // incluido en `data`, útil para detectar relojes desincronizados o eventos
-    // retardados por la cola del Human Gate.
+    // Permite contrastar la hora del servidor con `client_event_ts` enviado
+    // por el frontend (momento real del evento), útil para detectar relojes
+    // desincronizados o eventos retardados por la cola del Human Gate.
     //
     const serverTimestamp = new Date().toISOString();
+    const parsedClientEventTs = Number(client_event_ts);
+    const hasClientEventTs = Number.isFinite(parsedClientEventTs) && parsedClientEventTs > 0;
+    const clientEventTimestamp = hasClientEventTs
+        ? new Date(parsedClientEventTs).toISOString()
+        : null;
+
 
     // ── 8. Construcción del mensaje en modo HTML ──────────────────────────────
     //
@@ -276,8 +286,11 @@ export default async function handler(req, res) {
             ? `📋 <b>Datos:</b>\n${dataEntries}`
             : '<i>Sin metadatos adicionales.</i>',
         '',
-        `🕐 <b>Servidor:</b> <code>${serverTimestamp}</code>`,
-        `<i>Love Arcade · Ghost Analytics v12.1</i>`,
+        hasClientEventTs
+            ? `🕓 <b>Cliente (evento):</b> <code>${clientEventTimestamp}</code>`
+            : '🕓 <b>Cliente (evento):</b> <i>sin client_event_ts</i>',
+        `🕐 <b>Servidor (envío):</b> <code>${serverTimestamp}</code>`,
+        `<i>Love Arcade · Ghost Analytics v12.2</i>`,
     ].join('\n');
 
     // ── 9. Lectura de credenciales y envío a Telegram ─────────────────────────
