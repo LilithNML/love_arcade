@@ -58,18 +58,51 @@
 
     <!--
       ╔══════════════════════════════════════════════════════════════╗
-      ║  SUPABASE SDK — Sentinel Cloud Sync v13.0                   ║
+      ║  SUPABASE SDK — Sentinel Cloud Sync v13.1                   ║
       ║                                                              ║
-      ║  Carga el cliente oficial de Supabase desde el CDN de jsDelivr.║
-      ║  Expondrá window.supabase — usado por el Sentinel en app.js ║
-      ║  para autenticación Email/Password y sincronización JSONB.   ║
-      ║  Posición: en <head> para que el objeto esté disponible      ║
-      ║  antes de que app.js ejecute su INIT síncrono al final de    ║
-      ║  <body>. Sin este orden app.js no puede leer window.supabase ║
-      ║  durante la inicialización del StorageInterceptor.           ║
+      ║  Carga resiliente con fallback CDN para reducir dependencia  ║
+      ║  de un único tercero en runtime.                             ║
+      ║  1) jsDelivr (primario)                                      ║
+      ║  2) unpkg (fallback)                                         ║
+      ║  Si ambos fallan, Sentinel entra en modo degradado           ║
+      ║  (solo almacenamiento local) sin romper la UI.               ║
       ╚══════════════════════════════════════════════════════════════╝
     -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script>
+      (function loadSupabaseSdk() {
+        const sources = [
+          'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js',
+          'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js'
+        ];
+        let idx = 0;
+
+        const loadNext = function() {
+          if (window.supabase?.createClient) return;
+          if (idx >= sources.length) {
+            console.warn('[Boot] No se pudo cargar Supabase SDK (CDN primario + fallback). Sentinel operará en estado degradado.');
+            return;
+          }
+          const src = sources[idx++];
+          const s = document.createElement('script');
+          s.src = src;
+          s.async = false;
+          s.crossOrigin = 'anonymous';
+          s.onload = function() {
+            if (!window.supabase?.createClient) {
+              console.warn('[Boot] Supabase SDK cargado pero incompleto. Probable bloqueo por extensión/CSP. Reintentando fallback...');
+              loadNext();
+            }
+          };
+          s.onerror = function() {
+            console.warn(`[Boot] Falló carga de Supabase SDK desde: ${src}`);
+            loadNext();
+          };
+          document.head.appendChild(s);
+        };
+
+        loadNext();
+      })();
+    </script>
 </head>
 <!--
   La clase theme-* ya NO va hardcodeada aquí.
@@ -1256,9 +1289,9 @@
          3. shop-logic.js → Catálogo, compras, sync, ajustes
          4. spa-router.js → Navegación SPA entre vistas
          5. event-logic.js → Eventos LTE, gachapón
-         Nota: @supabase/supabase-js se carga en <head> (CDN)
-         para garantizar window.supabase disponible antes del
-         INIT síncrono de app.js al final del <body>.
+         Nota: @supabase/supabase-js se carga en <head> con
+         fallback de CDN para garantizar window.supabase disponible
+         antes del INIT síncrono de app.js al final del <body>.
          ══════════════════════════════════════════════════════════ -->
     <script src="js/analytics.js"></script>     
     <script src="js/app.js"></script>
