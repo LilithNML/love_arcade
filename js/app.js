@@ -2692,6 +2692,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // 2. Crear cliente Supabase
+        if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+            console.warn(
+                '[Sentinel] SDK de Supabase no disponible (SDK no cargada / bloqueada). ' +
+                'Sentinel continuará en estado degradado (solo almacenamiento local).'
+            );
+            return;
+        }
         try {
             _sbClient = window.supabase.createClient(supabaseUrl, supabaseKey);
         } catch (err) {
