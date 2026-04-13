@@ -53,6 +53,10 @@
     
     /** @type {Object.<string, HTMLElement>} */
     let viewEls = {};
+    /** @type {HTMLElement[]} */
+    let navLinks = [];
+    /** @type {HTMLElement[]} */
+    let bottomNavItems = [];
     
     /** @type {string} */
     let currentView = 'home';
@@ -86,7 +90,9 @@
         }
         
         VIEWS.forEach(id => {
-            viewEls[id].classList.toggle('hidden', id !== viewId);
+            const viewEl = viewEls[id];
+            if (!viewEl) return;
+            viewEl.classList.toggle('hidden', id !== viewId);
         });
         
         currentView = viewId;
@@ -151,10 +157,10 @@
     // ── Helpers privados ──────────────────────────────────────────────────────
     
     function _syncNavHighlight(viewId) {
-        document.querySelectorAll('.nav-link[data-view]').forEach(link => {
+        navLinks.forEach(link => {
             link.classList.toggle('active', link.dataset.view === viewId && !link.dataset.anchor);
         });
-        document.querySelectorAll('.b-nav-item[data-view]').forEach(item => {
+        bottomNavItems.forEach(item => {
             item.classList.toggle('active', item.dataset.view === viewId && !item.dataset.anchor);
         });
     }
@@ -185,6 +191,9 @@
             if (el) viewEls[id] = el;
         });
         
+        navLinks = Array.from(document.querySelectorAll('.nav-link[data-view]'));
+        bottomNavItems = Array.from(document.querySelectorAll('.b-nav-item[data-view]'));
+
         // Registrar listeners de navegación
         document.querySelectorAll('[data-view]').forEach(el => {
             if (viewEls[el.dataset.view]) _bindNavItem(el);
