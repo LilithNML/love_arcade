@@ -174,15 +174,32 @@ export default async function handler(req, res) {
     // bloquear entornos de preview de Vercel ni desarrollo local.
     //
     const PRODUCTION_DOMAIN = process.env.PRODUCTION_DOMAIN || '';
-    const origin = req.headers['origin'] || req.headers['referer'] || '';
+    const originHeader = req.headers['origin'] || req.headers['referer'] || '';
+
+    function toHostname(value) {
+        if (!value || typeof value !== 'string') return '';
+        try {
+            const withProtocol = value.includes('://') ? value : `https://${value}`;
+            return new URL(withProtocol).hostname.toLowerCase();
+        } catch (_) {
+            return '';
+        }
+    }
+
+    function isSameOrSubdomain(hostname, baseDomain) {
+        if (!hostname || !baseDomain) return false;
+        return hostname === baseDomain || hostname.endsWith(`.${baseDomain}`);
+    }
 
     if (PRODUCTION_DOMAIN) {
-        const isProduction = origin.includes(PRODUCTION_DOMAIN);
-        const isVercelPreview = origin.includes('.vercel.app');
-        const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
+        const requestHost = toHostname(originHeader);
+        const productionHost = toHostname(PRODUCTION_DOMAIN);
+        const isProduction = isSameOrSubdomain(requestHost, productionHost);
+        const isVercelPreview = requestHost === 'vercel.app' || requestHost.endsWith('.vercel.app');
+        const isLocalhost = requestHost === 'localhost' || requestHost === '127.0.0.1';
 
         if (!isProduction && !isVercelPreview && !isLocalhost) {
-            console.warn('[report.js] Origen no autorizado:', origin);
+            console.warn('[report.js] Origen no autorizado:', originHeader);
             return res.status(403).json({ error: 'Forbidden' });
         }
     }
