@@ -76,6 +76,7 @@
      */
     function _applyView(viewId, anchor) {
         if (!viewEls[viewId]) return;
+        const previousView = currentView;
         
         // [v9.2] Scroll reset ANTES de la transición de entrada.
         // behavior:'instant' garantiza que no hay scroll animado compitiendo
@@ -103,13 +104,14 @@
 
             // Fase 3 (task separado): callbacks potencialmente pesados.
             setTimeout(() => {
-                // [v9.6] onLeave: notificar a la vista que se abandona antes de activar la nueva.
-                // ShopView.onLeave() desconecta el IntersectionObserver de precarga para liberar
-                // recursos cuando el catálogo no es visible.
-                if (viewId === 'shop') window.HomeView?.onLeave?.();
-                if (viewId === 'home') window.ShopView?.onLeave?.();
-                // [v10.0] EventView lifecycle
-                if (viewId !== 'events') window.EventView?.onLeave?.();
+                // [fix] onLeave debe dispararse según la vista que abandonamos,
+                // no según la vista destino. De lo contrario, transiciones como
+                // shop -> events no liberan recursos de ShopView.
+                if (previousView !== viewId) {
+                    if (previousView === 'home') window.HomeView?.onLeave?.();
+                    if (previousView === 'shop') window.ShopView?.onLeave?.();
+                    if (previousView === 'events') window.EventView?.onLeave?.();
+                }
 
                 if (viewId === 'home') window.HomeView?.refresh?.();
                 if (viewId === 'shop') window.ShopView?.onEnter?.();
