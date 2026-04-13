@@ -2034,6 +2034,37 @@ document.addEventListener('DOMContentLoaded', () => {
         window.GhostAnalytics?.track('open_game', { juego: gameId });
     }, { passive: true });
 
+    // ── Rehidratación al volver desde juegos externos / bfcache ─────────────
+    // pageshow se dispara al regresar con el botón "Atrás" y también cuando la
+    // página se restaura desde bfcache. Releer localStorage evita que la UI del
+    // hub quede desincronizada tras cambios hechos en pages de juegos.
+    const refreshHubStateFromDisk = () => {
+        const sentinelRehydrate = window.Sentinel?._rehydrateHubStoreFromDisk;
+        if (typeof sentinelRehydrate === 'function') {
+            try {
+                sentinelRehydrate();
+                return;
+            } catch (_) {
+                // Fallback manual debajo si Sentinel falla.
+            }
+        }
+
+        try {
+            const raw = localStorage.getItem(CONFIG.stateKey);
+            if (!raw) return;
+            store = migrateState(JSON.parse(raw));
+            // syncUI resetea _displayedCoins al valor actual del store para
+            // evitar animaciones innecesarias en este refresco de retorno.
+            window.GameCenter?.syncUI?.();
+        } catch (_) {
+            // JSON inválido o storage inaccesible → ignorar sin romper la SPA.
+        }
+    };
+
+    window.addEventListener('pageshow', refreshHubStateFromDisk);
+    // Opcional: también al recuperar foco de la ventana (alt-tab / click fuera).
+    window.addEventListener('focus', refreshHubStateFromDisk);
+
     // ── v11.0 — Tracker de tiempo activo (Misiones del Día) ──────────────────
     // Cada segundo que la pestaña esté visible se suma 1 al contador de playtime.
     // El guardado en localStorage se realiza cada 60 s para no saturar el disco.
@@ -2692,6 +2723,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // 2. Crear cliente Supabase
+        if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+            console.warn(
+                '[Sentinel] SDK de Supabase no disponible (SDK no cargada / bloqueada). ' +
+                'Sentinel continuará en estado degradado (solo almacenamiento local).'
+            );
+            return;
+        }
         try {
             _sbClient = window.supabase.createClient(supabaseUrl, supabaseKey);
         } catch (err) {
@@ -3064,6 +3102,7 @@ document.addEventListener('DOMContentLoaded', () => {
         getSession: () => _sbSession,
         getClient:  () => _sbClient,
         getStatus:  () => ({ hasClient: !!_sbClient, hasSession: !!_sbSession }),
+        _rehydrateHubStoreFromDisk: () => _rehydrateHubStoreFromDisk(),
     };
 
 })(); // fin IIFE SentinelCloudSync
