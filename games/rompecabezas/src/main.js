@@ -316,7 +316,7 @@ function setupGameControls() {
     newBtnPreview.addEventListener('mousedown', startP);
     newBtnPreview.addEventListener('mouseup', endP);
     newBtnPreview.addEventListener('mouseleave', endP);
-    newBtnPreview.addEventListener('touchstart', (e) => { e.preventDefault(); startP(); });
+    newBtnPreview.addEventListener('touchstart', startP, { passive: true });
     newBtnPreview.addEventListener('touchend', endP);
 
     const btnMagnet    = document.getElementById('btn-magnet');
