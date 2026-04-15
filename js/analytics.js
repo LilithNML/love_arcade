@@ -513,13 +513,18 @@
         window .addEventListener('scroll',   _onFirstInteraction, { once: true, passive: true });
     })();
 
-    // ── Endpoint del Proxy (v12.0) ────────────────────────────────────────────
+    // ── Endpoints del Proxy (v12.3) ───────────────────────────────────────────
     //
-    // Ruta relativa a la Vercel Serverless Function. Al ser relativa, Vercel
-    // la resuelve automáticamente al mismo dominio de producción sin configuración
-    // adicional. No se ofusca porque no contiene credenciales sensibles.
+    // Lista ordenada de rutas equivalentes del proxy:
+    //   1) Primario   → /api/telemetry
+    //   2) Secundario → /api/report
     //
-    const _PROXY_ENDPOINT = '/api/report';
+    // NOTA: /api/telemetry es un alias funcional de /api/report para esquivar
+    // bloqueos agresivos de extensiones que filtran rutas con la palabra
+    // "report". Ambas rutas resuelven al mismo handler serverless.
+    //
+    const _PROXY_ENDPOINTS = ['/api/telemetry', '/api/report'];
+    const _PRIMARY_PROXY_ENDPOINT = _PROXY_ENDPOINTS[0];
 
     // ── Clasificación de eventos por tipo (v12.0) ─────────────────────────────
     //
@@ -698,7 +703,7 @@
     // ── Envío al Proxy (v12.0) ────────────────────────────────────────────────
 
     /**
-     * Construye el payload ligero y lo envía al Proxy Serverless /api/report.
+     * Construye el payload ligero y lo envía al Proxy Serverless.
      * Fire-and-forget: el caller nunca espera. Los errores de red se loguean
      * en consola pero nunca se propagan.
      *
@@ -735,14 +740,15 @@
             data:  meta && Object.keys(meta).length ? meta : {},
         };
 
-        const attemptSend = async (attempt) => {
+        const attemptSend = async (attempt, endpointIndex) => {
+            const endpoint = _PROXY_ENDPOINTS[endpointIndex] || _PRIMARY_PROXY_ENDPOINT;
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort('timeout'), _SEND_TIMEOUT_MS);
             const startedAt = performance.now();
             let timedOut = false;
             try {
                 // keepalive: true — el request sobrevive a navegaciones de página
-                const promise = fetch(_PROXY_ENDPOINT, {
+                const promise = fetch(endpoint, {
                     method:    'POST',
                     headers:   { 'Content-Type': 'application/json' },
                     body:      JSON.stringify(payload),
@@ -773,6 +779,7 @@
                     const errorBodyText = await res.text().catch(() => '');
                     const structuredHttpError = {
                         event,
+                        endpoint,
                         attempt: attempt + 1,
                         online: navigator.onLine,
                         timedOut: false,
@@ -790,9 +797,9 @@
 
                 if (res.status >= 500 && attempt < (_SEND_MAX_ATTEMPTS - 1)) {
                     const backoff = _SEND_BACKOFF_BASE_MS * (2 ** attempt);
-                    console.warn('[GhostAnalytics] Proxy HTTP 5xx:', res.status, '| Reintento en', backoff, 'ms | Evento:', event);
+                    console.warn('[GhostAnalytics] Proxy HTTP 5xx:', res.status, '| Reintento en', backoff, 'ms | Endpoint:', endpoint, '| Evento:', event);
                     await _sleep(backoff);
-                    return attemptSend(attempt + 1);
+                    return attemptSend(attempt + 1, endpointIndex);
                 }
 
                 if (res.status >= 400 && res.status <= 499) {
@@ -819,6 +826,7 @@
                     ok: false,
                     status: res.status,
                     attempts: attempt + 1,
+                    endpoint,
                     classification: 'http_5xx',
                     error: `HTTP ${res.status}`,
                     dedupeKey,
@@ -834,6 +842,7 @@
                     : (offline ? 'Red caída' : 'Fallo de red');
                 console.warn('[GhostAnalytics] send_fail', {
                     event,
+                    endpoint,
                     attempt: attempt + 1,
                     online: navigator.onLine,
                     timedOut,
@@ -847,11 +856,19 @@
                     },
                 });
 
+                // Fallback inmediato: si falla el endpoint primario por excepción
+                // de red/timeout/offline, probar de inmediato el secundario antes
+                // de entrar al backoff exponencial normal.
+                if (endpointIndex === 0 && _PROXY_ENDPOINTS[1]) {
+                    console.warn('[GhostAnalytics] Fallback inmediato a endpoint secundario:', _PROXY_ENDPOINTS[1], '| Evento:', event);
+                    return attemptSend(attempt, 1);
+                }
+
                 if (attempt < (_SEND_MAX_ATTEMPTS - 1)) {
                     const backoff = _SEND_BACKOFF_BASE_MS * (2 ** attempt);
-                    console.warn(`[GhostAnalytics] ${humanReason} — reintento en ${backoff} ms | Evento:`, event);
+                    console.warn(`[GhostAnalytics] ${humanReason} — reintento en ${backoff} ms | Endpoint: ${endpoint} | Evento:`, event);
                     await _sleep(backoff);
-                    return attemptSend(attempt + 1);
+                    return attemptSend(attempt + 1, endpointIndex);
                 }
 
                 console.error(`[GhostAnalytics] ❌ ${humanReason} al enviar "${event}":`, err?.message || String(err));
@@ -861,6 +878,7 @@
                     ok: false,
                     status: null,
                     attempts: attempt + 1,
+                    endpoint,
                     classification: cause,
                     error: err?.message || String(err),
                     dedupeKey,
@@ -870,7 +888,7 @@
             }
         };
 
-        return attemptSend(0);
+        return attemptSend(0, 0);
     }
 
     // ── API pública ───────────────────────────────────────────────────────────
@@ -983,7 +1001,8 @@
                 blocked: 'shadow_gate',
                 diagnosis: 'bloqueado_por_cliente',
                 detail: 'Shadow-Gate activo en sessionStorage (ghost_ignore=true).',
-                endpoint: _PROXY_ENDPOINT,
+                endpoint: _PRIMARY_PROXY_ENDPOINT,
+                endpoints: _PROXY_ENDPOINTS.slice(),
             };
             console.warn(
                 '%c[GhostAnalytics] 🔕 Shadow-Gate activo',
@@ -1000,7 +1019,8 @@
                 blocked: 'localhost',
                 diagnosis: 'bloqueado_por_cliente',
                 detail: 'Anti-Localhost activo: envío bloqueado por diseño.',
-                endpoint: _PROXY_ENDPOINT,
+                endpoint: _PRIMARY_PROXY_ENDPOINT,
+                endpoints: _PROXY_ENDPOINTS.slice(),
             };
             console.warn(
                 '%c[GhostAnalytics] 🏠 Localhost detectado',
@@ -1017,7 +1037,8 @@
                 blocked: 'bot',
                 diagnosis: 'bloqueado_por_cliente',
                 detail: 'Anti-Bot activo por coincidencia de user-agent.',
-                endpoint: _PROXY_ENDPOINT,
+                endpoint: _PRIMARY_PROXY_ENDPOINT,
+                endpoints: _PROXY_ENDPOINTS.slice(),
             };
             console.warn(
                 '%c[GhostAnalytics] 🤖 Bot user-agent detectado',
@@ -1047,7 +1068,8 @@
                             : 'desconocido')));
             const diagnostic = {
                 ok: result.ok,
-                endpoint: _PROXY_ENDPOINT,
+                endpoint: result.endpoint || _PRIMARY_PROXY_ENDPOINT,
+                endpoints: _PROXY_ENDPOINTS.slice(),
                 status: result.status ?? null,
                 attempts: result.attempts,
                 latencyMs: result.latencyMs ?? null,
@@ -1085,7 +1107,7 @@
                 '\n  → Nickname detectado:', _getNickname() || '(ninguno)',
                 '\n  → Localhost:', _isLocalhost(),
                 '\n  → Bot UA:', _isBot(),
-                '\n  → Proxy endpoint:', _PROXY_ENDPOINT,
+                '\n  → Proxy endpoints:', _PROXY_ENDPOINTS.join(' → '),
                 '\n  → Desactivar con: window.GhostAnalytics.debug(false)'
             );
         } else {
@@ -1139,7 +1161,7 @@
             `\n  📥 Cola pendiente: ${_pendingQueue.length} evento(s)` +
                 (_nicknamePoller ? ' · Nickname poller ACTIVO ⏳' : ''),
             // ── Proxy ──
-            `\n  🔗 Proxy endpoint: ${_PROXY_ENDPOINT}`,
+            `\n  🔗 Proxy endpoints: ${_PROXY_ENDPOINTS.join(' → ')}`,
             // ── Debug ──
             `\n  🔍 Debug mode: ${_debugMode}`,
             // ── Telemetría de fallos ──
@@ -1156,7 +1178,8 @@
             nickname: nickname || null,
             pendingQueueSize: _pendingQueue.length,
             nicknamePollerActive: Boolean(_nicknamePoller),
-            endpoint: _PROXY_ENDPOINT,
+            endpoint: _PRIMARY_PROXY_ENDPOINT,
+            endpoints: _PROXY_ENDPOINTS.slice(),
             debug: _debugMode,
             failureCounters: failureCountersSnapshot,
             rateLimiterKeys: keys,
@@ -1382,7 +1405,7 @@
             console.log(
                 '[GhostAnalytics] ✅ Módulo listo (v12.0).',
                 '| Human Gate:', hasNick ? 'ABIERTO (nickname existente) 🔓' : 'EN ESPERA (primera interacción) 🔒',
-                '| Proxy:', _PROXY_ENDPOINT,
+                '| Proxy:', _PROXY_ENDPOINTS.join(' → '),
                 '| test(): probar Proxy',
                 '| debug(true): activar logs',
                 '| status(): ver estado interno'
