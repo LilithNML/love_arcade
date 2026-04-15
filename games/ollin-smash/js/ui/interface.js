@@ -192,6 +192,14 @@ export function bindButtons({ onStart, onRetry, onResume, onMenu, onPause }) {
   document.getElementById('os-btn-pause') .addEventListener('click', onPause);
 }
 
+function _deferNonCritical(task) {
+  if (window.requestIdleCallback) {
+    window.requestIdleCallback(task, { timeout: 120 });
+    return;
+  }
+  setTimeout(task, 16);
+}
+
 /**
  * Attach pointer/touch events to the wrapper element for paddle control.
  * Also wires up three automatic-pause triggers:
@@ -208,17 +216,17 @@ export function bindInput({ onMove, onTap, onPause, onPauseOnly }) {
   wrapper.addEventListener('mousemove', e => onMove(e.clientX));
 
   // ── Touch move ───────────────────────────────────────────────────────────────
-  // passive: false so we can call preventDefault and block page scroll
+  // touch-action CSS bloquea scroll/zoom en el área de juego, así evitamos
+  // preventDefault global y mantenemos este listener como passive:true.
   wrapper.addEventListener('touchmove', e => {
-    e.preventDefault();
-    onMove(e.touches[0].clientX);
-  }, { passive: false });
+    if (e.touches.length) onMove(e.touches[0].clientX);
+  }, { passive: true });
 
   // ── Click / single tap ───────────────────────────────────────────────────────
   wrapper.addEventListener('click', () => onTap());
   wrapper.addEventListener('touchend', e => {
     if (e.changedTouches.length) onTap();
-  }, { passive: false });
+  }, { passive: true });
 
   // ── Two-finger double tap ────────────────────────────────────────────────────
   // A "two-finger tap" is a touchstart where ≥ 2 fingers land simultaneously.
@@ -231,6 +239,8 @@ export function bindInput({ onMove, onTap, onPause, onPauseOnly }) {
       const now = Date.now();
       if (now - lastTwoFingerTap <= DOUBLE_TAP_WINDOW) {
         // Second two-finger tap within the window — toggle pause
+        // preventDefault es imprescindible aquí para bloquear gestos del navegador
+        // (zoom/scroll) durante la pausa intencional.
         e.preventDefault();
         onPause();
         lastTwoFingerTap = 0;   // reset to avoid triple-tap triggering again
@@ -248,12 +258,12 @@ export function bindInput({ onMove, onTap, onPause, onPauseOnly }) {
   // ── Visibility change (tab switch / minimise) ────────────────────────────────
   // Only auto-pause (never auto-resume) so the player consciously resumes.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) onPauseOnly();
+    if (document.hidden) _deferNonCritical(onPauseOnly);
   });
 
   // ── Window blur (alt-tab to another OS window) ───────────────────────────────
   window.addEventListener('blur', () => {
-    onPauseOnly();
+    _deferNonCritical(onPauseOnly);
   });
 }
 

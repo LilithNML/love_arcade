@@ -30,7 +30,7 @@ html, body {
   background: var(--os-darker);
   font-family: 'Exo 2', sans-serif;
   color: var(--os-text);
-  touch-action: none;
+  touch-action: manipulation;
 }
 
 /* Aztec grid overlay — purely decorative, pointer-events off */
@@ -67,6 +67,7 @@ body::before {
   align-items: center;
   justify-content: center;
   z-index: 1;
+  touch-action: none;
 }
 
 /* Canvas scales to fill the viewport while preserving 390:700 aspect ratio */
@@ -78,6 +79,7 @@ body::before {
   height: auto;
   position: relative;
   z-index: 2;
+  touch-action: none;
 }
 
 /* ── Back Button ──────────────────────────────────────────────────────────── */

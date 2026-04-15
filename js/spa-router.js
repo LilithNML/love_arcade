@@ -60,6 +60,43 @@
     
     /** @type {string} */
     let currentView = 'home';
+
+    const scheduleIdle = window.requestIdleCallback
+        ? (cb) => window.requestIdleCallback(cb, { timeout: 120 })
+        : (cb) => setTimeout(() => cb({ didTimeout: true, timeRemaining: () => 0 }), 16);
+
+    function _profileViewCallback(label, fn) {
+        if (typeof fn !== 'function') return;
+        const startMark = `${label}:start`;
+        const endMark = `${label}:end`;
+        performance.mark(startMark);
+        try {
+            fn();
+        } finally {
+            performance.mark(endMark);
+            performance.measure(label, startMark, endMark);
+            performance.clearMarks(startMark);
+            performance.clearMarks(endMark);
+        }
+    }
+
+    function _drainLifecycleQueue(tasks) {
+        if (!tasks.length) return;
+
+        const runNext = () => {
+            const task = tasks.shift();
+            if (task) task();
+            if (!tasks.length) return;
+
+            requestAnimationFrame(() => {
+                scheduleIdle(() => {
+                    runNext();
+                });
+            });
+        };
+
+        runNext();
+    }
     
     // ── Núcleo de transición (sin History API) ────────────────────────────────
     
@@ -108,20 +145,24 @@
                 if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
 
-            // Fase 3 (task separado): callbacks potencialmente pesados.
+            // Fase 3 (task separado): solo planificación; sin trabajo pesado síncrono.
             setTimeout(() => {
+                const lifecycleTasks = [];
+
                 // [fix] onLeave debe dispararse según la vista que abandonamos,
                 // no según la vista destino. De lo contrario, transiciones como
                 // shop -> events no liberan recursos de ShopView.
                 if (previousView !== viewId) {
-                    if (previousView === 'home') window.HomeView?.onLeave?.();
-                    if (previousView === 'shop') window.ShopView?.onLeave?.();
-                    if (previousView === 'events') window.EventView?.onLeave?.();
+                    if (previousView === 'home') lifecycleTasks.push(() => window.HomeView?.onLeave?.());
+                    if (previousView === 'shop') lifecycleTasks.push(() => window.ShopView?.onLeave?.());
+                    if (previousView === 'events') lifecycleTasks.push(() => window.EventView?.onLeave?.());
                 }
 
-                if (viewId === 'home') window.HomeView?.refresh?.();
-                if (viewId === 'shop') window.ShopView?.onEnter?.();
-                if (viewId === 'events') window.EventView?.onEnter?.();
+                if (viewId === 'home') lifecycleTasks.push(() => _profileViewCallback('HomeView.refresh', () => window.HomeView?.refresh?.()));
+                if (viewId === 'shop') lifecycleTasks.push(() => _profileViewCallback('ShopView.onEnter', () => window.ShopView?.onEnter?.()));
+                if (viewId === 'events') lifecycleTasks.push(() => _profileViewCallback('EventView.onEnter', () => window.EventView?.onEnter?.()));
+
+                _drainLifecycleQueue(lifecycleTasks);
             }, 0);
         });
     }
