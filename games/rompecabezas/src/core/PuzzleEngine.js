@@ -79,6 +79,8 @@ export class PuzzleEngine {
         this.isMobilePortrait = false;
 
         this.isLoopRunning = false;
+        this._rafId = null;
+        this._isDestroyed = false;
         this._idleWakeCount = 0;
         this._layoutRetryRaf = null;
         this._layoutRetryAttempts = 0;
@@ -117,6 +119,7 @@ export class PuzzleEngine {
     }
 
     wakeUp() {
+        if (this._isDestroyed) return;
         if (!this.isLoopRunning) {
             this.isLoopRunning = true;
             this.animate();
@@ -124,6 +127,11 @@ export class PuzzleEngine {
     }
 
     animate() {
+        if (this._isDestroyed || !this.isLoopRunning) {
+            this.isLoopRunning = false;
+            this._rafId = null;
+            return;
+        }
         if (this._idleWakeCount > 0) this._idleWakeCount--;
 
         const canStop =
@@ -137,14 +145,20 @@ export class PuzzleEngine {
 
         if (canStop) {
             this.isLoopRunning = false;
+            this._rafId = null;
             return;
         }
 
         this.render();
-        requestAnimationFrame(() => this.animate());
+        if (this._isDestroyed || !this.isLoopRunning) {
+            this._rafId = null;
+            return;
+        }
+        this._rafId = requestAnimationFrame(() => this.animate());
     }
 
     handleResize() {
+        if (this._isDestroyed) return;
         const oldW = this.logicalWidth  || 1;
         const oldH = this.logicalHeight || 1;
 
@@ -185,7 +199,15 @@ export class PuzzleEngine {
             this.logicalHeight > 0;
     }
 
+    _hasRenderableCanvases() {
+        return this.staticCanvas.width > 0 &&
+            this.staticCanvas.height > 0 &&
+            this.logicalWidth > 0 &&
+            this.logicalHeight > 0;
+    }
+
     _ensureLayoutReady(reason = 'unknown') {
+        if (this._isDestroyed) return;
         if (this._hasValidLogicalSize()) {
             if (this._layoutRetryRaf) {
                 cancelAnimationFrame(this._layoutRetryRaf);
@@ -198,6 +220,11 @@ export class PuzzleEngine {
 
         const maxAttempts = 60;
         const retry = () => {
+            if (this._isDestroyed) {
+                this._layoutRetryRaf = null;
+                this._layoutRetryAttempts = 0;
+                return;
+            }
             this._layoutRetryRaf = null;
             this._layoutRetryAttempts++;
             this.resizeCanvas();
@@ -603,10 +630,18 @@ export class PuzzleEngine {
     }
 
     _onVisibilityChange() {
-        if (document.visibilityState === 'visible') {
-            this.handleResize();
-            this._ensureLayoutReady('visibility');
+        if (document.visibilityState === 'hidden') {
+            this.isLoopRunning = false;
+            if (this._rafId) {
+                cancelAnimationFrame(this._rafId);
+                this._rafId = null;
+            }
+            return;
         }
+
+        this.handleResize();
+        this._ensureLayoutReady('visibility');
+        this.wakeUp();
     }
 
     render() {
@@ -619,6 +654,17 @@ export class PuzzleEngine {
             return;
         }
         this._invalidFrameReason = null;
+
+        if (!this._hasRenderableCanvases()) {
+            this._logSkippedFrame('invalid_static_canvas', {
+                staticCanvasWidth: this.staticCanvas.width,
+                staticCanvasHeight: this.staticCanvas.height,
+                logicalWidth: this.logicalWidth,
+                logicalHeight: this.logicalHeight
+            });
+            this._ensureLayoutReady('render_static');
+            return;
+        }
 
         if (this.needsStaticUpdate) {
             this.updateStaticLayer();
@@ -635,13 +681,21 @@ export class PuzzleEngine {
         this.ctx.drawImage(this.staticCanvas, 0, 0, this.logicalWidth, this.logicalHeight);
 
         if (this.showPreview) {
-            this.ctx.save();
-            this.ctx.globalAlpha = 0.28;
-            this.ctx.drawImage(
-                this.sourceCanvas, 0, 0, this.sourceCanvas.width, this.sourceCanvas.height,
-                this.boardX, this.boardY, this.boardWidth, this.boardHeight
-            );
-            this.ctx.restore();
+            if (this.sourceCanvas.width <= 0 || this.sourceCanvas.height <= 0) {
+                this._logSkippedFrame('invalid_preview_source_canvas', {
+                    sourceCanvasWidth: this.sourceCanvas.width,
+                    sourceCanvasHeight: this.sourceCanvas.height
+                });
+                this._ensureLayoutReady('render_preview');
+            } else {
+                this.ctx.save();
+                this.ctx.globalAlpha = 0.28;
+                this.ctx.drawImage(
+                    this.sourceCanvas, 0, 0, this.sourceCanvas.width, this.sourceCanvas.height,
+                    this.boardX, this.boardY, this.boardWidth, this.boardHeight
+                );
+                this.ctx.restore();
+            }
         }
 
         for (let i = 0; i < this.loosePieces.length; i++) {
@@ -1245,8 +1299,14 @@ export class PuzzleEngine {
      *   quedan referencias pendientes al finalizar resizeCanvas().
      */
     destroy() {
+        this._isDestroyed = true;
+
         // 1. Detener el loop de animación.
         this.isLoopRunning = false;
+        if (this._rafId) {
+            cancelAnimationFrame(this._rafId);
+            this._rafId = null;
+        }
         clearInterval(this._idleTimer);
 
         // 2. Eliminar listeners de input.
@@ -1274,6 +1334,8 @@ export class PuzzleEngine {
         this.staticCanvas.height = 0;
         this.gridCanvas.width    = 0;
         this.gridCanvas.height   = 0;
+        this.logicalWidth = 0;
+        this.logicalHeight = 0;
 
         // 4. Liberar el ImageBitmap si aplica (API determinista de liberación).
         if (this.img && typeof this.img.close === 'function') {
