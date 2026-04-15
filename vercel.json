@@ -31,6 +31,15 @@
       ]
     },
     {
+      "source": "/games/(.*)",
+      "headers": [
+        {
+          "key": "Link",
+          "value": ""
+        }
+      ]
+    },
+    {
       "source": "/api/(.*)",
       "headers": [
         {
