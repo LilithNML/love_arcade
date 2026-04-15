@@ -3086,11 +3086,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ── Arranque ─────────────────────────────────────────────────────────────
-    // Se ejecuta en background sin bloquear el INIT síncrono de app.js.
-    // El fetch a /api/client-config se lanza ANTES del DOMContentLoaded
-    // para que las credenciales estén listas cuando el usuario navegue
-    // a la pestaña de Sincronizar.
-    _sentinelInit().catch(err => {
+    // Espera explícitamente a que el loader de Supabase confirme createClient
+    // antes de invocar _sentinelInit(), evitando un init prematuro en degradado.
+    async function _bootSentinel() {
+        if (!window.supabase?.createClient && typeof window.__loadSupabaseSdk === 'function') {
+            try {
+                await window.__loadSupabaseSdk();
+            } catch (err) {
+                console.warn('[Sentinel] Loader Supabase devolvió error durante bootstrap:', err);
+            }
+        }
+
+        if (!window.supabase?.createClient) {
+            console.warn(
+                '[Sentinel] Supabase SDK no está disponible tras bootstrap (CDN primario + fallback). ' +
+                'Se omite _sentinelInit() y Sentinel queda en modo degradado.'
+            );
+            return;
+        }
+
+        await _sentinelInit();
+    }
+
+    _bootSentinel().catch(err => {
         console.error('[Sentinel] Error en inicialización:', err);
     });
 

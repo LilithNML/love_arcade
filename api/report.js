@@ -152,6 +152,24 @@ async function _parseBody(req) {
     });
 }
 
+function _traceId() {
+    return `rep_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function _errorJson(res, status, code, message, details) {
+    const payload = {
+        ok: false,
+        error: {
+            code,
+            message,
+            trace_id: _traceId(),
+            timestamp: new Date().toISOString(),
+            ...(details ? { details } : {}),
+        },
+    };
+    return res.status(status).json(payload);
+}
+
 export default async function handler(req, res) {
 
     // ── 1. Validación de método HTTP ──────────────────────────────────────────
@@ -160,7 +178,7 @@ export default async function handler(req, res) {
     // recibe un 405 para evitar que crawlers o scrapers consuman el endpoint.
     //
     if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
+        return _errorJson(res, 405, 'method_not_allowed', 'Method Not Allowed');
     }
 
     // ── 2. Seguridad de origen (ampliada para previews de Vercel) ─────────────
@@ -174,16 +192,35 @@ export default async function handler(req, res) {
     // bloquear entornos de preview de Vercel ni desarrollo local.
     //
     const PRODUCTION_DOMAIN = process.env.PRODUCTION_DOMAIN || '';
-    const origin = req.headers['origin'] || req.headers['referer'] || '';
+    const originHeader = req.headers['origin'] || req.headers['referer'] || '';
+
+    function toHostname(value) {
+        if (!value || typeof value !== 'string') return '';
+        try {
+            const withProtocol = value.includes('://') ? value : `https://${value}`;
+            return new URL(withProtocol).hostname.toLowerCase();
+        } catch (_) {
+            return '';
+        }
+    }
+
+    function isSameOrSubdomain(hostname, baseDomain) {
+        if (!hostname || !baseDomain) return false;
+        return hostname === baseDomain || hostname.endsWith(`.${baseDomain}`);
+    }
 
     if (PRODUCTION_DOMAIN) {
-        const isProduction = origin.includes(PRODUCTION_DOMAIN);
-        const isVercelPreview = origin.includes('.vercel.app');
-        const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
+        const requestHost = toHostname(originHeader);
+        const productionHost = toHostname(PRODUCTION_DOMAIN);
+        const isProduction = isSameOrSubdomain(requestHost, productionHost);
+        const isVercelPreview = requestHost === 'vercel.app' || requestHost.endsWith('.vercel.app');
+        const isLocalhost = requestHost === 'localhost' || requestHost === '127.0.0.1';
 
         if (!isProduction && !isVercelPreview && !isLocalhost) {
-            console.warn('[report.js] Origen no autorizado:', origin);
-            return res.status(403).json({ error: 'Forbidden' });
+            console.warn('[report.js] Origen no autorizado:', originHeader);
+            return _errorJson(res, 403, 'forbidden_origin', 'Forbidden', {
+                origin: originHeader || '(empty)',
+            });
         }
     }
 
@@ -306,13 +343,15 @@ export default async function handler(req, res) {
             '[report.js] ❌ Variables de entorno no configuradas.',
             'Asegúrate de definir TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en Vercel.'
         );
-        // 500 silencioso: el frontend no debe saber la causa interna
-        return res.status(500).json({ error: 'Server misconfiguration' });
+        return _errorJson(res, 500, 'server_misconfiguration', 'Server misconfiguration');
     }
 
     const telegramApiUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
 
+    let tgTimeoutId = null;
     try {
+        const tgAbort = new AbortController();
+        tgTimeoutId = setTimeout(() => tgAbort.abort('timeout'), 1800);
         const tgResponse = await fetch(telegramApiUrl, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -322,7 +361,9 @@ export default async function handler(req, res) {
                 text,
                 parse_mode:        'HTML',
             }),
+            signal: tgAbort.signal,
         });
+        clearTimeout(tgTimeoutId);
 
         if (!tgResponse.ok) {
             // Rate limit (429), bot bloqueado (403), Topic eliminado (400)…
@@ -333,7 +374,11 @@ export default async function handler(req, res) {
                 '— Evento:', event,
                 '— Respuesta:', JSON.stringify(errBody)
             );
-            return res.status(500).json({ error: 'Upstream error' });
+            return _errorJson(res, 502, 'telegram_upstream_error', 'Upstream error', {
+                upstream_status: tgResponse.status,
+                upstream_body: errBody,
+                event,
+            });
         }
 
         // ✅ Entregado con éxito
@@ -342,6 +387,19 @@ export default async function handler(req, res) {
     } catch (networkErr) {
         // Error de red entre Vercel y Telegram (timeout, DNS, etc.)
         console.error('[report.js] ❌ Error de red al contactar Telegram:', networkErr.message);
-        return res.status(500).json({ error: 'Network error' });
+        const isTimeout = networkErr?.name === 'AbortError';
+        return _errorJson(
+            res,
+            504,
+            isTimeout ? 'telegram_timeout' : 'telegram_network_error',
+            isTimeout ? 'Telegram timeout' : 'Network error',
+            {
+                event,
+                error_name: networkErr?.name || 'Error',
+                error_message: networkErr?.message || String(networkErr),
+            }
+        );
+    } finally {
+        if (tgTimeoutId) clearTimeout(tgTimeoutId);
     }
 }
