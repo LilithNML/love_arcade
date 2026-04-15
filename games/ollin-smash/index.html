@@ -162,7 +162,11 @@
     │     Deferred by the browser; executes AFTER full DOM parse      │
     │     and AFTER synchronous classic scripts below.                │
     │                                                                 │
-    │  2. app.js (classic synchronous)                                │
+    │  2. supabase-loader.js (classic synchronous)                    │
+    │     Inyecta Supabase con fallback primario/secundario y         │
+    │     expone window.__loadSupabaseSdk para bootstrap coordinado.  │
+    │                                                                 │
+    │  3. app.js (classic synchronous)                                │
     │     Runs immediately when the parser reaches this tag.          │
     │     Sets window.GameCenter before main.js initialises.          │
     │                                                                 │
@@ -173,6 +177,7 @@
   <script type="module" src="./js/main.js"></script>
 
   <!-- Love Arcade Core — must stay last, must stay a classic script -->
+  <script src="../../js/supabase-loader.js"></script>
   <script src="../../js/app.js"></script>
 
 </body>
