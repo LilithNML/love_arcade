@@ -580,6 +580,13 @@
     /** Persistencia temporal de fallos transitorios (sessionStorage). */
     const _FAILED_QUEUE_KEY = 'ghost_failed_queue_v1';
     let _failedQueue = [];
+    const _failureCounters = {
+        timeout: 0,
+        offline: 0,
+        network: 0,
+        http_5xx: 0,
+        http_4xx: 0,
+    };
 
     function _sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
@@ -614,6 +621,12 @@
         if (_failedQueue.some(item => item.dedupeKey === job.dedupeKey)) return;
         _failedQueue.push(job);
         _saveFailedQueue();
+    }
+
+    function _incrementFailureCounter(type) {
+        if (Object.prototype.hasOwnProperty.call(_failureCounters, type)) {
+            _failureCounters[type] += 1;
+        }
     }
 
     async function _flushFailedQueue() {
@@ -756,6 +769,25 @@
                     };
                 }
 
+                if (!res.ok) {
+                    const errorBodyText = await res.text().catch(() => '');
+                    const structuredHttpError = {
+                        event,
+                        attempt: attempt + 1,
+                        online: navigator.onLine,
+                        timedOut: false,
+                        error: {
+                            name: 'HTTPError',
+                            message: `HTTP ${res.status}`,
+                        },
+                        response: {
+                            status: res.status,
+                            body: errorBodyText ? errorBodyText.slice(0, 300) : null,
+                        },
+                    };
+                    console.warn('[GhostAnalytics] send_fail', structuredHttpError);
+                }
+
                 if (res.status >= 500 && attempt < (_SEND_MAX_ATTEMPTS - 1)) {
                     const backoff = _SEND_BACKOFF_BASE_MS * (2 ** attempt);
                     console.warn('[GhostAnalytics] Proxy HTTP 5xx:', res.status, '| Reintento en', backoff, 'ms | Evento:', event);
@@ -764,6 +796,7 @@
                 }
 
                 if (res.status >= 400 && res.status <= 499) {
+                    _incrementFailureCounter('http_4xx');
                     console.warn(
                         '[GhostAnalytics] ❗ Proxy HTTP 4xx:', res.status,
                         '— Evento:', event,
@@ -780,6 +813,7 @@
                 }
 
                 console.warn('[GhostAnalytics] ❗ Proxy HTTP 5xx:', res.status, '| Evento:', event, '| Sin más reintentos.');
+                _incrementFailureCounter('http_5xx');
                 _enqueueFailed({ event, meta, nickname, isTest, bucketStart, dedupeKey });
                 return {
                     ok: false,
@@ -798,6 +832,20 @@
                 const humanReason = timedOut
                     ? 'Timeout agotado'
                     : (offline ? 'Red caída' : 'Fallo de red');
+                console.warn('[GhostAnalytics] send_fail', {
+                    event,
+                    attempt: attempt + 1,
+                    online: navigator.onLine,
+                    timedOut,
+                    error: {
+                        name: err?.name || 'Error',
+                        message: err?.message || String(err),
+                    },
+                    response: {
+                        status: null,
+                        body: null,
+                    },
+                });
 
                 if (attempt < (_SEND_MAX_ATTEMPTS - 1)) {
                     const backoff = _SEND_BACKOFF_BASE_MS * (2 ** attempt);
@@ -807,6 +855,7 @@
                 }
 
                 console.error(`[GhostAnalytics] ❌ ${humanReason} al enviar "${event}":`, err?.message || String(err));
+                _incrementFailureCounter(cause);
                 _enqueueFailed({ event, meta, nickname, isTest, bucketStart, dedupeKey });
                 return {
                     ok: false,
@@ -929,33 +978,54 @@
      */
     function test() {
         if (_isShadowGated()) {
+            const diagnostic = {
+                ok: false,
+                blocked: 'shadow_gate',
+                diagnosis: 'bloqueado_por_cliente',
+                detail: 'Shadow-Gate activo en sessionStorage (ghost_ignore=true).',
+                endpoint: _PROXY_ENDPOINT,
+            };
             console.warn(
                 '%c[GhostAnalytics] 🔕 Shadow-Gate activo',
                 'color:#f97316;font-weight:bold',
                 '— test() bloqueado. Esta sesión está excluida de las analíticas.',
                 '\n  Para desactivar: sessionStorage.removeItem(\'ghost_ignore\') y recarga.'
             );
-            return Promise.resolve({ ok: false, blocked: 'shadow_gate', endpoint: _PROXY_ENDPOINT });
+            return Promise.resolve(diagnostic);
         }
 
         if (_isLocalhost()) {
+            const diagnostic = {
+                ok: false,
+                blocked: 'localhost',
+                diagnosis: 'bloqueado_por_cliente',
+                detail: 'Anti-Localhost activo: envío bloqueado por diseño.',
+                endpoint: _PROXY_ENDPOINT,
+            };
             console.warn(
                 '%c[GhostAnalytics] 🏠 Localhost detectado',
                 'color:#f97316;font-weight:bold',
                 '— test() bloqueado. El Proxy no se activa en entornos locales.',
                 '\n  Despliega en producción y abre con el token de Shadow-Gate para probar.'
             );
-            return Promise.resolve({ ok: false, blocked: 'localhost', endpoint: _PROXY_ENDPOINT });
+            return Promise.resolve(diagnostic);
         }
 
         if (_isBot()) {
+            const diagnostic = {
+                ok: false,
+                blocked: 'bot',
+                diagnosis: 'bloqueado_por_cliente',
+                detail: 'Anti-Bot activo por coincidencia de user-agent.',
+                endpoint: _PROXY_ENDPOINT,
+            };
             console.warn(
                 '%c[GhostAnalytics] 🤖 Bot user-agent detectado',
                 'color:#f97316;font-weight:bold',
                 '— test() bloqueado.',
                 '\n  UA:', navigator.userAgent
             );
-            return Promise.resolve({ ok: false, blocked: 'bot', endpoint: _PROXY_ENDPOINT });
+            return Promise.resolve(diagnostic);
         }
 
         const nickname = _getNickname() || '(sin nickname)';
@@ -966,6 +1036,15 @@
             nickname,
             /* isTest= */ true
         ).then(result => {
+            const diagnosis = result.ok
+                ? 'ok'
+                : (result.classification === 'timeout'
+                    ? 'timeout'
+                    : ((result.classification === 'offline' || result.classification === 'network')
+                        ? 'endpoint_no_accesible'
+                        : (result.classification === 'http_4xx' || result.classification === 'http_5xx'
+                            ? 'error_http_backend'
+                            : 'desconocido')));
             const diagnostic = {
                 ok: result.ok,
                 endpoint: _PROXY_ENDPOINT,
@@ -974,6 +1053,7 @@
                 latencyMs: result.latencyMs ?? null,
                 error: result.error ?? null,
                 classification: result.classification,
+                diagnosis,
             };
             console.log('[GhostAnalytics] Diagnóstico test():', diagnostic);
             return diagnostic;
@@ -1031,6 +1111,7 @@
             return `  · ${k}  →  ${remainingMs > 0 ? `rate-limited (${Math.ceil(remainingMs / 1000)}s)` : 'libre'}`;
         });
 
+        const failureCountersSnapshot = { ..._failureCounters };
         console.log(
             '%c[GhostAnalytics] Estado actual (v12.0)',
             'color:#9b59ff;font-weight:bold',
@@ -1061,9 +1142,25 @@
             `\n  🔗 Proxy endpoint: ${_PROXY_ENDPOINT}`,
             // ── Debug ──
             `\n  🔍 Debug mode: ${_debugMode}`,
+            // ── Telemetría de fallos ──
+            `\n  🧪 Fallos acumulados: timeout=${failureCountersSnapshot.timeout}, offline=${failureCountersSnapshot.offline}, network=${failureCountersSnapshot.network}, http_5xx=${failureCountersSnapshot.http_5xx}, http_4xx=${failureCountersSnapshot.http_4xx}`,
             // ── Rate limiter ──
             `\n  ⏱ Rate limiter (${keys.length} clave${keys.length !== 1 ? 's' : ''}):\n${rl.join('\n') || '  (vacío)'}`
         );
+
+        return {
+            shadowGate: gated,
+            localhostBlocked: isLocal,
+            botBlocked: isRobot,
+            humanGateUnlocked: _humanGateUnlocked,
+            nickname: nickname || null,
+            pendingQueueSize: _pendingQueue.length,
+            nicknamePollerActive: Boolean(_nicknamePoller),
+            endpoint: _PROXY_ENDPOINT,
+            debug: _debugMode,
+            failureCounters: failureCountersSnapshot,
+            rateLimiterKeys: keys,
+        };
     }
 
     // ── Captura automática de errores globales ────────────────────────────────
