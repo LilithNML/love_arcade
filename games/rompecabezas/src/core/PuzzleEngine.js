@@ -1,6 +1,7 @@
 export class PuzzleEngine {
     constructor(canvasElement, config, callbacks) {
         this.canvas = canvasElement;
+        this.debug = Boolean(config?.debug || window.__PUZZLE_DEBUG__);
 
         // ── Contexto principal ────────────────────────────────────────────────
         // alpha: false evita que el compositor mezcle el canal alfa del canvas
@@ -79,6 +80,9 @@ export class PuzzleEngine {
 
         this.isLoopRunning = false;
         this._idleWakeCount = 0;
+        this._layoutRetryRaf = null;
+        this._layoutRetryAttempts = 0;
+        this._invalidFrameReason = null;
 
         this.shadowBlur    = 0;
         this.particleLimit = this.gridSize >= 8 ? 20 : 50;
@@ -88,6 +92,7 @@ export class PuzzleEngine {
         this.handleEnd      = this.handleEnd.bind(this);
         this.handleResize   = this.handleResize.bind(this);
         this._onOrientation = this._onOrientation.bind(this);
+        this._onVisibilityChange = this._onVisibilityChange.bind(this);
 
         this.init();
     }
@@ -95,6 +100,7 @@ export class PuzzleEngine {
     init() {
         this.resizeCanvas();
         this.buildGridCanvas();
+        this._ensureLayoutReady('init');
         this.generateBlinkDots();
         this.generateSharedTopology();
         this.createPieces();
@@ -143,6 +149,15 @@ export class PuzzleEngine {
         const oldH = this.logicalHeight || 1;
 
         this.resizeCanvas();
+        if (!this._hasValidLogicalSize()) {
+            this._logSkippedFrame('resize_invalid_logical_size', {
+                logicalWidth: this.logicalWidth,
+                logicalHeight: this.logicalHeight
+            });
+            this._ensureLayoutReady('resize');
+            return;
+        }
+
         this.buildGridCanvas();
         this.generateBlinkDots();
         this.createPiecesPathsOnly();
@@ -161,6 +176,76 @@ export class PuzzleEngine {
         this.updatePieceCaches();
         this.needsStaticUpdate = true;
         this.wakeUp();
+    }
+
+    _hasValidLogicalSize() {
+        return Number.isFinite(this.logicalWidth) &&
+            Number.isFinite(this.logicalHeight) &&
+            this.logicalWidth > 0 &&
+            this.logicalHeight > 0;
+    }
+
+    _ensureLayoutReady(reason = 'unknown') {
+        if (this._hasValidLogicalSize()) {
+            if (this._layoutRetryRaf) {
+                cancelAnimationFrame(this._layoutRetryRaf);
+                this._layoutRetryRaf = null;
+            }
+            this._layoutRetryAttempts = 0;
+            return;
+        }
+        if (this._layoutRetryRaf) return;
+
+        const maxAttempts = 60;
+        const retry = () => {
+            this._layoutRetryRaf = null;
+            this._layoutRetryAttempts++;
+            this.resizeCanvas();
+
+            if (this._hasValidLogicalSize()) {
+                this.buildGridCanvas();
+                this.generateBlinkDots();
+                if (this.pieces.length > 0) {
+                    this.createPiecesPathsOnly();
+                    this.updatePieceCaches();
+                }
+                this.needsStaticUpdate = true;
+                this._layoutRetryAttempts = 0;
+                this.wakeUp();
+                this._debugLog('layout_recovered', { reason });
+                return;
+            }
+
+            this._logSkippedFrame('layout_retry_pending', {
+                reason,
+                attempt: this._layoutRetryAttempts,
+                logicalWidth: this.logicalWidth,
+                logicalHeight: this.logicalHeight
+            });
+
+            if (this._layoutRetryAttempts < maxAttempts) {
+                this._layoutRetryRaf = requestAnimationFrame(retry);
+            } else {
+                this._debugLog('layout_retry_exhausted', {
+                    reason,
+                    attempts: this._layoutRetryAttempts
+                });
+                this._layoutRetryAttempts = 0;
+            }
+        };
+
+        this._layoutRetryRaf = requestAnimationFrame(retry);
+    }
+
+    _debugLog(event, details = {}) {
+        if (!this.debug) return;
+        console.debug(`[PuzzleEngine] ${event}`, details);
+    }
+
+    _logSkippedFrame(reason, details = {}) {
+        if (this._invalidFrameReason === reason) return;
+        this._invalidFrameReason = reason;
+        this._debugLog('frame_skipped', { reason, ...details });
     }
 
     /**
@@ -438,6 +523,18 @@ export class PuzzleEngine {
     }
 
     buildGridCanvas() {
+        if (!this._hasValidLogicalSize()) {
+            this.gridCanvasW = 0;
+            this.gridCanvasH = 0;
+            this.gridCanvas.width = 0;
+            this.gridCanvas.height = 0;
+            this._logSkippedFrame('build_grid_invalid_logical_size', {
+                logicalWidth: this.logicalWidth,
+                logicalHeight: this.logicalHeight
+            });
+            return;
+        }
+
         const ext        = 0.12;
         const lw         = this.logicalWidth;
         const lh         = this.logicalHeight;
@@ -502,9 +599,27 @@ export class PuzzleEngine {
         const px = this.logicalWidth  * (0.5 + (e.gamma || 0) / 90  * 0.5);
         const py = this.logicalHeight * (0.5 + (e.beta  || 0) / 180 * 0.5);
         this._updateParallaxTarget(px, py);
+        this._ensureLayoutReady('orientation');
+    }
+
+    _onVisibilityChange() {
+        if (document.visibilityState === 'visible') {
+            this.handleResize();
+            this._ensureLayoutReady('visibility');
+        }
     }
 
     render() {
+        if (!this._hasValidLogicalSize()) {
+            this._logSkippedFrame('invalid_logical_dimensions', {
+                logicalWidth: this.logicalWidth,
+                logicalHeight: this.logicalHeight
+            });
+            this._ensureLayoutReady('render');
+            return;
+        }
+        this._invalidFrameReason = null;
+
         if (this.needsStaticUpdate) {
             this.updateStaticLayer();
             this.needsStaticUpdate = false;
@@ -556,6 +671,19 @@ export class PuzzleEngine {
     }
 
     _renderGridLayer() {
+        if (this.gridCanvas.width === 0 ||
+            this.gridCanvas.height === 0 ||
+            this.gridCanvasW <= 0 ||
+            this.gridCanvasH <= 0) {
+            this._logSkippedFrame('invalid_grid_canvas', {
+                width: this.gridCanvas.width,
+                height: this.gridCanvas.height,
+                gridCanvasW: this.gridCanvasW,
+                gridCanvasH: this.gridCanvasH
+            });
+            return;
+        }
+
         const dx = -this.gridPad + this.parallaxX;
         const dy = -this.gridPad + this.parallaxY;
 
@@ -1078,6 +1206,9 @@ export class PuzzleEngine {
         this.canvas.addEventListener('touchstart', this.handleStart, { passive: false });
         window.addEventListener('touchmove', this.handleMove, { passive: false });
         window.addEventListener('touchend', this.handleEnd);
+        document.addEventListener('visibilitychange', this._onVisibilityChange);
+        window.addEventListener('pageshow', this.handleResize, { passive: true });
+        window.addEventListener('orientationchange', this.handleResize, { passive: true });
 
         if (window.DeviceOrientationEvent) {
             window.addEventListener('deviceorientation', this._onOrientation, { passive: true });
@@ -1125,8 +1256,15 @@ export class PuzzleEngine {
         this.canvas.removeEventListener('touchstart', this.handleStart);
         window.removeEventListener('touchmove', this.handleMove);
         window.removeEventListener('touchend', this.handleEnd);
+        document.removeEventListener('visibilitychange', this._onVisibilityChange);
+        window.removeEventListener('pageshow', this.handleResize);
+        window.removeEventListener('orientationchange', this.handleResize);
         window.removeEventListener('deviceorientation', this._onOrientation);
         if (this._resizeObserver) this._resizeObserver.disconnect();
+        if (this._layoutRetryRaf) {
+            cancelAnimationFrame(this._layoutRetryRaf);
+            this._layoutRetryRaf = null;
+        }
 
         // 3. Liberar VRAM de los buffers offscreen.
         //    Asignar 0 invalida la textura en la GPU de forma síncrona.
