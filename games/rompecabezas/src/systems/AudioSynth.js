@@ -28,8 +28,11 @@ export class AudioSynthesizer {
         this.resume();
 
         switch (type) {
-            case 'click':
-                this.uiClick();
+            case 'ui_tap':
+                this.uiTap();
+                break;
+            case 'board_pick':
+                this.boardPick();
                 break;
             case 'snap':
                 this.pieceSnap();
@@ -40,25 +43,48 @@ export class AudioSynthesizer {
         }
     }
 
-    uiClick() {
+    uiTap() {
         const now = this.ctx.currentTime;
 
         this.tone({
-            freq: 1200,
+            freq: 1450,
             type: 'triangle',
-            attack: 0.001,
-            decay: 0.03,
-            volume: 0.15,
+            attack: 0.002,
+            decay: 0.04,
+            volume: 0.055,
             time: now
         });
 
         this.tone({
-            freq: 500,
+            freq: 980,
             type: 'sine',
+            attack: 0.003,
+            decay: 0.05,
+            volume: 0.04,
+            time: now + 0.004
+        });
+    }
+
+    boardPick() {
+        const now = this.ctx.currentTime;
+
+        this.tone({
+            freq: 410,
+            type: 'triangle',
             attack: 0.002,
             decay: 0.06,
-            volume: 0.08,
-            time: now
+            volume: 0.11,
+            time: now,
+            lowpass: 1800
+        });
+
+        this.tone({
+            freq: 760,
+            type: 'sine',
+            attack: 0.001,
+            decay: 0.05,
+            volume: 0.065,
+            time: now + 0.003
         });
     }
 

@@ -26,7 +26,7 @@ export const UI = {
         const onPress = (e) => {
             const el = e.target.closest(selector);
             if (!el) return;
-            AudioSynth.play('click');
+            AudioSynth.play('ui_tap');
         };
 
         const onRelease = (e) => {
