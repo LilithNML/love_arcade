@@ -22,6 +22,7 @@ export const UI = {
 
     initGlobalInteractions() {
         const selector = '.btn, .btn-icon, .btn-hud-action, .level-card';
+        let lastTouchTs = 0;
 
         const onPress = (e) => {
             const el = e.target.closest(selector);
@@ -43,10 +44,16 @@ export const UI = {
             );
         };
 
-        document.addEventListener('mousedown', onPress);
+        if (window.PointerEvent) {
+            document.addEventListener('pointerdown', onPress);
+            document.addEventListener('pointerup', onRelease);
+            return;
+        }
+
         document.addEventListener('touchstart', onPress, { passive: true });
-        document.addEventListener('mouseup',   onRelease);
-        document.addEventListener('touchend',  onRelease, { passive: true });
+        document.addEventListener('mousedown', onPress);
+        document.addEventListener('touchend', onRelease, { passive: true });
+        document.addEventListener('mouseup', onRelease);
     },
 
     showScreen(targetIdOrName) {
