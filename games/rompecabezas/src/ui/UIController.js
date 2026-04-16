@@ -27,11 +27,7 @@ export const UI = {
         const onPress = (e) => {
             const el = e.target.closest(selector);
             if (!el) return;
-
-            if (e.type === 'mousedown' && Date.now() - lastTouchTs < 500) return;
-            if (e.type === 'touchstart') lastTouchTs = Date.now();
-
-            AudioSynth.play('click');
+            AudioSynth.play('ui_tap');
         };
 
         const onRelease = (e) => {
