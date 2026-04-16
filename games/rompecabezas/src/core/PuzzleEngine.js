@@ -1122,7 +1122,7 @@ export class PuzzleEngine {
                 p.originalX        = p.currentX;
                 p.originalY        = p.currentY;
                 this.wakeUp();
-                this.callbacks.onSound && this.callbacks.onSound('click');
+                this.callbacks.onSound && this.callbacks.onSound('board_pick');
                 if (navigator.vibrate) navigator.vibrate(10);
                 this.loosePieces.splice(i, 1);
                 this.loosePieces.push(p);
