@@ -1,7 +1,15 @@
 export class AudioSynthesizer {
     constructor() {
-        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.ctx = null;
         this.enabled = true;
+        this.master = null;
+        this.compressor = null;
+    }
+
+    ensureContext() {
+        if (this.ctx) return;
+
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
 
         this.master = this.ctx.createGain();
         this.master.gain.value = 0.7;
@@ -17,15 +25,26 @@ export class AudioSynthesizer {
         this.compressor.connect(this.master);
     }
 
-    resume() {
+    async resume() {
+        this.ensureContext();
+
+        if (!this.ctx) return false;
+
         if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
+            try {
+                await this.ctx.resume();
+            } catch {
+                return false;
+            }
         }
+
+        return this.ctx.state === 'running';
     }
 
-    play(type) {
+    async play(type) {
         if (!this.enabled) return;
-        this.resume();
+        const isReady = await this.resume();
+        if (!isReady) return;
 
         switch (type) {
             case 'click':

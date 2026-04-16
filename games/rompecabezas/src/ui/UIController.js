@@ -22,6 +22,13 @@ export const UI = {
 
     initGlobalInteractions() {
         const selector = '.btn, .btn-icon, .btn-hud-action, .level-card';
+        let audioUnlocked = false;
+
+        const unlockAudio = () => {
+            if (audioUnlocked) return;
+            audioUnlocked = true;
+            AudioSynth.resume();
+        };
 
         const onPress = (e) => {
             const el = e.target.closest(selector);
@@ -43,6 +50,9 @@ export const UI = {
             );
         };
 
+        document.addEventListener('pointerdown', unlockAudio, { once: true, passive: true });
+        document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
+        document.addEventListener('mousedown', unlockAudio, { once: true, passive: true });
         document.addEventListener('mousedown', onPress);
         document.addEventListener('touchstart', onPress, { passive: true });
         document.addEventListener('mouseup',   onRelease);
