@@ -908,5 +908,95 @@
     "tags": [
       "Mobile"
     ]
+  },
+  {
+    "id": 92,
+    "name": "Bardock",
+    "price": 1500,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/bardock_1fbcba3f",
+    "file": "bardock_1fbcba3f.webp",
+    "tags": [
+      "Mobile"
+    ]
+  },
+  {
+    "id": 93,
+    "name": "Invencible Vs Cecil",
+    "price": 2000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/invencible_vs_cecil_46f5a56f",
+    "file": "invencible_vs_cecil_46f5a56f.webp",
+    "tags": [
+      "Mobile"
+    ]
+  },
+  {
+    "id": 94,
+    "name": "Nakano Itsuki",
+    "price": 2000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/nakano_itsuki_c30720a9",
+    "file": "nakano_itsuki_c30720a9.webp",
+    "tags": [
+      "Mobile"
+    ]
+  },
+  {
+    "id": 95,
+    "name": "Gran Regente Thragg",
+    "price": 1500,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/gran_regente_thragg_6717e4af",
+    "file": "gran_regente_thragg_6717e4af.webp",
+    "tags": [
+      "Mobile"
+    ]
+  },
+  {
+    "id": 96,
+    "name": "Itsuki Nakano",
+    "price": 3000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/itsuki_nakano_8905039e",
+    "file": "itsuki_nakano_8905039e.webp",
+    "tags": [
+      "Mobile"
+    ]
+  },
+  {
+    "id": 97,
+    "name": "Nakano Nino",
+    "price": 2000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/nakano_nino_a2f17957",
+    "file": "nakano_nino_a2f17957.webp",
+    "tags": [
+      "Mobile"
+    ]
+  },
+  {
+    "id": 98,
+    "name": "Invencible",
+    "price": 1800,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/invencible_7e362442",
+    "file": "invencible_7e362442.webp",
+    "tags": [
+      "Mobile"
+    ]
+  },
+  {
+    "id": 99,
+    "name": "Makima",
+    "price": 3000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/makima_95376fff",
+    "file": "makima_95376fff.webp",
+    "tags": [
+      "Mobile"
+    ]
+  },
+  {
+    "id": 100,
+    "name": "Rias Gremory",
+    "price": 1800,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/rias_gremory_fa7587d2",
+    "file": "rias_gremory_fa7587d2.webp",
+    "tags": [
+      "Mobile"
+    ]
   }
 ]
