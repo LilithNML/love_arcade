@@ -1016,7 +1016,7 @@ window.LA_WS_LEVELS = [
     {
         id: "lvl_142",
         title: "Black Mirror",
-        gridSize: 11,
+        gridSize: 12,
         words: ["NOSEDIVE", "COOKIE", "ARKANGEL", "METALHEAD", "CROCODILE", "BANDERSNATCH"],
         rewardCoins: 150 // Media: 11x11, 6 palabras + BANDERSNATCH (12 chars) → 130+20
     },
@@ -1075,6 +1075,184 @@ window.LA_WS_LEVELS = [
         gridSize: 12,
         words: ["BLOCKCHAIN", "METAVERSO", "CUANTICO", "NANOBOT", "ROBOTICA", "HOLOGRAMA", "FUSION", "SATELITE", "BITCOIN", "QUANTUM"],
         rewardCoins: 250 // HITO nivel 150 + Maestra: 12x12, 10 palabras + técnica + BLOCKCHAIN (10) → máxima recompensa
+    },
+
+    // ─── BLOQUE 151-175: DB Legends, Invincible, The Boys, Breaking Bad, Gastronomía ───
+
+    {
+        id: "lvl_151",
+        title: "Dragon Ball Legends: Guerreros",
+        gridSize: 12,
+        words: ["SHALLOT", "ZAHHA", "GIBLET", "GINE", "TURLES", "FASHA", "BARDOCK", "PARAGUS"],
+        rewardCoins: 180 // Avanzada: 12x12, 8 palabras — personajes exclusivos del modo historia
+    },
+    {
+        id: "lvl_152",
+        title: "Invincible: Protagonistas",
+        gridSize: 12,
+        words: ["MARK", "NOLAN", "AMBER", "WILLIAM", "ATOM", "EVE", "ROBOT", "DEBBIE"],
+        rewardCoins: 180 // Avanzada: 12x12, 8 palabras
+    },
+    {
+        id: "lvl_153",
+        title: "The Boys: Los Siete",
+        gridSize: 12,
+        words: ["HOMELANDER", "STARLIGHT", "BUTCHER", "FRENCHIE", "KIMIKO", "MAEVE", "HUGHIE", "ASHLEY"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + HOMELANDER (10) y STARLIGHT (9) → 180+20
+    },
+    {
+        id: "lvl_154",
+        title: "Breaking Bad: Química Azul",
+        gridSize: 12,
+        words: ["METILAMINA", "CRISTAL", "PRECURSOR", "ACETONA", "REDUCCION", "PUREZA", "COCINADO", "AZUL"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + METILAMINA (10) y REDUCCION (9) → 180+20
+    },
+    {
+        id: "lvl_155",
+        title: "Gastronomía Francesa",
+        gridSize: 12,
+        words: ["CROISSANT", "BAGUETTE", "RATATOUILLE", "SOUFFLE", "ECLAIR", "QUICHE", "CREPE", "TERRINE"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + RATATOUILLE (11) y CROISSANT (9) → 180+20
+    },
+    {
+        id: "lvl_156",
+        title: "Dragon Ball Legends: Formas",
+        gridSize: 12,
+        words: ["OZARU", "KAIOKEN", "INSTINTO", "BERSERK", "SSBLUE", "SSROSE", "FUSION", "ULTRA"],
+        rewardCoins: 180 // Avanzada: 12x12, 8 palabras — transformaciones del juego
+    },
+    {
+        id: "lvl_157",
+        title: "The Boys: Compound V",
+        gridSize: 11,
+        words: ["COMPOUNDV", "SUPE", "VOUGHT", "SOLDIER", "PAYBACK", "STORMFRONT", "STARLIGHT"],
+        rewardCoins: 170 // Media: 11x11, 7 palabras + STORMFRONT (10) y COMPOUNDV (9) → 150+20
+    },
+    {
+        id: "lvl_158",
+        title: "Gastronomía Mexicana",
+        gridSize: 12,
+        words: ["MOLE", "POZOLE", "TLAYUDA", "TAMALES", "TOSTADA", "CHILAQUILES", "ENCHILADA", "BARBACOA"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + CHILAQUILES (11) y ENCHILADA (9) → 180+20
+    },
+    {
+        id: "lvl_159",
+        title: "Invincible: Viltrumitas",
+        gridSize: 11,
+        words: ["THRAGG", "CONQUEST", "ANISSA", "LUCAN", "KREGG", "VILTRUM", "VILTRUMITE"],
+        rewardCoins: 170 // Media: 11x11, 7 palabras + VILTRUMITE (10) → 150+20
+    },
+    {
+        id: "lvl_160",
+        title: "Cultura Pop: Íconos Máximos",
+        gridSize: 12,
+        words: ["KAMEHAMEHA", "HOMELANDER", "HEISENBERG", "INVINCIBLE", "CROISSANT", "CHILAQUILES", "VILTRUMITE", "GALICKGUN", "METILAMINA", "RATATOUILLE"],
+        rewardCoins: 250 // HITO nivel 160 + Maestra: 12x12, 10 palabras + múltiples palabras largas → máxima recompensa
+    },
+    {
+        id: "lvl_161",
+        title: "Breaking Bad: El Cartel",
+        gridSize: 12,
+        words: ["SALAMANCA", "GUSTAVO", "POLLOS", "NACHO", "LALO", "BOLSA", "ELADIO", "HECTOR"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + SALAMANCA (9) → 180+20
+    },
+    {
+        id: "lvl_162",
+        title: "Términos Japoneses",
+        gridSize: 11,
+        words: ["IKIGAI", "WABISABI", "KODAWARI", "SHOKUNIN", "FURUSATO", "MONO", "HIKIKOMORI"],
+        rewardCoins: 170 // Media: 11x11, 7 palabras + HIKIKOMORI (10) → 150+20
+    },
+    {
+        id: "lvl_163",
+        title: "Gastronomía Asiática",
+        gridSize: 12,
+        words: ["BIBIMBAP", "BULGOGI", "LAKSA", "RENDANG", "TONKATSU", "KIMCHI", "MALATANG", "TTEOKBOKKI"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + TTEOKBOKKI (10) → 180+20
+    },
+    {
+        id: "lvl_164",
+        title: "Dragon Ball Legends: Sagas",
+        gridSize: 10,
+        words: ["SAIYAN", "NAMEK", "BEERUS", "JIREN", "ZAMASU", "MORO"],
+        rewardCoins: 125 // Básica: 10x10, 6 palabras (tope de rango)
+    },
+    {
+        id: "lvl_165",
+        title: "Invincible: Teen Team",
+        gridSize: 10,
+        words: ["MARK", "EVE", "REX", "ROBOT", "TERRA", "KATE"],
+        rewardCoins: 125 // Básica: 10x10, 6 palabras (tope de rango)
+    },
+    {
+        id: "lvl_166",
+        title: "The Boys: La Agencia",
+        gridSize: 11,
+        words: ["BUTCHER", "MALLORY", "GRACE", "FRENCHIE", "KIMIKO", "HUGHIE", "MOTHER", "MILK"],
+        rewardCoins: 175 // Media: 11x11, 8 palabras → tope de rango medio
+    },
+    {
+        id: "lvl_167",
+        title: "Gastronomía Nórdica",
+        gridSize: 12,
+        words: ["GRAVLAX", "LUTEFISK", "KNACKEBROD", "HYGGE", "FIKA", "SMORREBROD", "LEFSE", "ROMMEGROT"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + KNACKEBROD (10) y SMORREBROD (10) → 180+20
+    },
+    {
+        id: "lvl_168",
+        title: "Gastronomía Española",
+        gridSize: 12,
+        words: ["PAELLA", "GAZPACHO", "CHURROS", "JAMON", "CROQUETA", "TORTILLA", "SOBRASADA", "PISTO"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + SOBRASADA (9) → 180+20
+    },
+    {
+        id: "lvl_169",
+        title: "Breaking Bad: Locaciones",
+        gridSize: 12,
+        words: ["ALBUQUERQUE", "LABORATORIO", "LAVANDERIA", "DESIERTO", "JUNKYARD", "POLLOS", "SALON", "CARCEL"],
+        rewardCoins: 220 // Avanzada: 12x12, 8 palabras + ALBUQUERQUE (11) y LABORATORIO (11) → 200+20
+    },
+    {
+        id: "lvl_170",
+        title: "Antihéroes Legendarios",
+        gridSize: 12,
+        words: ["WALTER", "BUTCHER", "NOLAN", "MAGNETO", "VEGETA", "LIGHT", "THANOS", "OZYMANDIAS", "RICK", "JAIME"],
+        rewardCoins: 250 // HITO nivel 170 + Maestra: 12x12, 10 palabras + OZYMANDIAS (10) → máxima recompensa
+    },
+    {
+        id: "lvl_171",
+        title: "Germanismos",
+        gridSize: 12,
+        words: ["ZEITGEIST", "ANGST", "GESTALT", "DOPPELGANGER", "POLTERGEIST", "UBERMENSCH", "WELTGEIST"],
+        rewardCoins: 220 // Avanzada: 12x12, 7 palabras + DOPPELGANGER (12), POLTERGEIST (11) y UBERMENSCH (10) → rango técnico
+    },
+    {
+        id: "lvl_172",
+        title: "Dragon Ball: Técnicas Épicas",
+        gridSize: 12,
+        words: ["KAMEHAMEHA", "GALICKGUN", "MASENKOHA", "KIENZAN", "MAKANKOSAPPO", "HAKAI", "MAFUBA", "KAIOKEN"],
+        rewardCoins: 220 // Avanzada: 12x12, 8 palabras + MAKANKOSAPPO (12) y KAMEHAMEHA (10) → 200+20
+    },
+    {
+        id: "lvl_173",
+        title: "The Boys: Temporada 4",
+        gridSize: 11,
+        words: ["FIRECRACKER", "SISTER", "SAGE", "WEBWEAVER", "GUNPOWDER", "NOIR", "ASHLEY"],
+        rewardCoins: 170 // Media: 11x11, 7 palabras + FIRECRACKER (11) y WEBWEAVER (9) → 150+20
+    },
+    {
+        id: "lvl_174",
+        title: "Alta Cocina: Técnicas",
+        gridSize: 12,
+        words: ["DEGUSTATION", "CONSOMME", "VELOUTE", "BECHAMEL", "HOLLANDAISE", "MIREPOIX", "BRUNOISE", "JULIENNE"],
+        rewardCoins: 220 // Avanzada: 12x12, 8 palabras + DEGUSTATION (11) y HOLLANDAISE (11) → 200+20
+    },
+    {
+        id: "lvl_175",
+        title: "Invincible: El Universo",
+        gridSize: 12,
+        words: ["INVINCIBLE", "VILTRUMITE", "SEQUID", "FLAXAN", "IMMORTAL", "OMNI", "CONQUEST", "THRAGG", "ANISSA", "KREGG"],
+        rewardCoins: 230 // Maestra: 12x12, 10 palabras + INVINCIBLE (10) y VILTRUMITE (10) → 230
     }
 ];
 
