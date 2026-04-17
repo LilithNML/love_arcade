@@ -224,6 +224,7 @@ const PROMO_CODES_HASHED = {
 'aec9091f68e1f1324e1ed9b8ccb6ce86a137a9b2c3440ea5d2fa83bb2fb70523': 1000,// 09112024  
 'a6670a5454af70c97e1fc2fc457af9521383055a257ba58ac549c5ccc7766a85': 200,   // VERSION9
 '02d936b1e7ecebb010709ccc9b82509f092b98a89731dcf474829451dd627ee9': 13000, // PAGO_QA
+'fc4cbe30d1379fac9ba1cf923cc7e076f3d90a69a321fce8d683e1380077a7d8': 1200,  // FIX_REWARD_120426
 };
 
 // =====================================================
