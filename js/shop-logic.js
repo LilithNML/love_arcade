@@ -263,6 +263,54 @@ let _pendingHiResImg     = null;   // Tracks in-flight Image() load; cancelled o
 let _preloadObserver     = null;   // IntersectionObserver for hi-res smart preloading (v9.6)
 
 /**
+ * Resuelve el aspect ratio objetivo del preview.
+ * Prioridad:
+ *  1) Dimensiones reales de la imagen (naturalWidth/naturalHeight) si existen.
+ *  2) Heurística por tags del item (Mobile=9:20, PC=16:9).
+ *  3) Fallback neutro 1:1 para compatibilidad futura.
+ *
+ * @param {object} item
+ * @param {HTMLImageElement|null} [probeImg]
+ * @returns {number} ratio ancho/alto
+ */
+function _resolvePreviewAspectRatio(item, probeImg = null) {
+    const w = Number(probeImg?.naturalWidth || 0);
+    const h = Number(probeImg?.naturalHeight || 0);
+    if (w > 0 && h > 0) return w / h;
+
+    const tags = Array.isArray(item?.tags) ? item.tags : [];
+    if (tags.includes('Mobile')) return 9 / 20;
+    if (tags.includes('PC')) return 16 / 9;
+    return 1;
+}
+
+/**
+ * Ajusta tamaño de la caja de preview para respetar el aspect ratio indicado
+ * sin exceder ni el ancho del stage ni el alto máximo visual (62vh).
+ *
+ * @param {HTMLElement} frameEl
+ * @param {number} ratio  ancho/alto
+ */
+function _applyPreviewFrameSize(frameEl, ratio) {
+    if (!frameEl) return;
+    const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+    const stage     = document.getElementById('preview-mockup-stage');
+    const maxW      = Math.max(220, (stage?.clientWidth || 520) - 40);
+    const maxH      = Math.max(180, Math.floor(window.innerHeight * 0.62));
+
+    // Fit "contain": primero por ancho, luego corregir por alto si excede.
+    let width  = maxW;
+    let height = width / safeRatio;
+    if (height > maxH) {
+        height = maxH;
+        width  = height * safeRatio;
+    }
+
+    frameEl.style.width  = `${Math.round(width)}px`;
+    frameEl.style.height = `${Math.round(height)}px`;
+}
+
+/**
  * Returns the current time as "HH:MM" using the device locale.
  * @returns {string}
  */
@@ -947,6 +995,10 @@ function openPreviewModal(itemOrId) {
 
     const wallpaperPath = _getMockupUrl(item);
     const artEl         = slot.querySelector('.preview-art-layer');
+    const frameEl       = slot.querySelector('.preview-art-frame');
+
+    // Tamaño inicial inmediato usando heurística por tags.
+    _applyPreviewFrameSize(frameEl, _resolvePreviewAspectRatio(item));
 
     artEl.style.backgroundImage = `url('${item.image}')`;
     artEl.classList.add('mockup-bg-loading');
@@ -956,7 +1008,11 @@ function openPreviewModal(itemOrId) {
     let _thumbOk = false;
     const thumbProbe = new Image();
     thumbProbe.decoding = 'async';
-    thumbProbe.onload = () => { _thumbOk = true; };
+    thumbProbe.onload = () => {
+        _thumbOk = true;
+        // Refinar el tamaño con el aspect ratio REAL de la imagen.
+        _applyPreviewFrameSize(frameEl, _resolvePreviewAspectRatio(item, thumbProbe));
+    };
     thumbProbe.onerror = () => {
         if (_pendingHiResImg) {
             _pendingHiResImg.onload = _pendingHiResImg.onerror = null;

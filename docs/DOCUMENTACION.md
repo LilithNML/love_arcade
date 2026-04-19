@@ -4998,6 +4998,7 @@ Reducir el tiempo de apertura del preview, disminuir carga del DOM en la vista d
 1. **Preview simplificado (sin mockups superpuestos)**
    - Se eliminó el render de mockups Mobile/PC en la apertura del modal de preview.
    - El modal ahora monta un frame único (`.preview-art-frame`) con una sola capa de arte y una capa ligera de protección visual.
+   - El tamaño del frame se adapta al **aspect ratio real de la imagen** cuando está disponible (`naturalWidth/naturalHeight`), con fallback por tag (`Mobile`=9:20, `PC`=16:9, default=1:1).
    - Se mantiene la protección básica anti-extracción:
      - Bloqueo de menú contextual (`contextmenu` + `preventDefault`).
      - Capa superpuesta no interactiva (`.preview-art-protection`).
