@@ -11,7 +11,6 @@
  *    result.message === 'Código inválido'. Diferencia intentos de adivinar códigos
  *    de errores ya canjeados (message === 'Ya canjeaste este código'), que se
  *    ignoran para no saturar el canal.
- *  - renderShop(): wishlist click handler añade track('wishlist_add') solo al
  *    agregar un ítem (isNow === true), no al quitarlo.
  *  - loadCatalog(): añade track('user_snapshot') una sola vez por sesión de
  *    navegador (guardado en sessionStorage bajo 'ga_snapshot_sent') tras cargar
@@ -1206,7 +1205,6 @@ function filterItems() {
     const filtered = allItems.filter(item => {
         let matchesFilter;
         if      (activeFilter === 'Todos')       matchesFilter = true;
-        else if (activeFilter === 'Wishlist')    matchesFilter = GameCenter.isWishlisted(item.id);
         else if (activeFilter === 'NoObtenidos') matchesFilter = GameCenter.getBoughtCount(item.id) === 0;
         else                                     matchesFilter = Array.isArray(item.tags) && item.tags.includes(activeFilter);
 
@@ -1218,19 +1216,15 @@ function filterItems() {
         return matchesFilter && matchesSearch;
     });
 
-    const wishlisted = filtered.filter(item =>  GameCenter.isWishlisted(item.id));
-    const others     = filtered.filter(item => !GameCenter.isWishlisted(item.id));
-    renderShop([...wishlisted, ...others]);
+    renderShop(filtered);
 
     const countEl = document.getElementById('search-results-count');
     const emptyEl = document.getElementById('filter-empty');
     const gridEl  = document.getElementById('shop-container');
-    const sorted  = [...wishlisted, ...others];
+    const sorted  = filtered;
 
     if (sorted.length === 0 && activeFilter === 'NoObtenidos' && !searchQuery) {
-        const allWishlisted = allItems.filter(item =>  GameCenter.isWishlisted(item.id));
-        const allOthers     = allItems.filter(item => !GameCenter.isWishlisted(item.id));
-        renderShop([...allWishlisted, ...allOthers]);
+        renderShop(allItems);
         gridEl.classList.remove('hidden');
         emptyEl.classList.add('hidden');
         countEl.textContent = 'No hay novedades pendientes';
@@ -1246,7 +1240,6 @@ function filterItems() {
         countEl.textContent = isFiltered ? `${sorted.length} resultado${sorted.length !== 1 ? 's' : ''}` : '';
         countEl.classList.toggle('hidden', !isFiltered);
     }
-    updateWishlistCost();
 }
 
 function resetFilters() {
@@ -1262,35 +1255,6 @@ function resetFilters() {
 }
 // Exponer globalmente (compatible con onclick="resetFilters()" en el HTML)
 window.resetFilters = resetFilters;
-
-// ── Wishlist Cost ─────────────────────────────────────────────────────────────
-function updateWishlistCost() {
-    const banner = document.getElementById('wishlist-cost-banner');
-    const textEl = document.getElementById('wishlist-cost-text');
-    if (!banner || !textEl || !allItems.length) return;
-
-    const unowned = allItems.filter(item =>
-        GameCenter.isWishlisted(item.id) && GameCenter.getBoughtCount(item.id) === 0
-    );
-    if (unowned.length === 0) { banner.classList.add('hidden'); return; }
-
-    const eco   = window.ECONOMY;
-    const total = unowned.reduce((sum, item) => {
-        const price = eco.isSaleActive ? Math.floor(item.price * eco.saleMultiplier) : item.price;
-        return sum + price;
-    }, 0);
-
-    const balance = GameCenter.getBalance();
-    const needed  = Math.max(0, total - balance);
-    const count   = unowned.length;
-    const plural  = count !== 1 ? 's' : '';
-
-    textEl.innerHTML = needed > 0
-        ? `Necesitas <strong>${needed} ⭐</strong> más para toda tu lista (<strong>${count}</strong> ítem${plural})`
-        : `¡Tienes saldo para toda tu lista! (<strong>${count}</strong> ítem${plural})`;
-
-    banner.classList.remove('hidden');
-}
 
 // ── Render: Streak Calendar ───────────────────────────────────────────────────
 function renderStreakCalendar() {
@@ -1317,7 +1281,6 @@ function renderStreakCalendar() {
 function _buildShopCard(item) {
     const bought     = GameCenter.getBoughtCount(item.id);
     const isOwned    = bought > 0;
-    const isWished   = GameCenter.isWishlisted(item.id);
     const eco        = window.ECONOMY;
     const finalPrice = eco.isSaleActive ? Math.floor(item.price * eco.saleMultiplier) : item.price;
 
@@ -1362,14 +1325,7 @@ function _buildShopCard(item) {
     const card = document.createElement('article');
     card.className = 'glass-panel shop-card';
     card.innerHTML =
-        `${!isOwned
-            ? `<button class="wishlist-btn ${isWished ? 'wishlist-btn--active' : ''}"
-                       data-id="${item.id}"
-                       title="${isWished ? 'Quitar de lista' : 'Agregar a lista de deseos'}">
-                   <svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>
-               </button>`
-            : ''}
-        <img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy" decoding="async"
+        `        <img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy" decoding="async"
              onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
         ${isOwned ? '<div class="owned-badge"><svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-check-circle-2"></use></svg> Tuyo</div>' : ''}
         ${eco.isSaleActive && !isOwned
@@ -1454,24 +1410,6 @@ function _bindShopContainerDelegation() {
     _shopDelegationBound = true;
 
     container.addEventListener('click', async (e) => {
-        const wishlistBtn = e.target.closest('.wishlist-btn');
-        if (wishlistBtn) {
-            e.stopPropagation();
-            const id    = parseInt(wishlistBtn.dataset.id, 10);
-            const isNow = GameCenter.toggleWishlist(id);
-            wishlistBtn.classList.toggle('wishlist-btn--active', isNow);
-            wishlistBtn.title = isNow ? 'Quitar de lista' : 'Agregar a lista de deseos';
-            wishlistBtn.innerHTML = '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>';
-            updateWishlistCost();
-            if (isNow) {
-                const item = allItems.find(i => i.id === id);
-                window.GhostAnalytics?.track('wishlist_add', {
-                    wallpaper: item?.name || `id:${id}`,
-                    precio:    item?.price ?? '?'
-                });
-            }
-            return;
-        }
 
         const previewBtn = e.target.closest('.shop-preview-btn');
         if (previewBtn) {
@@ -1693,8 +1631,7 @@ async function initiatePurchase(item, btn) {
         });
         const cbNote = result.cashback > 0 ? ` <strong>+${result.cashback} cashback</strong> devueltas.` : '';
         showToast(`"${item.name}" desbloqueado.${cbNote} Ve a <strong>Mis Tesoros</strong>.`, 'success');
-        updateWishlistCost();
-    } else {
+        } else {
         if (result.reason === 'coins') {
             if (btn) shakeElement(btn);
             showToast('No tienes suficientes monedas.', 'error');
@@ -2121,8 +2058,7 @@ function loadCatalog() {
             if (gridEl) gridEl.innerHTML = '';
             filterItems();
             renderLibrary(items);
-            updateWishlistCost();
-
+        
             // Asegurar que el error state está oculto si se cargó correctamente
             if (errorEl) errorEl.classList.add('hidden');
 

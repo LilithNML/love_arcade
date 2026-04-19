@@ -998,5 +998,75 @@
     "tags": [
       "Mobile"
     ]
+  },
+  {
+    "id": 101,
+    "name": "Blaze The Cat",
+    "price": 1000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_1:1,c_fill,g_auto,w_640/pfp_blaze_the_cat_e2567d98",
+    "file": "pfp_blaze_the_cat_e2567d98.webp",
+    "tags": [
+      "Avatar"
+    ]
+  },
+  {
+    "id": 102,
+    "name": "Nakano Miku",
+    "price": 1000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_1:1,c_fill,g_auto,w_640/pfp_nakano_miku_6593596d",
+    "file": "pfp_nakano_miku_6593596d.webp",
+    "tags": [
+      "Avatar"
+    ]
+  },
+  {
+    "id": 103,
+    "name": "Ellen Joe",
+    "price": 1000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_1:1,c_fill,g_auto,w_640/pfp_ellen_joe_7fdb9274",
+    "file": "pfp_ellen_joe_7fdb9274.webp",
+    "tags": [
+      "Avatar"
+    ]
+  },
+  {
+    "id": 104,
+    "name": "Nakano Nino",
+    "price": 1000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_1:1,c_fill,g_auto,w_640/pfp_nakano_nino_d78efa29",
+    "file": "pfp_nakano_nino_d78efa29.webp",
+    "tags": [
+      "Avatar"
+    ]
+  },
+  {
+    "id": 105,
+    "name": "Himiko Toga",
+    "price": 1000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_1:1,c_fill,g_auto,w_640/pfp_himiko_toga_e52a90df",
+    "file": "pfp_himiko_toga_e52a90df.webp",
+    "tags": [
+      "Avatar"
+    ]
+  },
+  {
+    "id": 106,
+    "name": "Shadow El Latinas",
+    "price": 1000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_1:1,c_fill,g_auto,w_640/pfp_shadow_el_latinas_3587f310",
+    "file": "pfp_shadow_el_latinas_3587f310.webp",
+    "tags": [
+      "Avatar"
+    ]
+  },
+  {
+    "id": 107,
+    "name": "Mitsuri Kanroji",
+    "price": 1000,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_1:1,c_fill,g_auto,w_640/pfp_mitsuri_kanroji_918226b9",
+    "file": "pfp_mitsuri_kanroji_918226b9.webp",
+    "tags": [
+      "Avatar"
+    ]
   }
 ]
