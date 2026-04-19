@@ -103,7 +103,7 @@ html {
     stroke: none;
 }
 
-/* Icono de corazón relleno (wishlist banner) */
+/* Icono de corazón relleno */
 .icon--heart-filled {
     fill: currentColor;
     stroke: none;
@@ -1101,6 +1101,13 @@ body::before {
     margin: 0 auto;
 }
 
+/* Sentinel invisible para lazy rendering incremental del catálogo. */
+.shop-lazy-sentinel {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 1px;
+}
+
 .shop-card {
     background: #141620;
     border: 1px solid var(--border-subtle);
@@ -1159,47 +1166,6 @@ body::before {
     90% { transform: translateX(2px); }
 }
 .anim-shake { animation: shake 0.45s ease-in-out; }
-
-/* ================================================================
-   WISHLIST
-   ================================================================ */
-.wishlist-btn {
-    position: absolute; top: 8px; left: 8px; z-index: 10;
-    background: rgba(7,7,13,0.9);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 50%;
-    /* Visual size: 28px. Touch area extended via padding for WCAG 2.5.5 compliance.
-       The button is positioned absolute so padding does not affect card layout. */
-    width: 28px; height: 28px;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    color: var(--text-low);
-    transition: transform 0.18s, color 0.18s, background 0.18s;
-    /* Solid 3.0: no backdrop-filter */
-}
-/* Extend touch area on touch devices without affecting visual size */
-@media (pointer: coarse) {
-    .wishlist-btn {
-        width: 40px; height: 40px;
-    }
-}
-.wishlist-btn:hover { transform: scale(1.2); color: #ff4f7a; }
-.wishlist-btn--active { color: #ff4f7a; background: rgba(255,79,122,0.15); }
-.wishlist-btn--active svg path,
-.wishlist-btn--active svg circle { fill: currentColor !important; }
-
-/* Wishlist cost banner */
-.wishlist-cost-banner {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px;
-    border-radius: var(--radius-md);
-    background: rgba(255,79,122,0.06);
-    border: 1px solid rgba(255,79,122,0.2);
-    font-size: 0.8rem;
-    color: var(--text-med);
-    margin-bottom: 12px;
-}
-.wishlist-cost-banner strong { color: #ff4f7a; }
 
 /* ================================================================
    SHOP TABS
@@ -1306,8 +1272,6 @@ body::before {
     border-color: var(--accent-border);
     color: var(--accent);
 }
-.pill--wishlist.active { background: rgba(255,79,122,0.1); border-color: rgba(255,79,122,0.4); color: #ff4f7a; }
-.pill--wishlist.active svg path { fill: currentColor !important; }
 
 .filter-empty {
     grid-column: 1/-1;
@@ -2189,7 +2153,6 @@ details[open] summary::after { transform: rotate(45deg); }
     .shop-card { padding: 16px; }
     .shop-card .card-name { font-size: 0.95rem; }
     .shop-img { height: 160px; }
-    .wishlist-btn { width: 30px; height: 30px; top: 10px; left: 10px; }
 
     /* Tabs */
     .shop-tab { padding: 10px 16px; font-size: 0.85rem; }
@@ -2529,6 +2492,39 @@ svg { stroke-width: 2; }
     justify-content: center;
     min-height: 140px;
     padding: 20px 20px 12px;
+}
+
+/* Preview liviano: frame único sin mockups superpuestos (Mobile/PC). */
+.preview-art-frame {
+    position: relative;
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.08),
+        0 12px 40px rgba(0, 0, 0, 0.65);
+}
+
+.preview-art-layer {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+}
+
+.preview-art-protection {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    background-image: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.06),
+        rgba(0, 0, 0, 0.2)
+    );
+    z-index: 2;
 }
 
 /* Close button — floats above everything */

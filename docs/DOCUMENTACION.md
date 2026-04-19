@@ -4988,3 +4988,33 @@ Para que la subida de avatares cloud funcione en producción:
 
 - `userAvatar` **no debe viajar** dentro de `game_data` en cloud sync.
 - El binario/archivo vive en Supabase Storage (`avatars`) y sólo se persiste la URL pública en `user_profiles.avatar_url`.
+## Actualización de rendimiento de Tienda (abril 2026)
+
+### Objetivo
+Reducir el tiempo de apertura del preview, disminuir carga del DOM en la vista de catálogo y mejorar la fluidez de scroll en catálogos grandes.
+
+### Cambios implementados
+
+1. **Preview simplificado (sin mockups superpuestos)**
+   - Se eliminó el render de mockups Mobile/PC en la apertura del modal de preview.
+   - El modal ahora monta un frame único (`.preview-art-frame`) con una sola capa de arte y una capa ligera de protección visual.
+   - El tamaño del frame se resuelve por tag de negocio: `Mobile`=9:20, `PC`=16:9, `Avatar`=1:1. Si no hay tag reconocido, usa `naturalWidth/naturalHeight` como fallback.
+   - Se mantiene la protección básica anti-extracción:
+     - Bloqueo de menú contextual (`contextmenu` + `preventDefault`).
+     - Capa superpuesta no interactiva (`.preview-art-protection`).
+
+2. **Carga progresiva optimizada del arte**
+   - Se conserva el patrón de carga en dos fases (thumbnail inmediata + hi-res diferida).
+   - Se mantiene `decoding="async"` para minimizar bloqueos del hilo principal.
+   - El fallback offline sigue activo cuando falla la imagen del CDN.
+
+3. **Lazy rendering incremental del catálogo**
+   - `renderShop()` fue refactorizada para pintar el catálogo por lotes.
+   - Se incorporó un sentinel (`.shop-lazy-sentinel`) con `IntersectionObserver` para agregar nuevas tarjetas solo cuando el usuario se acerca al final del grid.
+   - En navegadores sin soporte de `IntersectionObserver`, se aplica fallback progresivo hasta completar el render.
+
+### Beneficios esperados
+- Menor tiempo de interacción al abrir preview.
+- Menor cantidad de nodos simultáneos en el DOM.
+- Scroll más estable y con menos jank en catálogos extensos.
+- Menor presión de memoria en dispositivos de gama baja.

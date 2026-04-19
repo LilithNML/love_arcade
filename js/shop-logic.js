@@ -11,7 +11,6 @@
  *    result.message === 'Código inválido'. Diferencia intentos de adivinar códigos
  *    de errores ya canjeados (message === 'Ya canjeaste este código'), que se
  *    ignoran para no saturar el canal.
- *  - renderShop(): wishlist click handler añade track('wishlist_add') solo al
  *    agregar un ítem (isNow === true), no al quitarlo.
  *  - loadCatalog(): añade track('user_snapshot') una sola vez por sesión de
  *    navegador (guardado en sessionStorage bajo 'ga_snapshot_sent') tras cargar
@@ -156,6 +155,19 @@ let activeFilter = 'NoObtenidos';
 let searchQuery  = '';
 let _pendingFilterFrame = null;
 let _shopDelegationBound = false;
+let _shopLazyObserver = null;
+let _shopLazySentinel = null;
+
+/**
+ * Estado de renderizado incremental del catálogo.
+ * En lugar de pintar todos los ítems de una sola vez (costoso con catálogos
+ * grandes), se montan en lotes bajo demanda al acercarse al final del grid.
+ */
+const _shopRenderState = {
+    items: [],
+    cursor: 0,
+    batchSize: 18
+};
 
 function scheduleFilterItems() {
     if (_pendingFilterFrame !== null) cancelAnimationFrame(_pendingFilterFrame);
@@ -248,6 +260,57 @@ function _closeModal(value) {
 let _mockupClockInterval = null;   // Cleared on modal close to prevent leaks
 let _pendingHiResImg     = null;   // Tracks in-flight Image() load; cancelled on close
 let _preloadObserver     = null;   // IntersectionObserver for hi-res smart preloading (v9.6)
+
+/**
+ * Resuelve el aspect ratio objetivo del preview.
+ * Prioridad:
+ *  1) Tag del item (Mobile=9:20, PC=16:9, Avatar=1:1).
+ *  2) Dimensiones reales de la imagen (naturalWidth/naturalHeight) si existen.
+ *  3) Fallback neutro 1:1.
+ *
+ * @param {object} item
+ * @param {HTMLImageElement|null} [probeImg]
+ * @returns {number} ratio ancho/alto
+ */
+function _resolvePreviewAspectRatio(item, probeImg = null) {
+    const tags = Array.isArray(item?.tags) ? item.tags : [];
+    // Reglas explícitas de negocio: el tag manda sobre cualquier metadato.
+    if (tags.includes('Mobile')) return 9 / 20;
+    if (tags.includes('PC')) return 16 / 9;
+    if (tags.includes('Avatar')) return 1;
+
+    // Solo si no hay tag reconocido, usar dimensión real del archivo.
+    const w = Number(probeImg?.naturalWidth || 0);
+    const h = Number(probeImg?.naturalHeight || 0);
+    if (w > 0 && h > 0) return w / h;
+    return 1;
+}
+
+/**
+ * Ajusta tamaño de la caja de preview para respetar el aspect ratio indicado
+ * sin exceder ni el ancho del stage ni el alto máximo visual (62vh).
+ *
+ * @param {HTMLElement} frameEl
+ * @param {number} ratio  ancho/alto
+ */
+function _applyPreviewFrameSize(frameEl, ratio) {
+    if (!frameEl) return;
+    const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+    const stage     = document.getElementById('preview-mockup-stage');
+    const maxW      = Math.max(220, (stage?.clientWidth || 520) - 40);
+    const maxH      = Math.max(180, Math.floor(window.innerHeight * 0.62));
+
+    // Fit "contain": primero por ancho, luego corregir por alto si excede.
+    let width  = maxW;
+    let height = width / safeRatio;
+    if (height > maxH) {
+        height = maxH;
+        width  = height * safeRatio;
+    }
+
+    frameEl.style.width  = `${Math.round(width)}px`;
+    frameEl.style.height = `${Math.round(height)}px`;
+}
 
 /**
  * Returns the current time as "HH:MM" using the device locale.
@@ -475,10 +538,9 @@ function _getMockupUrl(item) {
     const tags     = Array.isArray(item.tags) ? item.tags : [];
     const base     = item.file.replace(/\.[^.]+$/, ''); // strip extension → public ID
 
-    if (tags.includes('Mobile')) {
-        return `${CDN_BASE}f_auto,q_auto,ar_9:20,c_fill,w_500/${base}`;
-    }
-    // PC or untagged — 16:9 widescreen
+    if (tags.includes('Mobile')) return `${CDN_BASE}f_auto,q_auto,ar_9:20,c_fill,w_500/${base}`;
+    if (tags.includes('Avatar')) return `${CDN_BASE}f_auto,q_auto,ar_1:1,c_fill,w_800/${base}`;
+    // PC o no etiquetado — 16:9 widescreen
     return `${CDN_BASE}f_auto,q_auto,ar_16:9,c_fill,w_1200/${base}`;
 }
 
@@ -923,119 +985,72 @@ function openPreviewModal(itemOrId) {
         categoria: Array.isArray(item.tags) && item.tags.length ? item.tags[0] : 'General'
     });
 
-    // Diferir construcción pesada del mockup al siguiente frame de animación.
-    // En ese momento el overlay ya está visible y pintado; el hilo principal
-    // puede permitirse 50–150 ms de trabajo sin que el usuario lo perciba como freeze.
-    requestAnimationFrame(() => {
+    // Preview simplificado (sin mockups Mobile/PC) para minimizar nodos y trabajo JS.
+    // Mantiene una capa visual de protección y bloqueo contextual para dificultar
+    // extracción directa, pero elimina UI superpuesta no esencial.
+    slot.innerHTML = `
+        <div class="preview-art-frame">
+            <div class="preview-art-layer mockup-layer-art" aria-hidden="true"></div>
+            <div class="preview-art-protection" aria-hidden="true"></div>
+        </div>`;
 
-        // ── Inject mockup structure (art layer starts empty) ──────────────────
-        slot.innerHTML = _buildMockupHTML(item);
+    const wallpaperPath = _getMockupUrl(item);
+    const artEl         = slot.querySelector('.preview-art-layer');
+    const frameEl       = slot.querySelector('.preview-art-frame');
 
-        // ── Double-layer progressive image load ───────────────────────────────
-        //
-        // Phase 1 (instant): set thumbnail as background immediately for zero-blank
-        //   display, then probe its reachability with a parallel Image() test.
-        //   → If thumbProbe.onload fires: CDN is reachable; Phase 2 proceeds normally.
-        //   → If thumbProbe.onerror fires: CDN is unreachable; cancel Phase 2 and
-        //     apply _applyArtFallback() so the frame shows a CSS gradient instead of
-        //     a blank white/dark void.
-        //
-        // Phase 2 (async): mockup-optimised wallpaper loads in a background Image().
-        //   → swapped in once fully decoded.
-        //   → On error, decision depends on _thumbOk (local closure variable):
-        //       _thumbOk = true  → thumbnail loaded; file may be missing on CDN.
-        //                          Degrade to visible thumbnail (blur→clear).
-        //       _thumbOk = false → CDN fully unreachable; apply solid CSS fallback.
-        //
-        // _getMockupUrl() selects the Cloudinary transformation that matches the
-        // device frame: 9:20 portrait for Mobile, 16:9 landscape for PC.
-        const wallpaperPath = _getMockupUrl(item);
-        const artEl         = slot.querySelector('.mockup-layer-art');
+    // Tamaño inicial inmediato usando heurística por tags.
+    _applyPreviewFrameSize(frameEl, _resolvePreviewAspectRatio(item));
 
-        // Phase 1 — set thumbnail immediately (best-case path stays zero-latency)
-        artEl.style.backgroundImage = `url('${item.image}')`;
-        artEl.classList.add('mockup-bg-loading');
+    artEl.style.backgroundImage = `url('${item.image}')`;
+    artEl.classList.add('mockup-bg-loading');
 
-        // Cancel any stale load from a previous modal open
-        if (_pendingHiResImg) { _pendingHiResImg.onload = _pendingHiResImg.onerror = null; _pendingHiResImg = null; }
+    if (_pendingHiResImg) { _pendingHiResImg.onload = _pendingHiResImg.onerror = null; _pendingHiResImg = null; }
 
-        // _thumbOk: local closure variable shared between thumbProbe and hiRes handlers.
-        // Tracks whether the Phase 1 thumbnail was reachable. Not module-level to avoid
-        // state contamination across rapid open/close cycles.
-        let _thumbOk = false;
+    let _thumbOk = false;
+    const thumbProbe = new Image();
+    thumbProbe.decoding = 'async';
+    thumbProbe.onload = () => {
+        _thumbOk = true;
+        // Refinar el tamaño con el aspect ratio REAL de la imagen.
+        _applyPreviewFrameSize(frameEl, _resolvePreviewAspectRatio(item, thumbProbe));
+    };
+    thumbProbe.onerror = () => {
+        if (_pendingHiResImg) {
+            _pendingHiResImg.onload = _pendingHiResImg.onerror = null;
+            _pendingHiResImg = null;
+        }
+        _applyArtFallback(artEl);
+    };
+    thumbProbe.src = item.image;
 
-        // Phase 1 probe — runs in parallel with Phase 2 load
-        const thumbProbe = new Image();
-        // decoding='async': la decodificación ocurre fuera del hilo principal.
-        // Aunque la thumbnail suele venir de caché (ya se mostró en la card del
-        // catálogo), el probe instancia un nuevo objeto Image y el navegador puede
-        // necesitar decodificarla en este contexto si la entrada de caché fue
-        // descartada. 'async' evita cualquier bloqueo del hilo principal.
-        thumbProbe.decoding = 'async';
-        thumbProbe.onload = () => { _thumbOk = true; };
-        thumbProbe.onerror = () => {
-            // CDN unreachable — thumbnail and hi-res will both fail.
-            // Cancel the in-flight Phase 2 load to avoid a redundant error callback,
-            // then apply the CSS fallback immediately.
-            if (_pendingHiResImg) {
-                _pendingHiResImg.onload = _pendingHiResImg.onerror = null;
-                _pendingHiResImg = null;
-            }
-            _applyArtFallback(artEl);
-        };
-        thumbProbe.src = item.image;
-
-        // Phase 2 — hi-res mockup load in background
-        const hiRes    = new Image();
-        _pendingHiResImg = hiRes;
-        // decoding='async': la decodificación de la imagen hi-res (hasta 1200 px de
-        // ancho) se realiza en el hilo de decodificación del navegador. Sin este
-        // atributo, el onload dispararía en el hilo principal y la decodificación
-        // de una imagen grande podría bloquear el compositor por 20-80 ms, causando
-        // un "salto" perceptible en la animación de entrada del modal o en el scroll
-        // de fondo. Con 'async', el swap de backgroundImage ocurre sin jank.
-        hiRes.decoding = 'async';
-        hiRes.onload = () => {
-            if (_pendingHiResImg !== hiRes) return;    // Stale: modal was closed/re-opened
-            artEl.style.backgroundImage = `url('${wallpaperPath}')`;
+    const hiRes = new Image();
+    _pendingHiResImg = hiRes;
+    hiRes.decoding = 'async';
+    hiRes.onload = () => {
+        if (_pendingHiResImg !== hiRes) return;
+        artEl.style.backgroundImage = `url('${wallpaperPath}')`;
+        artEl.classList.remove('mockup-bg-loading');
+        artEl.classList.add('mockup-bg-ready');
+        _pendingHiResImg = null;
+    };
+    hiRes.onerror = () => {
+        if (_pendingHiResImg !== hiRes) return;
+        _pendingHiResImg = null;
+        if (_thumbOk) {
             artEl.classList.remove('mockup-bg-loading');
             artEl.classList.add('mockup-bg-ready');
-            _pendingHiResImg = null;
-        };
-        hiRes.onerror = () => {
-            if (_pendingHiResImg !== hiRes) return;
-            _pendingHiResImg = null;
-            if (_thumbOk) {
-                // Thumbnail loaded fine — hi-res file may be missing or have a
-                // different public ID. Degrade gracefully: show thumbnail as final.
-                artEl.classList.remove('mockup-bg-loading');
-                artEl.classList.add('mockup-bg-ready');
-            } else {
-                // CDN fully unreachable — both phases failed.
-                _applyArtFallback(artEl);
-            }
-        };
-        hiRes.src = wallpaperPath;
-
-        // ── Anti-extraction: contextmenu hardening ────────────────────────────
-        // Guardado en variable de módulo (no en propiedad DOM) para poder hacer
-        // removeEventListener correctamente en closePreviewModal().
-        const stage = document.getElementById('preview-mockup-stage');
-        if (!_stageCtxHandler) {
-            _stageCtxHandler = (e) => { e.preventDefault(); };
+        } else {
+            _applyArtFallback(artEl);
         }
-        // Eliminar listener previo antes de añadir, por si el modal se abrió sin cerrar
-        stage.removeEventListener('contextmenu', _stageCtxHandler);
-        stage.addEventListener('contextmenu', _stageCtxHandler);
+    };
+    hiRes.src = wallpaperPath;
 
-        slot.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); return false; };
-
-        // ── Live clock: update immediately, then every 30 s ───────────────────
-        if (_mockupClockInterval) clearInterval(_mockupClockInterval);
-        updateMockupTime();
-        _mockupClockInterval = setInterval(updateMockupTime, 30_000);
-
-    }); // end rAF — heavy DOM work done
+    // ── Anti-extraction: contextmenu hardening ────────────────────────────────
+    const stage = document.getElementById('preview-mockup-stage');
+    if (!_stageCtxHandler) _stageCtxHandler = (e) => { e.preventDefault(); };
+    stage.removeEventListener('contextmenu', _stageCtxHandler);
+    stage.addEventListener('contextmenu', _stageCtxHandler);
+    slot.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); return false; };
 
     // ── Action buttons ────────────────────────────────────────────────────────
     // Se construyen de forma síncrona porque son DOM mínimo (2 botones) y
@@ -1190,7 +1205,6 @@ function filterItems() {
     const filtered = allItems.filter(item => {
         let matchesFilter;
         if      (activeFilter === 'Todos')       matchesFilter = true;
-        else if (activeFilter === 'Wishlist')    matchesFilter = GameCenter.isWishlisted(item.id);
         else if (activeFilter === 'NoObtenidos') matchesFilter = GameCenter.getBoughtCount(item.id) === 0;
         else                                     matchesFilter = Array.isArray(item.tags) && item.tags.includes(activeFilter);
 
@@ -1202,19 +1216,15 @@ function filterItems() {
         return matchesFilter && matchesSearch;
     });
 
-    const wishlisted = filtered.filter(item =>  GameCenter.isWishlisted(item.id));
-    const others     = filtered.filter(item => !GameCenter.isWishlisted(item.id));
-    renderShop([...wishlisted, ...others]);
+    renderShop(filtered);
 
     const countEl = document.getElementById('search-results-count');
     const emptyEl = document.getElementById('filter-empty');
     const gridEl  = document.getElementById('shop-container');
-    const sorted  = [...wishlisted, ...others];
+    const sorted  = filtered;
 
     if (sorted.length === 0 && activeFilter === 'NoObtenidos' && !searchQuery) {
-        const allWishlisted = allItems.filter(item =>  GameCenter.isWishlisted(item.id));
-        const allOthers     = allItems.filter(item => !GameCenter.isWishlisted(item.id));
-        renderShop([...allWishlisted, ...allOthers]);
+        renderShop(allItems);
         gridEl.classList.remove('hidden');
         emptyEl.classList.add('hidden');
         countEl.textContent = 'No hay novedades pendientes';
@@ -1230,7 +1240,6 @@ function filterItems() {
         countEl.textContent = isFiltered ? `${sorted.length} resultado${sorted.length !== 1 ? 's' : ''}` : '';
         countEl.classList.toggle('hidden', !isFiltered);
     }
-    updateWishlistCost();
 }
 
 function resetFilters() {
@@ -1246,35 +1255,6 @@ function resetFilters() {
 }
 // Exponer globalmente (compatible con onclick="resetFilters()" en el HTML)
 window.resetFilters = resetFilters;
-
-// ── Wishlist Cost ─────────────────────────────────────────────────────────────
-function updateWishlistCost() {
-    const banner = document.getElementById('wishlist-cost-banner');
-    const textEl = document.getElementById('wishlist-cost-text');
-    if (!banner || !textEl || !allItems.length) return;
-
-    const unowned = allItems.filter(item =>
-        GameCenter.isWishlisted(item.id) && GameCenter.getBoughtCount(item.id) === 0
-    );
-    if (unowned.length === 0) { banner.classList.add('hidden'); return; }
-
-    const eco   = window.ECONOMY;
-    const total = unowned.reduce((sum, item) => {
-        const price = eco.isSaleActive ? Math.floor(item.price * eco.saleMultiplier) : item.price;
-        return sum + price;
-    }, 0);
-
-    const balance = GameCenter.getBalance();
-    const needed  = Math.max(0, total - balance);
-    const count   = unowned.length;
-    const plural  = count !== 1 ? 's' : '';
-
-    textEl.innerHTML = needed > 0
-        ? `Necesitas <strong>${needed} ⭐</strong> más para toda tu lista (<strong>${count}</strong> ítem${plural})`
-        : `¡Tienes saldo para toda tu lista! (<strong>${count}</strong> ítem${plural})`;
-
-    banner.classList.remove('hidden');
-}
 
 // ── Render: Streak Calendar ───────────────────────────────────────────────────
 function renderStreakCalendar() {
@@ -1298,36 +1278,27 @@ function renderStreakCalendar() {
     }).join('');
 }
 
-// ── Render: Catálogo ──────────────────────────────────────────────────────────
-function renderShop(items) {
-    const container = document.getElementById('shop-container');
-    container.innerHTML = '';
-    if (!items.length) return;
+function _buildShopCard(item) {
+    const bought     = GameCenter.getBoughtCount(item.id);
+    const isOwned    = bought > 0;
+    const eco        = window.ECONOMY;
+    const finalPrice = eco.isSaleActive ? Math.floor(item.price * eco.saleMultiplier) : item.price;
 
-    const frag = document.createDocumentFragment();
+    const priceHTML = eco.isSaleActive && !isOwned
+        ? `<div class="shop-price">
+               <span class="price-original">${item.price}</span>
+               <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
+               <span class="price-sale">${finalPrice}</span>
+           </div>`
+        : `<div class="shop-price">
+               <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
+               ${isOwned ? '<span style="color:var(--success);">Obtenido</span>' : item.price}
+           </div>`;
 
-    items.forEach(item => {
-        const bought     = GameCenter.getBoughtCount(item.id);
-        const isOwned    = bought > 0;
-        const isWished   = GameCenter.isWishlisted(item.id);
-        const eco        = window.ECONOMY;
-        const finalPrice = eco.isSaleActive ? Math.floor(item.price * eco.saleMultiplier) : item.price;
-
-        const priceHTML = eco.isSaleActive && !isOwned
-            ? `<div class="shop-price">
-                   <span class="price-original">${item.price}</span>
-                   <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
-                   <span class="price-sale">${finalPrice}</span>
-               </div>`
-            : `<div class="shop-price">
-                   <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg>
-                   ${isOwned ? '<span style="color:var(--success);">Obtenido</span>' : item.price}
-               </div>`;
-
-        let actionHTML;
-        if (isOwned) {
+    const actionHTML = isOwned
+        ? (() => {
             const url = GameCenter.getDownloadUrl(item.id, item.file);
-            actionHTML = url
+            return url
                 ? `<a href="${url}" download class="btn-primary vault-btn"
                        style="width:100%; justify-content:center; font-size:0.78rem; padding:7px;">
                        <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-download"></use></svg> Descargar
@@ -1337,61 +1308,99 @@ function renderShop(items) {
                        disabled>
                        <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-check"></use></svg> Obtenido
                    </button>`;
-        } else {
-            actionHTML =
-                `<div style="display:flex; gap:5px; width:100%;">
-                    <button class="btn-ghost shop-preview-btn"
-                            style="flex-shrink:0; padding:7px 9px;"
-                            data-id="${item.id}" title="Vista previa">
-                        <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-eye"></use></svg>
-                    </button>
-                    <button class="btn-primary shop-buy-btn"
-                            style="flex:1; justify-content:center; font-size:0.78rem; padding:7px;"
-                            data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
-                        <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg> ${finalPrice}
-                    </button>
-                </div>`;
-        }
+        })()
+        : `<div style="display:flex; gap:5px; width:100%;">
+                <button class="btn-ghost shop-preview-btn"
+                        style="flex-shrink:0; padding:7px 9px;"
+                        data-id="${item.id}" title="Vista previa">
+                    <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-eye"></use></svg>
+                </button>
+                <button class="btn-primary shop-buy-btn"
+                        style="flex:1; justify-content:center; font-size:0.78rem; padding:7px;"
+                        data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
+                    <svg class="icon" width="11" height="11" style="fill:#fbbf24;stroke:none" aria-hidden="true"><use href="#icon-star"></use></svg> ${finalPrice}
+                </button>
+           </div>`;
 
-        const card = document.createElement('article');
-        card.className = 'glass-panel shop-card';
-        // will-change en tarjetas: gestionado en CSS vía .shop-card:hover { will-change: transform }
-        // NO se aplica aquí en JS para evitar promover N capas GPU mientras el catálogo está en reposo.
-        card.innerHTML =
-            `${!isOwned
-                ? `<button class="wishlist-btn ${isWished ? 'wishlist-btn--active' : ''}"
-                           data-id="${item.id}"
-                           title="${isWished ? 'Quitar de lista' : 'Agregar a lista de deseos'}">
-                       <svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>
-                   </button>`
-                : ''}
-            <img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy"
-                 onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
-            ${isOwned ? '<div class="owned-badge"><svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-check-circle-2"></use></svg> Tuyo</div>' : ''}
-            ${eco.isSaleActive && !isOwned
-                ? '<div class="sale-card-badge"><svg class="icon" width="9" height="9" style="fill:currentColor;stroke:none" aria-hidden="true"><use href="#icon-zap"></use></svg> OFERTA</div>'
-                : ''}
-            <div style="width:100%;">
-                <h3 class="card-name">${item.name}</h3>
-                ${priceHTML}
-                ${actionHTML}
-            </div>`;
+    const card = document.createElement('article');
+    card.className = 'glass-panel shop-card';
+    card.innerHTML =
+        `        <img src="${item.image}" alt="${item.name}" class="shop-img" loading="lazy" decoding="async"
+             onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
+        ${isOwned ? '<div class="owned-badge"><svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-check-circle-2"></use></svg> Tuyo</div>' : ''}
+        ${eco.isSaleActive && !isOwned
+            ? '<div class="sale-card-badge"><svg class="icon" width="9" height="9" style="fill:currentColor;stroke:none" aria-hidden="true"><use href="#icon-zap"></use></svg> OFERTA</div>'
+            : ''}
+        <div style="width:100%;">
+            <h3 class="card-name">${item.name}</h3>
+            ${priceHTML}
+            ${actionHTML}
+        </div>`;
+    return card;
+}
 
-        frag.appendChild(card);
-    });
-    container.appendChild(frag);
+function _teardownShopLazyRender() {
+    if (_shopLazyObserver) {
+        _shopLazyObserver.disconnect();
+        _shopLazyObserver = null;
+    }
+    if (_shopLazySentinel) {
+        _shopLazySentinel.remove();
+        _shopLazySentinel = null;
+    }
+}
 
-    // Scope al container del catálogo.
-    // @perf ADVERTENCIA: renderShop destruye y reconstruye el DOM completo en cada
-    // llamada (cada keystroke del buscador, cada cambio de filtro, cada compra).
-    // NO añadir lógica costosa dentro del forEach de items sin considerar este ciclo.
+function _appendShopBatch(container) {
+    const start = _shopRenderState.cursor;
+    const end   = Math.min(start + _shopRenderState.batchSize, _shopRenderState.items.length);
+    if (start >= end) return false;
+
+    const frag = document.createDocumentFragment();
+    for (let i = start; i < end; i += 1) frag.appendChild(_buildShopCard(_shopRenderState.items[i]));
+    if (_shopLazySentinel && _shopLazySentinel.parentElement === container) {
+        container.insertBefore(frag, _shopLazySentinel);
+    } else {
+        container.appendChild(frag);
+    }
+    _shopRenderState.cursor = end;
+
     refreshIcons(container);
+    _initPreloadObserver(container, _shopRenderState.items.slice(0, end));
+    return end < _shopRenderState.items.length;
+}
 
-    // Smart Preload (v9.6): inicializar/reinicializar el observer tras cada render.
-    // renderShop destruye y reconstruye el DOM, así que el observer anterior apunta
-    // a nodos huérfanos. _initPreloadObserver() lo desconecta y crea uno nuevo
-    // observando únicamente los cards con .shop-preview-btn (no comprados).
-    _initPreloadObserver(container, items);
+// ── Render: Catálogo (lazy incremental mounting) ─────────────────────────────
+function renderShop(items) {
+    const container = document.getElementById('shop-container');
+    _teardownShopLazyRender();
+    container.innerHTML = '';
+
+    _shopRenderState.items  = items;
+    _shopRenderState.cursor = 0;
+
+    if (!items.length) return;
+    const hasMore = _appendShopBatch(container);
+    if (!hasMore) return;
+
+    _shopLazySentinel = document.createElement('div');
+    _shopLazySentinel.className = 'shop-lazy-sentinel';
+    _shopLazySentinel.setAttribute('aria-hidden', 'true');
+    container.appendChild(_shopLazySentinel);
+
+    if (!('IntersectionObserver' in window)) {
+        while (_appendShopBatch(container)) { /* fallback eager append */ }
+        return;
+    }
+
+    _shopLazyObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting) return;
+            const stillHasMore = _appendShopBatch(container);
+            if (!stillHasMore) _teardownShopLazyRender();
+        });
+    }, { rootMargin: '500px 0px 700px 0px', threshold: 0 });
+
+    _shopLazyObserver.observe(_shopLazySentinel);
 }
 
 function _bindShopContainerDelegation() {
@@ -1401,24 +1410,6 @@ function _bindShopContainerDelegation() {
     _shopDelegationBound = true;
 
     container.addEventListener('click', async (e) => {
-        const wishlistBtn = e.target.closest('.wishlist-btn');
-        if (wishlistBtn) {
-            e.stopPropagation();
-            const id    = parseInt(wishlistBtn.dataset.id, 10);
-            const isNow = GameCenter.toggleWishlist(id);
-            wishlistBtn.classList.toggle('wishlist-btn--active', isNow);
-            wishlistBtn.title = isNow ? 'Quitar de lista' : 'Agregar a lista de deseos';
-            wishlistBtn.innerHTML = '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-heart"></use></svg>';
-            updateWishlistCost();
-            if (isNow) {
-                const item = allItems.find(i => i.id === id);
-                window.GhostAnalytics?.track('wishlist_add', {
-                    wallpaper: item?.name || `id:${id}`,
-                    precio:    item?.price ?? '?'
-                });
-            }
-            return;
-        }
 
         const previewBtn = e.target.closest('.shop-preview-btn');
         if (previewBtn) {
@@ -1640,8 +1631,7 @@ async function initiatePurchase(item, btn) {
         });
         const cbNote = result.cashback > 0 ? ` <strong>+${result.cashback} cashback</strong> devueltas.` : '';
         showToast(`"${item.name}" desbloqueado.${cbNote} Ve a <strong>Mis Tesoros</strong>.`, 'success');
-        updateWishlistCost();
-    } else {
+        } else {
         if (result.reason === 'coins') {
             if (btn) shakeElement(btn);
             showToast('No tienes suficientes monedas.', 'error');
@@ -2068,8 +2058,7 @@ function loadCatalog() {
             if (gridEl) gridEl.innerHTML = '';
             filterItems();
             renderLibrary(items);
-            updateWishlistCost();
-
+        
             // Asegurar que el error state está oculto si se cargó correctamente
             if (errorEl) errorEl.classList.add('hidden');
 

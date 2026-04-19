@@ -485,7 +485,6 @@ function migrateState(loadedStore) {
         history:        [],
         userAvatar:     null,
         theme:          'violet',
-        wishlist:       [],
         daily:          { lastClaim: 0, streak: 0 },
         buffs:          { moonBlessingExpiry: 0 },
         // v9.4 — Identity
@@ -517,7 +516,6 @@ function migrateState(loadedStore) {
     // Asegurar sub-objetos faltantes
     if (!merged.daily   || typeof merged.daily !== 'object')  merged.daily = defaults.daily;
     if (!merged.buffs   || typeof merged.buffs !== 'object')  merged.buffs = defaults.buffs;
-    if (!Array.isArray(merged.wishlist))        merged.wishlist = [];
     if (!Array.isArray(merged.redeemedHashes))  merged.redeemedHashes = [];
     if (!Array.isArray(merged.history))         merged.history = [];
 
@@ -1040,23 +1038,6 @@ window.GameCenter = {
         return CONFIG.wallpapersPath + base;
     },
 
-    // ── WISHLIST ─────────────────────────────────────────────────────────────
-
-    /**
-     * Alterna el estado de favorito de un ítem.
-     * @returns {boolean} true si quedó en wishlist, false si fue removido.
-     */
-    toggleWishlist: (itemId) => {
-        if (!Array.isArray(store.wishlist)) store.wishlist = [];
-        const idx = store.wishlist.indexOf(itemId);
-        if (idx > -1) store.wishlist.splice(idx, 1);
-        else          store.wishlist.push(itemId);
-        saveState();
-        return store.wishlist.includes(itemId);
-    },
-
-    isWishlisted: (itemId) =>
-        Array.isArray(store.wishlist) && store.wishlist.includes(itemId),
 
     // ── HISTORIAL ────────────────────────────────────────────────────────────
 
