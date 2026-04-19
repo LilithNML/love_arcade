@@ -265,22 +265,25 @@ let _preloadObserver     = null;   // IntersectionObserver for hi-res smart prel
 /**
  * Resuelve el aspect ratio objetivo del preview.
  * Prioridad:
- *  1) Dimensiones reales de la imagen (naturalWidth/naturalHeight) si existen.
- *  2) Heurística por tags del item (Mobile=9:20, PC=16:9).
- *  3) Fallback neutro 1:1 para compatibilidad futura.
+ *  1) Tag del item (Mobile=9:20, PC=16:9, Avatar=1:1).
+ *  2) Dimensiones reales de la imagen (naturalWidth/naturalHeight) si existen.
+ *  3) Fallback neutro 1:1.
  *
  * @param {object} item
  * @param {HTMLImageElement|null} [probeImg]
  * @returns {number} ratio ancho/alto
  */
 function _resolvePreviewAspectRatio(item, probeImg = null) {
+    const tags = Array.isArray(item?.tags) ? item.tags : [];
+    // Reglas explícitas de negocio: el tag manda sobre cualquier metadato.
+    if (tags.includes('Mobile')) return 9 / 20;
+    if (tags.includes('PC')) return 16 / 9;
+    if (tags.includes('Avatar')) return 1;
+
+    // Solo si no hay tag reconocido, usar dimensión real del archivo.
     const w = Number(probeImg?.naturalWidth || 0);
     const h = Number(probeImg?.naturalHeight || 0);
     if (w > 0 && h > 0) return w / h;
-
-    const tags = Array.isArray(item?.tags) ? item.tags : [];
-    if (tags.includes('Mobile')) return 9 / 20;
-    if (tags.includes('PC')) return 16 / 9;
     return 1;
 }
 
@@ -536,10 +539,9 @@ function _getMockupUrl(item) {
     const tags     = Array.isArray(item.tags) ? item.tags : [];
     const base     = item.file.replace(/\.[^.]+$/, ''); // strip extension → public ID
 
-    if (tags.includes('Mobile')) {
-        return `${CDN_BASE}f_auto,q_auto,ar_9:20,c_fill,w_500/${base}`;
-    }
-    // PC or untagged — 16:9 widescreen
+    if (tags.includes('Mobile')) return `${CDN_BASE}f_auto,q_auto,ar_9:20,c_fill,w_500/${base}`;
+    if (tags.includes('Avatar')) return `${CDN_BASE}f_auto,q_auto,ar_1:1,c_fill,w_800/${base}`;
+    // PC o no etiquetado — 16:9 widescreen
     return `${CDN_BASE}f_auto,q_auto,ar_16:9,c_fill,w_1200/${base}`;
 }
 
