@@ -1101,6 +1101,13 @@ body::before {
     margin: 0 auto;
 }
 
+/* Sentinel invisible para lazy rendering incremental del catálogo. */
+.shop-lazy-sentinel {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 1px;
+}
+
 .shop-card {
     background: #141620;
     border: 1px solid var(--border-subtle);
@@ -2529,6 +2536,39 @@ svg { stroke-width: 2; }
     justify-content: center;
     min-height: 140px;
     padding: 20px 20px 12px;
+}
+
+/* Preview liviano: frame único sin mockups superpuestos (Mobile/PC). */
+.preview-art-frame {
+    position: relative;
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.08),
+        0 12px 40px rgba(0, 0, 0, 0.65);
+}
+
+.preview-art-layer {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+}
+
+.preview-art-protection {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    background-image: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.06),
+        rgba(0, 0, 0, 0.2)
+    );
+    z-index: 2;
 }
 
 /* Close button — floats above everything */
