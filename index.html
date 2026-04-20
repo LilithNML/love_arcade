@@ -612,6 +612,9 @@
                         <button class="pill active" data-filter="NoObtenidos">
                             <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-sparkles"></use></svg> Nuevos
                         </button>
+                        <button class="pill filter-btn-gift" data-filter="Regalos">
+                            <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-gift"></use></svg> Regalos
+                        </button>
                         <button class="pill" data-filter="Avatar">
                             <svg class="icon" width="10" height="10" aria-hidden="true"><use href="#icon-user"></use></svg> Avatar
                         </button>
@@ -628,6 +631,9 @@
 
                 <p id="search-results-count" class="search-count hidden"></p>
                 <div id="shop-container" class="shop-grid"></div>
+                <section id="gift-carousel" class="gift-carousel hidden" aria-label="Sección de regalos">
+                    <div id="gift-carousel-track" class="gift-carousel-track"></div>
+                </section>
 
                 <!-- Estado de error de red — visible solo si shop.json falla -->
                 <div id="shop-error-state" class="shop-error-state hidden" role="alert">
