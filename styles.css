@@ -556,6 +556,14 @@ body::before {
     filter: drop-shadow(0 0 6px var(--accent-glow));
 }
 
+body.ui-bottom-labels-off .b-nav-item {
+    font-size: 0;
+    gap: 2px;
+}
+body.ui-bottom-labels-off .b-nav-item span {
+    display: none;
+}
+
 /* ================================================================
    LAYOUT
    ================================================================ */
@@ -612,6 +620,31 @@ body::before {
 .player-hud.is-ready {
     opacity: 1;
 }
+
+.quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.quick-action-chip {
+    border: 1px solid var(--border-subtle);
+    background: var(--solid-surface-base);
+    color: var(--text-med);
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+.quick-action-chip:hover {
+    color: var(--text-high);
+    border-color: var(--accent-border);
+    transform: translateY(-1px);
+}
+body.ui-quick-actions-off .quick-actions { display: none; }
 
 .hud-top {
     display: flex;
@@ -1782,6 +1815,53 @@ body::before {
 .theme-check { color: var(--accent); opacity: 0; transition: opacity 0.18s; flex-shrink: 0; }
 .theme-btn--active .theme-check { opacity: 1; }
 
+.ui-pref-grid {
+    display: grid;
+    gap: 10px;
+}
+.ui-pref-field {
+    display: grid;
+    gap: 6px;
+}
+.ui-pref-label {
+    font-size: 0.75rem;
+    color: var(--text-low);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.ui-pref-control {
+    background: var(--solid-surface-base);
+    border: 1px solid var(--glass-base-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-high);
+    font-size: 0.82rem;
+    padding: 10px 12px;
+}
+.ui-pref-toggle {
+    grid-template-columns: auto 1fr;
+    gap: 10px;
+    align-items: center;
+    background: var(--solid-surface-base);
+    border: 1px solid var(--glass-base-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+}
+.ui-pref-toggle input {
+    accent-color: var(--accent);
+}
+.ui-pref-toggle strong {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--text-high);
+}
+.ui-pref-toggle small {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-low);
+    font-size: 0.72rem;
+}
+
 /* ================================================================
    BENDICIÓN LUNAR
    ================================================================ */
@@ -2324,6 +2404,8 @@ details[open] summary::after { transform: rotate(45deg); }
     /* Settings */
     .settings-card { padding: 1.5rem; }
     .theme-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    .ui-pref-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ui-pref-field:first-child { grid-column: span 2; }
     .sync-card { padding: 1.5rem; }
     .memory-card { padding: 1.5rem; }
 
@@ -2335,6 +2417,28 @@ details[open] summary::after { transform: rotate(45deg); }
 
     /* Sale banner */
     .sale-banner__ticket { padding: 16px 24px; }
+}
+
+body.ui-compact .container {
+    padding: 14px 12px;
+}
+body.ui-compact .player-hud {
+    gap: 12px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+body.ui-compact .section-header,
+body.ui-compact .shop-tabs {
+    margin-bottom: 14px;
+}
+body.ui-compact .games-grid,
+body.ui-compact .shop-grid {
+    gap: 12px;
+}
+body.ui-compact .card-info,
+body.ui-compact .shop-card,
+body.ui-compact .settings-card {
+    padding: 12px;
 }
 
 @media (min-width: 1024px) {

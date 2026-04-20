@@ -490,6 +490,12 @@ function migrateState(loadedStore) {
         // v9.4 — Identity
         nickname:       '',    // Máx. 15 chars. Vacío = primer acceso → flujo de bienvenida.
         gender:         '@',   // 'o' | 'a' | '@' — controla el sufijo del saludo.
+        // v15.0 — Preferencias de interfaz
+        ui: {
+            density:       'comfortable', // 'comfortable' | 'compact'
+            quickActions:  true,          // chips rápidos en Home
+            bottomLabels:  true           // etiquetas de texto en bottom nav
+        },
         // v11.0 — Multiplicador de bonificación con expiración (Hitos Personales)
         bonus_multiplier:         1,   // Factor activo (ej: 2 = ×2). Base = 1 (sin efecto).
         bonus_multiplier_expires: 0,   // Timestamp ms. 0 = sin multiplicador activo.
@@ -522,6 +528,12 @@ function migrateState(loadedStore) {
     // v9.4 — Validación de identidad (migración silenciosa)
     if (typeof merged.nickname !== 'string')           merged.nickname = '';
     if (!['o', 'a', '@'].includes(merged.gender))      merged.gender   = '@';
+    if (!merged.ui || typeof merged.ui !== 'object')   merged.ui = defaults.ui;
+    if (!['comfortable', 'compact'].includes(merged.ui.density)) {
+        merged.ui.density = 'comfortable';
+    }
+    if (typeof merged.ui.quickActions !== 'boolean') merged.ui.quickActions = true;
+    if (typeof merged.ui.bottomLabels !== 'boolean') merged.ui.bottomLabels = true;
 
     // v11.0 — Multiplicador de bonificación
     if (typeof merged.bonus_multiplier !== 'number' || merged.bonus_multiplier < 1) {
@@ -1467,6 +1479,27 @@ window.GameCenter = {
     },
     getTheme: () => store.theme || 'violet',
 
+    // ── INTERFAZ ─────────────────────────────────────────────────────────────
+    setUIPreferences: (partial) => {
+        const next = {
+            ...(store.ui || {}),
+            ...(partial || {})
+        };
+        if (!['comfortable', 'compact'].includes(next.density)) {
+            next.density = 'comfortable';
+        }
+        next.quickActions = Boolean(next.quickActions);
+        next.bottomLabels = Boolean(next.bottomLabels);
+        store.ui = next;
+        saveState();
+        applyUIPreferences(next);
+    },
+    getUIPreferences: () => ({
+        density:      store.ui?.density || 'comfortable',
+        quickActions: store.ui?.quickActions !== false,
+        bottomLabels: store.ui?.bottomLabels !== false
+    }),
+
     // ── IDENTIDAD — v9.4 ─────────────────────────────────────────────────────
 
     /**
@@ -1800,6 +1833,26 @@ function applyIdentity() {
     if (nicknameEl) nicknameEl.textContent = store.nickname || '';
 }
 
+function applyUIPreferences(pref = store.ui || {}) {
+    const density = pref.density === 'compact' ? 'compact' : 'comfortable';
+    const quickActions = pref.quickActions !== false;
+    const bottomLabels = pref.bottomLabels !== false;
+    const bodyClasses = document.body.classList;
+
+    bodyClasses.toggle('ui-compact', density === 'compact');
+    bodyClasses.toggle('ui-quick-actions-off', !quickActions);
+    bodyClasses.toggle('ui-bottom-labels-off', !bottomLabels);
+
+    const densitySelect = document.getElementById('ui-density-select');
+    if (densitySelect) densitySelect.value = density;
+
+    const quickToggle = document.getElementById('ui-quick-actions-toggle');
+    if (quickToggle) quickToggle.checked = quickActions;
+
+    const bottomToggle = document.getElementById('ui-bottom-labels-toggle');
+    if (bottomToggle) bottomToggle.checked = bottomLabels;
+}
+
 function applyTheme(key) {
     const t    = THEMES[key] || THEMES.violet;
     const root = document.documentElement;
@@ -1975,6 +2028,7 @@ applyAvatar();
 //    Solo actúa si hay nickname guardado; si no, el modal de bienvenida (en el
 //    inline script de index.html) se encarga de llamar a revealUI() al confirmar.
 applyIdentity();
+applyUIPreferences(store.ui || {});
 
 // NOTA: revealUI() se llama desde el inline script de index.html, DESPUÉS de
 // que updateStreakBar() y updateCountdownDisplay() también hayan corrido.
@@ -2158,6 +2212,29 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.theme-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             if (window.GameCenter) window.GameCenter.setTheme(btn.dataset.theme);
+        });
+    });
+
+    const densitySelect = document.getElementById('ui-density-select');
+    densitySelect?.addEventListener('change', () => {
+        window.GameCenter?.setUIPreferences({ density: densitySelect.value });
+    });
+
+    const quickToggle = document.getElementById('ui-quick-actions-toggle');
+    quickToggle?.addEventListener('change', () => {
+        window.GameCenter?.setUIPreferences({ quickActions: quickToggle.checked });
+    });
+
+    const bottomToggle = document.getElementById('ui-bottom-labels-toggle');
+    bottomToggle?.addEventListener('change', () => {
+        window.GameCenter?.setUIPreferences({ bottomLabels: bottomToggle.checked });
+    });
+
+    document.querySelectorAll('[data-quick-view]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const viewId = btn.dataset.quickView;
+            const anchor = btn.dataset.quickAnchor || null;
+            window.SpaRouter?.navigateTo?.(viewId, anchor);
         });
     });
 
