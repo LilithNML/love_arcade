@@ -160,6 +160,7 @@ let _shopLazySentinel = null;
 let _giftAutoplayTimer = null;
 let _giftPauseUntil = 0;
 let _giftCurrentIndex = 0;
+let _giftSnapTimer = null;
 if (typeof window.__laSessionGameCompleted === 'undefined') {
     let fromSession = false;
     try { fromSession = sessionStorage.getItem('la_session_game_completed') === '1'; } catch (_) { /* noop */ }
@@ -1225,6 +1226,52 @@ function _getGiftRequirementText(item) {
     return item?.requirements?.description || 'Completa 1 partida';
 }
 
+function _readGiftClaimOrder() {
+    try {
+        const raw = sessionStorage.getItem('la_gift_claim_order');
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr.filter(v => Number.isFinite(v)) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function _writeGiftClaimOrder(order) {
+    try {
+        sessionStorage.setItem('la_gift_claim_order', JSON.stringify(order.slice(-30)));
+    } catch (_) { /* noop */ }
+}
+
+function _rememberGiftClaim(itemId) {
+    const prev = _readGiftClaimOrder().filter(id => id !== itemId);
+    prev.push(itemId);
+    _writeGiftClaimOrder(prev);
+}
+
+function _buildGiftFocus(items) {
+    const owned = items.filter(item => window.GameCenter.getBoughtCount(item.id) > 0);
+    const pending = items.filter(item => window.GameCenter.getBoughtCount(item.id) === 0);
+    const claimedOrder = _readGiftClaimOrder();
+
+    const recentOwned = [];
+    for (let i = claimedOrder.length - 1; i >= 0 && recentOwned.length < 2; i -= 1) {
+        const found = owned.find(item => item.id === claimedOrder[i]);
+        if (found && !recentOwned.some(x => x.id === found.id)) recentOwned.push(found);
+    }
+    if (recentOwned.length < 2) {
+        const byIdDesc = owned.slice().sort((a, b) => b.id - a.id);
+        byIdDesc.forEach(item => {
+            if (recentOwned.length >= 2) return;
+            if (!recentOwned.some(x => x.id === item.id)) recentOwned.push(item);
+        });
+    }
+
+    const focus = [...pending, ...recentOwned].slice(0, 6);
+    const focusSet = new Set(focus.map(item => item.id));
+    const collection = owned.filter(item => !focusSet.has(item.id));
+    return { focus, collection, ownedTotal: owned.length };
+}
+
 function _stopGiftAutoplay() {
     if (_giftAutoplayTimer) {
         clearInterval(_giftAutoplayTimer);
@@ -1246,7 +1293,12 @@ function _advanceGiftCarousel(step = 1) {
     if (!track) return;
     const cards = Array.from(track.querySelectorAll('.gift-card'));
     if (!cards.length) return;
-    _giftCurrentIndex = (_giftCurrentIndex + step + cards.length) % cards.length;
+    const next = _giftCurrentIndex + step;
+    if (next >= cards.length) {
+        _giftCurrentIndex = cards.length - 1;
+        return;
+    }
+    _giftCurrentIndex = Math.max(0, next);
     cards[_giftCurrentIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
 }
 
@@ -1260,16 +1312,20 @@ function _initGiftAutoplay() {
 
 function _renderGiftCarousel(items) {
     const track = document.getElementById('gift-carousel-track');
+    const collectionToggle = document.getElementById('gift-collection-toggle');
+    const collectionGrid = document.getElementById('gift-collection-grid');
     if (!track) return;
     _stopGiftAutoplay();
     track.innerHTML = '';
+    if (collectionGrid) collectionGrid.innerHTML = '';
     if (!items.length) return;
 
-    const inventory = window.GameCenter.getInventory();
-    const unownedIndex = items.findIndex(item => (inventory[item.id] || 0) === 0);
+    const { focus, collection, ownedTotal } = _buildGiftFocus(items);
+    const focusItems = focus.length ? focus : items.slice(0, 1);
+    const unownedIndex = focusItems.findIndex(item => window.GameCenter.getBoughtCount(item.id) === 0);
     _giftCurrentIndex = unownedIndex >= 0 ? unownedIndex : 0;
 
-    const html = items.map(item => {
+    const html = focusItems.map(item => {
         const unlocked = _isGiftUnlocked(item);
         const owned = window.GameCenter.getBoughtCount(item.id) > 0;
         const ctaText = 'Descargar';
@@ -1278,6 +1334,7 @@ function _renderGiftCarousel(items) {
         return `<article class="gift-card" data-gift-id="${item.id}">
             <img src="${item.image}" alt="${item.name}" loading="lazy" decoding="async"
                  onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
+            ${owned ? `<span class="gift-owned-badge">${_icon('check', 11)} Obtenido</span>` : ''}
             <h3 class="gift-card-name">${item.name}</h3>
             <span class="gift-pill gift-pill--req">${_getGiftRequirementText(item)}</span>
             <button class="gift-pill gift-pill--cta" data-gift-action="${item.id}" ${disabled}${opacity}>${ctaText}</button>
@@ -1285,6 +1342,21 @@ function _renderGiftCarousel(items) {
     }).join('');
 
     track.innerHTML = html;
+    if (collectionToggle) {
+        collectionToggle.textContent = `Ver mi colección completa (${ownedTotal} totales)`;
+        collectionToggle.classList.toggle('hidden', collection.length === 0);
+        collectionToggle.setAttribute('aria-expanded', 'false');
+    }
+    if (collectionGrid) {
+        collectionGrid.classList.add('hidden');
+        collectionGrid.innerHTML = collection.map(item =>
+            `<article class="gift-collection-item" title="${item.name}">
+                <img src="${item.image}" alt="${item.name}" loading="lazy" decoding="async"
+                     onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
+            </article>`
+        ).join('');
+    }
+
     requestAnimationFrame(() => {
         const cards = track.querySelectorAll('.gift-card');
         cards[_giftCurrentIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
@@ -1294,6 +1366,19 @@ function _renderGiftCarousel(items) {
         track.dataset.boundScrollPause = '1';
         track.addEventListener('scroll', () => {
             _giftPauseUntil = Date.now() + 10000;
+            if (_giftSnapTimer) clearTimeout(_giftSnapTimer);
+            _giftSnapTimer = setTimeout(() => {
+                const cards = Array.from(track.querySelectorAll('.gift-card'));
+                if (!cards.length) return;
+                let nearest = 0;
+                let minDist = Number.POSITIVE_INFINITY;
+                cards.forEach((card, idx) => {
+                    const dist = Math.abs(card.offsetLeft - track.scrollLeft);
+                    if (dist < minDist) { minDist = dist; nearest = idx; }
+                });
+                _giftCurrentIndex = nearest;
+                cards[nearest]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+            }, 120);
         }, { passive: true });
     }
 
@@ -1562,6 +1647,7 @@ async function _handleGiftAction(itemId) {
             showToast('No se pudo reclamar el regalo ahora mismo.', 'error');
             return;
         }
+        _rememberGiftClaim(item.id);
         showToast('¡Gracias por jugar hoy! Tu apoyo mantiene este mundo vivo.', 'success');
         window.GhostAnalytics?.track('gift_claimed', { item: item.name, requirement: item.requirements?.type || 'unknown' });
     }
@@ -2375,6 +2461,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const giftBtn = e.target.closest('[data-gift-action]');
         if (!giftBtn) return;
         _handleGiftAction(parseInt(giftBtn.dataset.giftAction, 10));
+    });
+    document.getElementById('gift-collection-toggle')?.addEventListener('click', () => {
+        const grid = document.getElementById('gift-collection-grid');
+        const btn = document.getElementById('gift-collection-toggle');
+        if (!grid || !btn) return;
+        const willOpen = grid.classList.contains('hidden');
+        grid.classList.toggle('hidden', !willOpen);
+        btn.setAttribute('aria-expanded', String(willOpen));
     });
 
     document.addEventListener('la:levelcomplete', () => {

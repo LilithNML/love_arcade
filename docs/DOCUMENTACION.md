@@ -5058,3 +5058,11 @@ Reducir el tiempo de apertura del preview, disminuir carga del DOM en la vista d
 - Al reclamar regalo se registra `gift_claimed`.
 - Al descargar desde carrusel se registra `click_download` con fuente `gift_carousel`.
 - Se muestra mensaje de agradecimiento al jugador al reclamar.
+
+### Evolución UX (abril 2026, iteración 2)
+
+- La experiencia de Regalos se dividió en 2 capas:
+  1. **Carrusel de Novedades**: muestra pendientes + últimos 2 obtenidos (máximo 6).
+  2. **Baúl de Recuerdos**: acceso a colección completa en grid desplegable.
+- El carrusel dejó de comportarse como banda continua: ahora usa snap estricto por tarjeta para evitar vistas partidas entre dos imágenes.
+- Se añadió badge visual de **Obtenido** dentro de las cards del carrusel para distinguir regalos reclamados.
