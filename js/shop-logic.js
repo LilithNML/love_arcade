@@ -157,6 +157,15 @@ let _pendingFilterFrame = null;
 let _shopDelegationBound = false;
 let _shopLazyObserver = null;
 let _shopLazySentinel = null;
+let _giftAutoplayTimer = null;
+let _giftPauseUntil = 0;
+let _giftCurrentIndex = 0;
+let _giftSnapTimer = null;
+if (typeof window.__laSessionGameCompleted === 'undefined') {
+    let fromSession = false;
+    try { fromSession = sessionStorage.getItem('la_session_game_completed') === '1'; } catch (_) { /* noop */ }
+    window.__laSessionGameCompleted = fromSession;
+}
 
 /**
  * Estado de renderizado incremental del catálogo.
@@ -1198,14 +1207,198 @@ function switchTab(tab) {
     refreshIcons(panel);
 }
 
+function _isGiftItem(item) {
+    return item?.category === 'gift' || (Array.isArray(item?.tags) && item.tags.includes('regalo'));
+}
+
+function _isGiftUnlocked(item) {
+    const reqType = item?.requirements?.type;
+    if (reqType === 'game_played') {
+        const byWindow = Boolean(window.__laSessionGameCompleted);
+        let bySession = false;
+        try { bySession = sessionStorage.getItem('la_session_game_completed') === '1'; } catch (_) { /* noop */ }
+        return byWindow || bySession;
+    }
+    return false;
+}
+
+function _getGiftRequirementText(item) {
+    return item?.requirements?.description || 'Completa 1 partida';
+}
+
+function _readGiftClaimOrder() {
+    try {
+        const raw = sessionStorage.getItem('la_gift_claim_order');
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr.filter(v => Number.isFinite(v)) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function _writeGiftClaimOrder(order) {
+    try {
+        sessionStorage.setItem('la_gift_claim_order', JSON.stringify(order.slice(-30)));
+    } catch (_) { /* noop */ }
+}
+
+function _rememberGiftClaim(itemId) {
+    const prev = _readGiftClaimOrder().filter(id => id !== itemId);
+    prev.push(itemId);
+    _writeGiftClaimOrder(prev);
+}
+
+function _buildGiftFocus(items) {
+    const owned = items.filter(item => window.GameCenter.getBoughtCount(item.id) > 0);
+    const pending = items.filter(item => window.GameCenter.getBoughtCount(item.id) === 0);
+    const claimedOrder = _readGiftClaimOrder();
+
+    const recentOwned = [];
+    for (let i = claimedOrder.length - 1; i >= 0 && recentOwned.length < 2; i -= 1) {
+        const found = owned.find(item => item.id === claimedOrder[i]);
+        if (found && !recentOwned.some(x => x.id === found.id)) recentOwned.push(found);
+    }
+    if (recentOwned.length < 2) {
+        const byIdDesc = owned.slice().sort((a, b) => b.id - a.id);
+        byIdDesc.forEach(item => {
+            if (recentOwned.length >= 2) return;
+            if (!recentOwned.some(x => x.id === item.id)) recentOwned.push(item);
+        });
+    }
+
+    const focus = [...pending, ...recentOwned].slice(0, 6);
+    const focusSet = new Set(focus.map(item => item.id));
+    const collection = owned.filter(item => !focusSet.has(item.id));
+    return { focus, collection, ownedTotal: owned.length };
+}
+
+function _stopGiftAutoplay() {
+    if (_giftAutoplayTimer) {
+        clearInterval(_giftAutoplayTimer);
+        _giftAutoplayTimer = null;
+    }
+}
+
+function _updateGiftFilterGlow() {
+    const giftBtn = document.querySelector('.filter-btn-gift');
+    if (!giftBtn || !allItems.length) return;
+    const hasUnclaimed = allItems.some(item =>
+        _isGiftItem(item) && _isGiftUnlocked(item) && window.GameCenter.getBoughtCount(item.id) === 0
+    );
+    giftBtn.classList.toggle('has-unclaimed', hasUnclaimed);
+}
+
+function _advanceGiftCarousel(step = 1) {
+    const track = document.getElementById('gift-carousel-track');
+    if (!track) return;
+    const cards = Array.from(track.querySelectorAll('.gift-card'));
+    if (!cards.length) return;
+    const next = _giftCurrentIndex + step;
+    if (next >= cards.length) {
+        _giftCurrentIndex = cards.length - 1;
+        return;
+    }
+    _giftCurrentIndex = Math.max(0, next);
+    cards[_giftCurrentIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+}
+
+function _initGiftAutoplay() {
+    _stopGiftAutoplay();
+    _giftAutoplayTimer = setInterval(() => {
+        if (Date.now() < _giftPauseUntil) return;
+        _advanceGiftCarousel(1);
+    }, 3800);
+}
+
+function _renderGiftCarousel(items) {
+    const track = document.getElementById('gift-carousel-track');
+    const collectionToggle = document.getElementById('gift-collection-toggle');
+    const collectionGrid = document.getElementById('gift-collection-grid');
+    if (!track) return;
+    _stopGiftAutoplay();
+    track.innerHTML = '';
+    if (collectionGrid) collectionGrid.innerHTML = '';
+    if (!items.length) return;
+
+    const { focus, collection, ownedTotal } = _buildGiftFocus(items);
+    const focusItems = focus.length ? focus : items.slice(0, 1);
+    const unownedIndex = focusItems.findIndex(item => window.GameCenter.getBoughtCount(item.id) === 0);
+    _giftCurrentIndex = unownedIndex >= 0 ? unownedIndex : 0;
+
+    const html = focusItems.map(item => {
+        const unlocked = _isGiftUnlocked(item);
+        const owned = window.GameCenter.getBoughtCount(item.id) > 0;
+        const ctaText = 'Descargar';
+        const disabled = !owned && !unlocked ? 'disabled' : '';
+        const opacity = !owned && !unlocked ? ' style="opacity:.5"' : '';
+        return `<article class="gift-card" data-gift-id="${item.id}">
+            <img src="${item.image}" alt="${item.name}" loading="lazy" decoding="async"
+                 onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
+            ${owned ? `<span class="gift-owned-badge">${_icon('check', 11)} Obtenido</span>` : ''}
+            <h3 class="gift-card-name">${item.name}</h3>
+            <span class="gift-pill gift-pill--req">${_getGiftRequirementText(item)}</span>
+            <button class="gift-pill gift-pill--cta" data-gift-action="${item.id}" ${disabled}${opacity}>${ctaText}</button>
+        </article>`;
+    }).join('');
+
+    track.innerHTML = html;
+    if (collectionToggle) {
+        collectionToggle.textContent = `Ver mi colección completa (${ownedTotal} totales)`;
+        collectionToggle.classList.toggle('hidden', collection.length === 0);
+        collectionToggle.setAttribute('aria-expanded', 'false');
+    }
+    if (collectionGrid) {
+        collectionGrid.classList.add('hidden');
+        collectionGrid.innerHTML = collection.map(item =>
+            `<article class="gift-collection-item" title="${item.name}">
+                <img src="${item.image}" alt="${item.name}" loading="lazy" decoding="async"
+                     onerror="this.onerror=null; this.classList.add('shop-img--offline'); this.removeAttribute('src');">
+            </article>`
+        ).join('');
+    }
+
+    requestAnimationFrame(() => {
+        const cards = track.querySelectorAll('.gift-card');
+        cards[_giftCurrentIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+    });
+
+    if (!track.dataset.boundScrollPause) {
+        track.dataset.boundScrollPause = '1';
+        track.addEventListener('scroll', () => {
+            _giftPauseUntil = Date.now() + 10000;
+            if (_giftSnapTimer) clearTimeout(_giftSnapTimer);
+            _giftSnapTimer = setTimeout(() => {
+                const cards = Array.from(track.querySelectorAll('.gift-card'));
+                if (!cards.length) return;
+                let nearest = 0;
+                let minDist = Number.POSITIVE_INFINITY;
+                cards.forEach((card, idx) => {
+                    const dist = Math.abs(card.offsetLeft - track.scrollLeft);
+                    if (dist < minDist) { minDist = dist; nearest = idx; }
+                });
+                _giftCurrentIndex = nearest;
+                cards[nearest]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+            }, 120);
+        }, { passive: true });
+    }
+
+    _initGiftAutoplay();
+}
+
 // ── Filtros ───────────────────────────────────────────────────────────────────
 function filterItems() {
     if (!allItems.length) return;
+    const gridEl      = document.getElementById('shop-container');
+    const giftEl      = document.getElementById('gift-carousel');
+    const countEl     = document.getElementById('search-results-count');
+    const emptyEl     = document.getElementById('filter-empty');
 
     const filtered = allItems.filter(item => {
+        const isGift = _isGiftItem(item);
         let matchesFilter;
-        if      (activeFilter === 'Todos')       matchesFilter = true;
-        else if (activeFilter === 'NoObtenidos') matchesFilter = GameCenter.getBoughtCount(item.id) === 0;
+        if      (activeFilter === 'Todos')       matchesFilter = !isGift;
+        else if (activeFilter === 'NoObtenidos') matchesFilter = !isGift && GameCenter.getBoughtCount(item.id) === 0;
+        else if (activeFilter === 'Regalos')     matchesFilter = isGift;
         else                                     matchesFilter = Array.isArray(item.tags) && item.tags.includes(activeFilter);
 
         const matchesSearch = !searchQuery
@@ -1216,30 +1409,38 @@ function filterItems() {
         return matchesFilter && matchesSearch;
     });
 
-    renderShop(filtered);
+    if (activeFilter === 'Regalos') {
+        gridEl?.classList.add('hidden');
+        giftEl?.classList.remove('hidden');
+        _renderGiftCarousel(filtered);
+    } else {
+        giftEl?.classList.add('hidden');
+        renderShop(filtered);
+    }
 
-    const countEl = document.getElementById('search-results-count');
-    const emptyEl = document.getElementById('filter-empty');
-    const gridEl  = document.getElementById('shop-container');
     const sorted  = filtered;
 
     if (sorted.length === 0 && activeFilter === 'NoObtenidos' && !searchQuery) {
         renderShop(allItems);
         gridEl.classList.remove('hidden');
+        giftEl?.classList.add('hidden');
         emptyEl.classList.add('hidden');
         countEl.textContent = 'No hay novedades pendientes';
         countEl.classList.remove('hidden');
     } else if (sorted.length === 0) {
         gridEl.classList.add('hidden');
+        giftEl?.classList.add('hidden');
         emptyEl.classList.remove('hidden');
         countEl.classList.add('hidden');
     } else {
-        gridEl.classList.remove('hidden');
+        if (activeFilter !== 'Regalos') gridEl.classList.remove('hidden');
         emptyEl.classList.add('hidden');
         const isFiltered = activeFilter !== 'Todos' || searchQuery;
         countEl.textContent = isFiltered ? `${sorted.length} resultado${sorted.length !== 1 ? 's' : ''}` : '';
         countEl.classList.toggle('hidden', !isFiltered);
     }
+
+    _updateGiftFilterGlow();
 }
 
 function resetFilters() {
@@ -1428,6 +1629,40 @@ function _bindShopContainerDelegation() {
             }
         }
     });
+}
+
+async function _handleGiftAction(itemId) {
+    const item = allItems.find(i => i.id === itemId && _isGiftItem(i));
+    if (!item) return;
+
+    const owned = window.GameCenter.getBoughtCount(item.id) > 0;
+    if (!owned && !_isGiftUnlocked(item)) {
+        showToast('Completa una partida para desbloquear este regalo.', 'warning');
+        return;
+    }
+
+    if (!owned) {
+        const result = window.GameCenter.buyItem(item);
+        if (!result?.success) {
+            showToast('No se pudo reclamar el regalo ahora mismo.', 'error');
+            return;
+        }
+        _rememberGiftClaim(item.id);
+        showToast('¡Gracias por jugar hoy! Tu apoyo mantiene este mundo vivo.', 'success');
+        window.GhostAnalytics?.track('gift_claimed', { item: item.name, requirement: item.requirements?.type || 'unknown' });
+    }
+
+    const url = window.GameCenter.getDownloadUrl(item.id, item.file);
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.GhostAnalytics?.track('click_download', { wallpaper: item.name, fuente: 'gift_carousel' });
+    filterItems();
+    renderLibrary(allItems);
 }
 
 // ── Render: Biblioteca ────────────────────────────────────────────────────────
@@ -1997,6 +2232,7 @@ window.ShopView = {
         // y searchQuery en lugar de resetear a "Todos". Esto preserva el contexto
         // de navegación y evita la frustración de perder un filtro aplicado.
         if (allItems.length) filterItems();
+        _updateGiftFilterGlow();
 
         // Scope a la vista de la tienda. El sale banner, tabs y pills tienen
         // iconos dinámicos que pueden necesitar re-inicialización al volver a la vista.
@@ -2048,16 +2284,22 @@ function loadCatalog() {
             'Cargando catálogo…</p>';
     }
 
-    fetch('data/shop.json')
-        .then(r => {
+    Promise.all([
+        fetch('data/shop.json').then(r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             return r.json();
-        })
-        .then(items => {
-            allItems = items;
+        }),
+        fetch('data/shop-gifts.json')
+            .then(r => (r.ok ? r.json() : []))
+            .catch(() => [])
+    ])
+        .then(([items, gifts]) => {
+            const baseCatalog = items.filter(item => !_isGiftItem(item));
+            const giftCatalog = gifts.length ? gifts : items.filter(item => _isGiftItem(item));
+            allItems = [...baseCatalog, ...giftCatalog];
             if (gridEl) gridEl.innerHTML = '';
             filterItems();
-            renderLibrary(items);
+            renderLibrary(allItems);
         
             // Asegurar que el error state está oculto si se cargó correctamente
             if (errorEl) errorEl.classList.add('hidden');
@@ -2072,7 +2314,7 @@ function loadCatalog() {
                     const gc          = window.GameCenter;
                     const inventory   = gc?.getInventory?.() || {};
                     const comprados   = Object.values(inventory).filter(v => v > 0).length;
-                    const disponibles = items.length - comprados;
+                    const disponibles = allItems.length - comprados;
                     const state       = gc?.getState?.() || {};
 
                     window.GhostAnalytics?.track('user_snapshot', {
@@ -2213,6 +2455,27 @@ document.addEventListener('DOMContentLoaded', () => {
             activeFilter = pill.dataset.filter;
             scheduleFilterItems();
         });
+    });
+
+    document.getElementById('gift-carousel-track')?.addEventListener('click', e => {
+        const giftBtn = e.target.closest('[data-gift-action]');
+        if (!giftBtn) return;
+        _handleGiftAction(parseInt(giftBtn.dataset.giftAction, 10));
+    });
+    document.getElementById('gift-collection-toggle')?.addEventListener('click', () => {
+        const grid = document.getElementById('gift-collection-grid');
+        const btn = document.getElementById('gift-collection-toggle');
+        if (!grid || !btn) return;
+        const willOpen = grid.classList.contains('hidden');
+        grid.classList.toggle('hidden', !willOpen);
+        btn.setAttribute('aria-expanded', String(willOpen));
+    });
+
+    document.addEventListener('la:levelcomplete', () => {
+        window.__laSessionGameCompleted = true;
+        try { sessionStorage.setItem('la_session_game_completed', '1'); } catch (_) { /* noop */ }
+        _updateGiftFilterGlow();
+        if (activeFilter === 'Regalos') filterItems();
     });
 
     // Sync
