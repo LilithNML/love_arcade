@@ -1305,9 +1305,15 @@ body::before {
 .gift-card {
     position: relative;
     min-width: 100%;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 1 / 1;
     border: 0;
     overflow: hidden;
+}
+
+@media (min-width: 640px) {
+    .gift-card {
+        aspect-ratio: 4 / 3;
+    }
 }
 
 .gift-card img {

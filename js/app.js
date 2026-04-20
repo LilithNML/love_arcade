@@ -827,6 +827,7 @@ window.GameCenter = {
         window.GameCenter.incrementMissionStat('games_played', 1);
         // Flag de sesión volátil para desbloqueos "Regalos" en tienda.
         window.__laSessionGameCompleted = true;
+        try { sessionStorage.setItem('la_session_game_completed', '1'); } catch (_) { /* noop */ }
 
         // [v11.0] Despachar evento personalizado para que event-logic.js pueda
         // actualizar el progreso de Hitos Personales sin acoplamiento directo.

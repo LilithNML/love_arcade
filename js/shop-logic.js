@@ -161,7 +161,9 @@ let _giftAutoplayTimer = null;
 let _giftPauseUntil = 0;
 let _giftCurrentIndex = 0;
 if (typeof window.__laSessionGameCompleted === 'undefined') {
-    window.__laSessionGameCompleted = false;
+    let fromSession = false;
+    try { fromSession = sessionStorage.getItem('la_session_game_completed') === '1'; } catch (_) { /* noop */ }
+    window.__laSessionGameCompleted = fromSession;
 }
 
 /**
@@ -1211,7 +1213,10 @@ function _isGiftItem(item) {
 function _isGiftUnlocked(item) {
     const reqType = item?.requirements?.type;
     if (reqType === 'game_played') {
-        return Boolean(window.__laSessionGameCompleted);
+        const byWindow = Boolean(window.__laSessionGameCompleted);
+        let bySession = false;
+        try { bySession = sessionStorage.getItem('la_session_game_completed') === '1'; } catch (_) { /* noop */ }
+        return byWindow || bySession;
     }
     return false;
 }
@@ -1267,7 +1272,7 @@ function _renderGiftCarousel(items) {
     const html = items.map(item => {
         const unlocked = _isGiftUnlocked(item);
         const owned = window.GameCenter.getBoughtCount(item.id) > 0;
-        const ctaText = owned ? 'Descargar' : 'Reclamar';
+        const ctaText = 'Descargar';
         const disabled = !owned && !unlocked ? 'disabled' : '';
         const opacity = !owned && !unlocked ? ' style="opacity:.5"' : '';
         return `<article class="gift-card" data-gift-id="${item.id}">
@@ -2374,6 +2379,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('la:levelcomplete', () => {
         window.__laSessionGameCompleted = true;
+        try { sessionStorage.setItem('la_session_game_completed', '1'); } catch (_) { /* noop */ }
         _updateGiftFilterGlow();
         if (activeFilter === 'Regalos') filterItems();
     });
