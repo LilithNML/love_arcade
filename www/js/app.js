@@ -263,6 +263,66 @@ function debounce(fn, delay = 300) {
 }
 window.debounce = debounce; // Disponible globalmente para shop-logic.js
 
+
+// =====================================================
+// CAPACITOR ANDROID — Navegación y botón físico de retroceso
+// =====================================================
+
+/**
+ * Redirige siempre al hub principal.
+ * Funciona tanto en web (http/https) como en WebView (capacitor:// o file://).
+ */
+function goToMainMenu() {
+    const current = window.location.href;
+    // Si ya estamos en index.html no forzar una navegación redundante.
+    if (/(?:\/|^)index\.html(?:[?#].*)?$/i.test(current)) return;
+
+    // Resolver siempre contra el origen/raíz actual para evitar rutas relativas rotas.
+    const target = new URL('/index.html', window.location.origin || window.location.href).toString();
+    window.location.href = target;
+}
+
+/**
+ * Configura la lógica del botón físico de Android mediante @capacitor/app.
+ * - Dentro de /games/: vuelve al menú principal.
+ * - En secciones SPA (shop/events/ayuda): vuelve a Inicio.
+ * - En Inicio: cierra la app.
+ */
+async function setupAndroidBackButton() {
+    try {
+        const cap = window.Capacitor;
+        if (!cap) return;
+
+        const isNative = typeof cap.isNativePlatform === 'function'
+            ? cap.isNativePlatform()
+            : ['android', 'ios'].includes(cap.getPlatform?.());
+
+        if (!isNative || cap.getPlatform?.() !== 'android') return;
+
+        const appPlugin = cap.Plugins?.App;
+        if (!appPlugin?.addListener || !appPlugin?.exitApp) return;
+
+        appPlugin.addListener('backButton', () => {
+            const path = window.location.pathname || '';
+            const isInGame = path.includes('/games/');
+            if (isInGame) {
+                goToMainMenu();
+                return;
+            }
+
+            const currentView = window.SPARouter?.getCurrentView?.() || 'home';
+            if (currentView === 'home') {
+                appPlugin.exitApp();
+                return;
+            }
+
+            window.SPARouter?.navigateTo?.('home');
+        });
+    } catch (_) {
+        // Entorno sin bridge nativo o plugin no disponible → no-op.
+    }
+}
+
 // =====================================================
 // TIEMPO DE RED — Fuente de verdad externa para el bono diario
 // =====================================================
@@ -1999,22 +2059,30 @@ document.addEventListener('DOMContentLoaded', () => {
     // Re-sincronizar UI por si algún sub-módulo modificó el DOM
     updateUI();
 
-    // ── Analítica — open_game ─────────────────────────────────────────────────
-    // Delegación global para detectar la apertura de cualquier minijuego.
-    // Se escucha el click en cualquier <a> cuya href contenga "games/" para no
-    // requerir data-attributes específicos en cada tarjeta de juego del HTML.
-    // passive:true garantiza que no bloquea el scroll ni el propio navegador.
+    // ── Navegación de juegos + analítica open_game ────────────────────────────
+    // Interceptar <a href*="games/"> para evitar target="_blank"/nueva pestaña
+    // en WebView de Capacitor. La navegación ocurre en la misma vista.
     document.addEventListener('click', (e) => {
         const link = e.target.closest('a[href*="games/"]');
         if (!link) return;
+
+        const href = link.getAttribute('href') || '';
+        const gameUrl = new URL(href, window.location.href).toString();
+
         // Intentar obtener el ID del juego desde data-game-id, data-game-name,
         // o derivarlo del nombre del archivo HTML (último segmento de la URL).
         const gameId = link.dataset.gameId
             || link.dataset.gameName
-            || link.getAttribute('href')?.split('/').pop()?.replace(/\.html?$/, '')
+            || href.split('/').pop()?.replace(/\.html?$/, '')
             || 'desconocido';
         window.GhostAnalytics?.track('open_game', { juego: gameId });
-    }, { passive: true });
+
+        e.preventDefault();
+        window.location.href = gameUrl;
+    }, { passive: false });
+
+    // Lógica de retroceso físico de Android (Capacitor App plugin).
+    setupAndroidBackButton();
 
     // ── Rehidratación al volver desde juegos externos / bfcache ─────────────
     // pageshow se dispara al regresar con el botón "Atrás" y también cuando la
