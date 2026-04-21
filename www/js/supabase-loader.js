@@ -6,8 +6,7 @@
   }
 
   const sources = [
-    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js',
-    'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js'
+    'vendor/supabase.umd.js'
   ];
 
   const hasClientFactory = () => typeof global.supabase?.createClient === 'function';
@@ -29,7 +28,7 @@
     }
 
     if (index >= sources.length) {
-      console.warn('[Boot] No se pudo cargar Supabase SDK (CDN primario + fallback). Sentinel operará en estado degradado.');
+      console.warn('[Boot] No se pudo cargar Supabase SDK local. Sentinel operará en estado degradado.');
       finish(false);
       return;
     }
@@ -46,7 +45,7 @@
         finish(true);
         return;
       }
-      console.warn('[Boot] Supabase SDK cargado pero incompleto. Probable bloqueo por extensión/CSP. Reintentando fallback...');
+      console.warn('[Boot] Supabase SDK cargado pero incompleto. Sentinel quedará en modo degradado.');
       loadFrom(index + 1);
     };
 

@@ -12,7 +12,7 @@
 export class ZipBuilder {
   constructor() {
     if (typeof JSZip === 'undefined') {
-      throw new Error('JSZip no está disponible. Verifica que el CDN cargó correctamente.');
+      throw new Error('JSZip no está disponible. Verifica que exista www/the-image-laboratory/vendor/jszip.min.js');
     }
     this._zip      = new JSZip();
     this._promises = []; // Promesas de lectura de File/Blob → ArrayBuffer

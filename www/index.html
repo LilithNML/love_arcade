@@ -54,7 +54,7 @@
       } catch(e) { /* localStorage no disponible — continuar con tema por defecto */ }
     }();
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    <script src="vendor/confetti.browser.min.js"></script>
 
 </head>
 <!--
@@ -1232,18 +1232,20 @@
     <!-- ══════════════════════════════════════════════════════════
          SCRIPTS — Orden estricto:
          1. analytics.js  → Ghost Analytics, telemetría
-         2. supabase-loader.js → Carga Supabase SDK (CDN + fallback)
-         3. app.js        → GameCenter, store, updateUI (núcleo)
+         2. remote-resource-policy.js → Bloqueo de CDNs no permitidos en runtime
+         3. supabase-loader.js → Carga Supabase SDK local (vendor)
+         4. app.js        → GameCenter, store, updateUI (núcleo)
                             Incluye Sentinel Cloud Sync v13.0:
                             StorageInterceptor + Supabase auth/sync
-         4. shop-logic.js → Catálogo, compras, sync, ajustes
+         5. shop-logic.js → Catálogo, compras, sync, ajustes
          5. spa-router.js → Navegación SPA entre vistas
          6. event-logic.js → Eventos LTE, gachapón
          Nota: supabase-loader.js expone bootstrap compartido para
          garantizar createClient antes de _sentinelInit().
          ══════════════════════════════════════════════════════════ -->
     <script src="js/native-bridge.js"></script>
-    <script src="js/analytics.js"></script>     
+    <script src="js/analytics.js"></script>
+    <script src="js/remote-resource-policy.js"></script>
     <script src="js/supabase-loader.js"></script>
     <script src="js/app.js"></script>
     <script src="js/backup-engine.js"></script>

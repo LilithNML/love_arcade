@@ -1669,9 +1669,15 @@ function fireConfetti() {
     // Verificar que estamos en la vista de Tienda
     if (window.SpaRouter?.getCurrentView?.() !== 'shop') return;
 
+    if (typeof window.confetti !== 'function') {
+        window.__featureFlags = window.__featureFlags || {};
+        window.__featureFlags.confetti = false;
+        return;
+    }
+
     const colors = ['#9b59ff', '#ff59b4', '#fbbf24', '#22d07a', '#00d4ff'];
-    confetti({ particleCount: 55, angle: 60,  spread: 65, origin: { x: 0, y: 0.7 }, colors });
-    confetti({ particleCount: 55, angle: 120, spread: 65, origin: { x: 1, y: 0.7 }, colors });
+    window.confetti({ particleCount: 55, angle: 60,  spread: 65, origin: { x: 0, y: 0.7 }, colors });
+    window.confetti({ particleCount: 55, angle: 120, spread: 65, origin: { x: 1, y: 0.7 }, colors });
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -1719,8 +1725,8 @@ async function handleRedeem() {
                 el.closest('.coin-badge')?.setAttribute('title', `${bal} monedas`);
             });
             document.querySelectorAll('.coin-display:not(.navbar .coin-display)').forEach(el => el.textContent = bal);
-            if (!document.hidden) {
-                confetti({ particleCount: 80, spread: 100, origin: { y: 0.4 }, colors: ['#fbbf24','#9b59ff','#22d07a'] });
+            if (!document.hidden && typeof window.confetti === 'function') {
+                window.confetti({ particleCount: 80, spread: 100, origin: { y: 0.4 }, colors: ['#fbbf24','#9b59ff','#22d07a'] });
             }
             // [v9.9.2] Fuente ÚNICA de track('redeem_code'): aquí, al final de la cadena
             // de éxito de UI. El disparo en app.js/redeemPromoCode() fue eliminado para

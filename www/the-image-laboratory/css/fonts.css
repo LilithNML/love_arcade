@@ -1,0 +1,19 @@
+@font-face {
+  font-family: 'Space Grotesk';
+  src:
+    local('Space Grotesk'),
+    url('../vendor/fonts/space-grotesk-v20-latin-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src:
+    local('JetBrains Mono'),
+    url('../vendor/fonts/jetbrains-mono-v23-latin-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
