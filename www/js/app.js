@@ -261,7 +261,31 @@ function debounce(fn, delay = 300) {
         timer = setTimeout(() => fn(...args), delay);
     };
 }
+
 window.debounce = debounce; // Disponible globalmente para shop-logic.js
+
+/**
+ * Navegación interna segura dentro de la misma WebView.
+ * - Resuelve rutas relativas con `new URL(path, location.href)`.
+ * - Bloquea destinos de otro origen para evitar escapes externos.
+ * @param {string} path
+ * @returns {boolean} true si navegó, false si se bloqueó.
+ */
+function navigateInternal(path) {
+    try {
+        const target = new URL(path, window.location.href);
+        if (target.origin !== window.location.origin) {
+            console.warn('[navigateInternal] Navegación bloqueada por origen distinto:', target.href);
+            return false;
+        }
+        window.location.assign(target.href);
+        return true;
+    } catch (err) {
+        console.warn('[navigateInternal] Ruta inválida:', path, err);
+        return false;
+    }
+}
+window.navigateInternal = navigateInternal;
 
 
 // =====================================================
@@ -278,8 +302,7 @@ function goToMainMenu() {
     if (/(?:\/|^)index\.html(?:[?#].*)?$/i.test(current)) return;
 
     // Resolver siempre contra el origen/raíz actual para evitar rutas relativas rotas.
-    const target = new URL('/index.html', window.location.origin || window.location.href).toString();
-    window.location.href = target;
+    navigateInternal('/index.html');
 }
 
 /**
@@ -2078,7 +2101,8 @@ document.addEventListener('DOMContentLoaded', () => {
         window.GhostAnalytics?.track('open_game', { juego: gameId });
 
         e.preventDefault();
-        window.location.href = gameUrl;
+        link.removeAttribute('target'); // Fuerza misma WebView en navegación interna.
+        navigateInternal(gameUrl);
     }, { passive: false });
 
     // Lógica de retroceso físico de Android (Capacitor App plugin).

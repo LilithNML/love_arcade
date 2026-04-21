@@ -1968,7 +1968,7 @@ async function _handleEmailConfirm() {
     }
 
     if (saveCb?.checked) window.MailHelper.saveLastMailRecipient(email);
-    window.location.href = uri;
+    window.navigateInternal(uri);
     setTimeout(_closeEmailModal, 300);
 }
 
