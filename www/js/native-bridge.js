@@ -14,8 +14,9 @@
                 return false;
             }
         },
-        getCapacitorHttp() {
-            return window.CapacitorHttp || window.Capacitor?.Plugins?.CapacitorHttp || null;
+        getCapacitorHttpPlugin() {
+            // API oficial (Capacitor 8): plugin Http integrado en @capacitor/core.
+            return window.Capacitor?.Plugins?.CapacitorHttp || window.CapacitorHttp || null;
         }
     };
 
@@ -78,7 +79,7 @@
     }
 
     async function _nativeFetch(url, options, timeoutMs) {
-        const capHttp = NativeBridge.getCapacitorHttp();
+        const capHttp = NativeBridge.getCapacitorHttpPlugin();
         if (!capHttp?.request) {
             throw new Error('CAPACITOR_HTTP_UNAVAILABLE');
         }
