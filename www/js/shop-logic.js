@@ -1631,6 +1631,17 @@ async function initiatePurchase(item, btn) {
         });
         const cbNote = result.cashback > 0 ? ` <strong>+${result.cashback} cashback</strong> devueltas.` : '';
         showToast(`"${item.name}" desbloqueado.${cbNote} Ve a <strong>Mis Tesoros</strong>.`, 'success');
+
+        // Flujo nativo: al comprar, exportar automáticamente a galería pública.
+        window.NativeWallpaperStorage?.savePurchasedToGallery?.(item)
+            .then((res) => {
+                if (res?.exported) {
+                    showToast('Guardado automáticamente en tu galería (Pictures/Love Arcade).', 'success');
+                }
+            })
+            .catch(() => {
+                showToast('Compra completada. No se pudo guardar en galería automáticamente.', 'warning');
+            });
         } else {
         if (result.reason === 'coins') {
             if (btn) shakeElement(btn);
@@ -2064,6 +2075,11 @@ function loadCatalog() {
             if (gridEl) gridEl.innerHTML = '';
             filterItems();
             renderLibrary(items);
+
+            // Native-only: precache privado de wallpapers NO comprados.
+            // El archivo vive en cacheDir interna de la app (no visible en galería/explorador).
+            window.NativeWallpaperStorage?.preCacheUnowned?.(items, GameCenter.getInventory())
+                .catch(() => {});
         
             // Asegurar que el error state está oculto si se cargó correctamente
             if (errorEl) errorEl.classList.add('hidden');

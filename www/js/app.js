@@ -863,6 +863,69 @@ async function _saveAvatarLocally(dataUrl) {
     applyAvatar();
 }
 
+
+// =====================================================
+// WALLPAPERS NATIVOS — cache privada + exportación a galería
+// =====================================================
+
+function _nativeWallpaperPlugin() {
+    const cap = window.Capacitor;
+    return cap?.Plugins?.WallpaperStorage || null;
+}
+
+window.NativeWallpaperStorage = {
+    isAvailable() {
+        const cap = window.Capacitor;
+        const isNative = typeof cap?.isNativePlatform === 'function'
+            ? cap.isNativePlatform()
+            : false;
+        return Boolean(isNative && _nativeWallpaperPlugin());
+    },
+
+    async preCacheUnowned(items, inventory = {}) {
+        if (!this.isAvailable() || !Array.isArray(items) || !items.length) return { cached: 0, skipped: 0 };
+
+        const plugin = _nativeWallpaperPlugin();
+        let cached = 0;
+        let skipped = 0;
+
+        // Lote conservador para no saturar red/disco al abrir la tienda.
+        const candidates = items
+            .filter(item => item && item.id && item.file && (inventory[item.id] || 0) === 0)
+            .slice(0, 12);
+
+        for (const item of candidates) {
+            try {
+                const url = window.GameCenter?.getDownloadUrl?.(item.id, item.file, { allowUnownedForNativeCache: true });
+                if (!url) { skipped += 1; continue; }
+                await plugin.cacheWallpaperPrivate({
+                    wallpaperId: String(item.id),
+                    imageUrl: url
+                });
+                cached += 1;
+            } catch (_) {
+                skipped += 1;
+            }
+        }
+
+        return { cached, skipped };
+    },
+
+    async savePurchasedToGallery(item) {
+        if (!this.isAvailable() || !item?.id || !item?.file) return { exported: false, skipped: true };
+
+        const plugin = _nativeWallpaperPlugin();
+        const url = window.GameCenter?.getDownloadUrl?.(item.id, item.file);
+        if (!url) return { exported: false, skipped: true };
+
+        return plugin.exportPurchasedWallpaper({
+            wallpaperId: String(item.id),
+            wallpaperName: String(item.name || 'Wallpaper'),
+            imageUrl: url
+        });
+    }
+};
+
 // =====================================================
 // API PÚBLICA — window.GameCenter
 // =====================================================
@@ -1111,9 +1174,10 @@ window.GameCenter = {
      */
     getRedeemedCount: () => (store.redeemedHashes || []).length,
 
-    getDownloadUrl: (itemId, fileName) => {
+    getDownloadUrl: (itemId, fileName, options = {}) => {
         if (!fileName) return null;
-        if ((store.inventory[itemId] || 0) === 0) return null;
+        const allowUnowned = options.allowUnownedForNativeCache === true;
+        if (!allowUnowned && (store.inventory[itemId] || 0) === 0) return null;
         // Strip file extension — Cloudinary download URL uses the base public ID
         // without extension or transformation parameters so the original master
         // file is served (no crop, no resize, no format override).
