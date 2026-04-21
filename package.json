@@ -13,11 +13,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@capacitor-community/sqlite": "^8.1.0",
     "@capacitor/android": "^8.3.1",
     "@capacitor/app": "^8.1.0",
     "@capacitor/filesystem": "^8.1.2",
-    "@capacitor/local-notifications": "^8.1.0",
-    "@capacitor/push-notifications": "^8.1.0",
-    "@capacitor/haptics": "^8.1.0"
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/http": "^0.0.2",
+    "@capacitor/local-notifications": "^8.0.2",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/push-notifications": "^8.0.3"
   }
 }
