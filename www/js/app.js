@@ -2482,6 +2482,12 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     async function _sentinelSync() {
         if (!_sbClient || !_sbSession || _isRestoringSession) return;
+        if (navigator.onLine === false) {
+            _setStatusBadge('connected');
+            _setSyncMsg('Sin red: Sentinel quedó en cola y se reintentará al volver conexión.', true);
+            _hasUnsyncedChanges = true;
+            return;
+        }
         if (_isSyncing) return; // Evitar doble subida simultánea
         _isSyncing = true;
         _setStatusBadge('syncing');
@@ -2724,6 +2730,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Cross-tab bridge: detectar writes desde otras pestañas ───────────────
     // El evento 'storage' NO se dispara en la pestaña que ejecuta setItem,
     // sólo en el resto de pestañas del mismo origen (ej: Hub abierto + juego).
+    window.addEventListener('offline', () => {
+        _setSyncMsg('Sin red: Sentinel en modo cola local.', true);
+        if (_sbSession) _setStatusBadge('connected');
+    });
+
+    window.addEventListener('online', () => {
+        _setSyncMsg('Conexión restablecida. Reintentando sincronización…');
+        if (_sbSession && _hasUnsyncedChanges) _sentinelScheduleSync(1000);
+    });
+
     window.addEventListener('storage', (event) => {
         if (!event?.key) return;
         if (event.key === CONFIG.stateKey) {
@@ -2757,9 +2773,20 @@ document.addEventListener('DOMContentLoaded', () => {
         // 1. Obtener credenciales desde el proxy seguro
         let supabaseUrl, supabaseKey;
         try {
-            const res = await fetch('/api/client-config', { cache: 'no-store' });
+            const requester = window.ApiClient?.request
+                ? window.ApiClient.request.bind(window.ApiClient)
+                : async (url, opts) => {
+                    const fallbackRes = await fetch(url, { cache: opts?.cache || 'default' });
+                    const fallbackData = await fallbackRes.json().catch(() => ({}));
+                    return { ok: fallbackRes.ok, status: fallbackRes.status, data: fallbackData };
+                };
+            const res = await requester('/api/client-config', {
+                cache: 'no-store',
+                timeoutMs: 5000,
+                retries: 1,
+            });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const cfg = await res.json();
+            const cfg = res.data || {};
             supabaseUrl = cfg.supabaseUrl;
             supabaseKey = cfg.supabaseKey;
         } catch (err) {

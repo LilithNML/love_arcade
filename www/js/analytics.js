@@ -597,6 +597,23 @@
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+
+    async function _apiRequest(path, options) {
+        if (window.ApiClient?.request) {
+            return window.ApiClient.request(path, options);
+        }
+        const res = await fetch(path, {
+            method: options.method || 'GET',
+            headers: options.headers || {},
+            body: options.body,
+            keepalive: options.keepalive,
+        });
+        const text = await res.text().catch(() => '');
+        let data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (_) { data = null; }
+        return { ok: res.ok, status: res.status, text, data };
+    }
+
     function _bucketTs(ts) {
         return Math.floor(ts / _DEDUPE_BUCKET_MS) * _DEDUPE_BUCKET_MS;
     }
@@ -742,24 +759,36 @@
 
         const attemptSend = async (attempt, endpointIndex) => {
             const endpoint = _PROXY_ENDPOINTS[endpointIndex] || _PRIMARY_PROXY_ENDPOINT;
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort('timeout'), _SEND_TIMEOUT_MS);
             const startedAt = performance.now();
             let timedOut = false;
             try {
-                // keepalive: true — el request sobrevive a navegaciones de página
-                const promise = fetch(endpoint, {
-                    method:    'POST',
-                    headers:   { 'Content-Type': 'application/json' },
-                    body:      JSON.stringify(payload),
+                const promise = _apiRequest(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
                     keepalive: true,
-                    signal: controller.signal,
+                    timeoutMs: _SEND_TIMEOUT_MS,
+                    retries: 0,
+                    analytics: true,
+                    queueIfOffline: true,
                 });
-
-                // Registrar en WeakSet ANTES de encadenar then/catch para que el
-                // handler de unhandledrejection pueda identificarlo como propio.
                 _pendingFetches.add(promise);
                 const res = await promise;
+
+                if (res.queued) {
+                    _incrementFailureCounter('offline');
+                    _enqueueFailed({ event, meta, nickname, isTest, bucketStart, dedupeKey });
+                    _log('📦 Sin red — evento encolado en ApiClient:', event);
+                    return {
+                        ok: false,
+                        status: 0,
+                        attempts: attempt + 1,
+                        endpoint,
+                        classification: 'offline',
+                        error: 'OFFLINE_QUEUED',
+                        dedupeKey,
+                    };
+                }
 
                 if (res.ok) {
                     const elapsedMs = Math.round(performance.now() - startedAt);
@@ -776,7 +805,7 @@
                 }
 
                 if (!res.ok) {
-                    const errorBodyText = await res.text().catch(() => '');
+                    const errorBodyText = res.text || '';
                     const structuredHttpError = {
                         event,
                         endpoint,
@@ -832,7 +861,7 @@
                     dedupeKey,
                 };
             } catch (err) {
-                timedOut = err?.name === 'AbortError';
+                timedOut = err?.name === 'AbortError' || /timeout/i.test(String(err?.message || ''));
                 const offline = navigator.onLine === false;
                 const cause = timedOut
                     ? 'timeout'
@@ -883,8 +912,6 @@
                     error: err?.message || String(err),
                     dedupeKey,
                 };
-            } finally {
-                clearTimeout(timeoutId);
             }
         };
 
