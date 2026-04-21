@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "621439303535",
+    "project_id": "prueba-79ff1",
+    "storage_bucket": "prueba-79ff1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:621439303535:android:33a7da0cd1ed517278729a",
+        "android_client_info": {
+          "package_name": "com.lovearcade.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAW_E_zxk8-uOZRYKNDQcqQP4-kMHT1bQI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
