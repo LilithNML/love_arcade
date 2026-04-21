@@ -1,25 +1,32 @@
 {
   "name": "love_arcade",
   "version": "1.0.0",
-  "description": "**Plataforma de minijuegos con economía de recompensas, tienda de wallpapers y sistema de rachas diarias.**",
+  "description": "**Plataforma de minijuegos con econom\u00eda de recompensas, tienda de wallpapers y sistema de rachas diarias.**",
   "main": "index.js",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "sync:android": "npx cap sync android",
+    "build:apk:debug": "cd android && ./gradlew assembleDebug",
+    "doctor": "npx cap doctor"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@capacitor-community/sqlite": "^8.1.0",
-    "@capacitor/android": "^8.3.1",
+    "@capacitor/android": "8.3.1",
     "@capacitor/app": "^8.1.0",
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/local-notifications": "^8.0.2",
     "@capacitor/preferences": "^8.0.1",
-    "@capacitor/push-notifications": "^8.0.3"
+    "@capacitor/push-notifications": "^8.0.3",
+    "@capacitor/core": "8.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.3.1"
   }
 }
