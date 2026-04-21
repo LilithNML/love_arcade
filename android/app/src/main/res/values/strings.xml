@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Love Arcade</string>
+    <string name="title_activity_main">Love Arcade</string>
+    <string name="package_name">com.lovearcade.app</string>
+    <string name="custom_url_scheme">com.lovearcade.app</string>
+</resources>

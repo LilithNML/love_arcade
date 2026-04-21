@@ -1,0 +1,20 @@
+{
+  "name": "love_arcade",
+  "version": "1.0.0",
+  "description": "**Plataforma de minijuegos con economía de recompensas, tienda de wallpapers y sistema de rachas diarias.**",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/filesystem": "^8.1.2"
+  }
+}
