@@ -71,6 +71,17 @@ Abre `http://localhost:8080` en el navegador. No requiere Node.js, npm ni compil
 
 ---
 
+## Dependencias locales (sin CDN)
+
+El runtime ya no debe depender de CDNs. Antes de empaquetar APK/web, verifica:
+
+- `www/vendor/README.md` para la lista exacta de archivos en `www/vendor/` y `www/the-image-laboratory/vendor/`.
+- `www/docs/remote-resources-policy.md` para la whitelist de recursos remotos permitidos.
+
+Si falta un asset local de vendor, la app entra en modo degradado y desactiva solo la feature relacionada (por ejemplo, confetti, recorte o ZIP) sin romper navegación base.
+
+---
+
 ## Integrar un minijuego
 
 ```js

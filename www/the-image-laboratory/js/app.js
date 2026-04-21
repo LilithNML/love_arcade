@@ -170,6 +170,11 @@ function downscaleForCrop(file, maxSide = 1600) {
  * @param {Function} callback        (cropData: {x,y,width,height}) => void
  */
 export async function openCropModal(file, aspectRatio, callback) {
+  if (typeof Cropper === 'undefined') {
+    showToast('Editor de recorte deshabilitado: falta vendor/cropper.min.js', 'warn');
+    return;
+  }
+
   _cropCb = callback;
 
   // Badge de aspect ratio
@@ -429,4 +434,15 @@ function escapeHtml(str) {
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────
 initIcons();
+
+if (!window.__imageLabDeps?.jszip) {
+  showToast('Exportación ZIP deshabilitada: falta vendor/jszip.min.js', 'warn', 6500);
+}
+if (!window.__imageLabDeps?.cropper) {
+  showToast('Recorte deshabilitado: falta vendor/cropper.min.js', 'warn', 6500);
+}
+if (!window.__imageLabDeps?.lucide) {
+  showToast('Iconos vectoriales deshabilitados: falta vendor/lucide.min.js', 'warn', 6500);
+}
+
 loadModule('store-manager');
