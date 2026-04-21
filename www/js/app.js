@@ -2326,6 +2326,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Clave del registro de marca de tiempo local (para Last Write Wins)
     const SENTINEL_TS_KEY = 'love_arcade_sentinel_ts';
     const SENTINEL_GUEST_KEY = 'love_arcade_guest_mode';
+    const SENTINEL_DIRTY_MAP_KEY = 'love_arcade_sentinel_dirty_map_v1';
+    const SUPABASE_KV_TABLE = 'user_profile_kv';
 
     // Tabla de Supabase
     const SUPABASE_TABLE = 'user_profiles';
@@ -2354,6 +2356,19 @@ document.addEventListener('DOMContentLoaded', () => {
         'LUMINA_gameState',
         SENTINEL_TS_KEY,
     ]);
+
+    async function _storageGet(key) {
+        if (window.StorageAdapter?.get) return await window.StorageAdapter.get(key);
+        return localStorage.getItem(key);
+    }
+    async function _storageSet(key, value) {
+        if (window.StorageAdapter?.set) return await window.StorageAdapter.set(key, value);
+        return localStorage.setItem(key, value);
+    }
+    async function _storageRemove(key) {
+        if (window.StorageAdapter?.remove) return await window.StorageAdapter.remove(key);
+        return localStorage.removeItem(key);
+    }
 
     function _getCloudAvatarUrl() {
         try {
@@ -2426,13 +2441,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (el) el.textContent = email || '';
     }
 
-    function _setGuestMode(active) {
-        if (active) _originalSetItem(SENTINEL_GUEST_KEY, '1');
-        else localStorage.removeItem(SENTINEL_GUEST_KEY);
+    async function _setGuestMode(active) {
+        if (active) await _storageSet(SENTINEL_GUEST_KEY, '1');
+        else await _storageRemove(SENTINEL_GUEST_KEY);
     }
 
-    function _isGuestMode() {
-        return localStorage.getItem(SENTINEL_GUEST_KEY) === '1';
+    async function _isGuestMode() {
+        return await _storageGet(SENTINEL_GUEST_KEY) === '1';
     }
 
     // ── Snapshot — lectura/escritura del estado vigilado ─────────────────────
@@ -2442,11 +2457,11 @@ document.addEventListener('DOMContentLoaded', () => {
      * en un objeto plano { key: value_string }.
      * El valor se almacena como string (igual que localStorage).
      */
-    function _buildSnapshot() {
+    async function _buildSnapshot() {
         const snap = {};
-        SENTINEL_WATCHED_KEYS.forEach(key => {
-            const val = localStorage.getItem(key);
-            if (val === null) return;
+        for (const key of SENTINEL_WATCHED_KEYS) {
+            const val = await _storageGet(key);
+            if (val === null) continue;
 
             // Evitar subir userAvatar dentro de game_data:
             // el avatar cloud vive en user_profiles.avatar_url y el binario en Storage.
@@ -2457,14 +2472,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         const sanitized = { ...parsed };
                         delete sanitized.userAvatar;
                         snap[key] = JSON.stringify(sanitized);
-                        return;
+                        continue;
                     }
                 } catch (_) {
                     // Si no es JSON válido, se conserva el valor tal cual.
                 }
             }
             snap[key] = val;
-        });
+        }
         return snap;
     }
 
@@ -2476,21 +2491,21 @@ document.addEventListener('DOMContentLoaded', () => {
      * IMPORTANTE: usa el setItem ORIGINAL (pre-interceptor) para no
      * disparar el debounce mientras aplicamos datos de la nube.
      */
-    function _applySnapshot(snap) {
+    async function _applySnapshot(snap) {
         if (!snap || typeof snap !== 'object') return;
-        SENTINEL_WATCHED_KEYS.forEach(key => {
+        for (const key of SENTINEL_WATCHED_KEYS) {
             if (Object.prototype.hasOwnProperty.call(snap, key) && snap[key] !== null) {
-                _originalSetItem(key, snap[key]);
+                await _storageSet(key, snap[key]);
             }
-        });
-        _rehydrateHubStoreFromDisk();
+        }
+        await _rehydrateHubStoreFromDisk();
         // Emitir evento para que los módulos sepan que el store fue reemplazado
         document.dispatchEvent(new CustomEvent('la:cloudsynced', { detail: { source: 'cloud' } }));
     }
 
-    function _rehydrateHubStoreFromDisk() {
+    async function _rehydrateHubStoreFromDisk() {
         try {
-            const raw = localStorage.getItem(CONFIG.stateKey);
+            const raw = await _storageGet(CONFIG.stateKey);
             if (raw) {
                 store = migrateState(JSON.parse(raw));
                 window.GameCenter?.syncUI?.();
@@ -2517,23 +2532,38 @@ document.addEventListener('DOMContentLoaded', () => {
         _setStatusBadge('syncing');
 
         try {
-            const snap       = _buildSnapshot();
+            const snap       = await _buildSnapshot();
             const now        = new Date().toISOString();
             const userId     = _sbSession.user.id;
             const nickname   = window.GameCenter?.getIdentity?.()?.nickname || '';
             const avatar_url = _getCloudAvatarUrl();
+            const dirtyMap = JSON.parse((await _storageGet(SENTINEL_DIRTY_MAP_KEY)) || '{}');
+            const dirtyKeys = Object.keys(dirtyMap);
 
-            const { error } = await _sbClient
-                .from(SUPABASE_TABLE)
-                .upsert(
-                    { id: userId, game_data: snap, nickname, avatar_url, updated_at: now },
-                    { onConflict: 'id' }
-                );
-
-            if (error) throw error;
+            if (dirtyKeys.length > 0) {
+                const rows = dirtyKeys.map((key) => ({
+                    user_id: userId,
+                    key,
+                    value: Object.prototype.hasOwnProperty.call(snap, key) ? snap[key] : null,
+                    updated_at: dirtyMap[key] || now
+                }));
+                const { error: kvError } = await _sbClient
+                    .from(SUPABASE_KV_TABLE)
+                    .upsert(rows, { onConflict: 'user_id,key' });
+                if (kvError) throw kvError;
+            } else {
+                const { error: fallbackError } = await _sbClient
+                    .from(SUPABASE_TABLE)
+                    .upsert(
+                        { id: userId, game_data: snap, nickname, avatar_url, updated_at: now },
+                        { onConflict: 'id' }
+                    );
+                if (fallbackError) throw fallbackError;
+            }
 
             // Guardar marca de tiempo local
-            _originalSetItem(SENTINEL_TS_KEY, now);
+            await _storageSet(SENTINEL_TS_KEY, now);
+            await _storageSet(SENTINEL_DIRTY_MAP_KEY, JSON.stringify({}));
             _setStatusBadge('synced');
             _setSyncMsg('¡Progreso guardado en la nube! ✓');
             _setLastSyncLabel(now);
@@ -2619,10 +2649,10 @@ document.addEventListener('DOMContentLoaded', () => {
     async function _migrateGuestData(cloudData = {}) {
         if (!_sbClient || !_sbSession) return cloudData || {};
 
-        const localGuestData = _buildSnapshot();
+        const localGuestData = await _buildSnapshot();
         const hasGuestProgress = Object.keys(localGuestData).length > 0;
         if (!hasGuestProgress) {
-            _setGuestMode(false);
+            await _setGuestMode(false);
             return cloudData || {};
         }
 
@@ -2636,8 +2666,8 @@ document.addEventListener('DOMContentLoaded', () => {
             .upsert({ id: userId, game_data: mergedData, nickname, avatar_url, updated_at: now }, { onConflict: 'id' });
         if (error) throw error;
 
-        _originalSetItem(SENTINEL_TS_KEY, now);
-        _setGuestMode(false);
+        await _storageSet(SENTINEL_TS_KEY, now);
+        await _setGuestMode(false);
         _hasUnsyncedChanges = false;
         _setSyncMsg('Progreso de invitad@ migrado a la nube ✓');
         _setLastSyncLabel(now);
@@ -2685,26 +2715,38 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             let effectiveData = data?.game_data || {};
-            if (_isGuestMode() && event === 'SIGNED_IN') {
+            if (!effectiveData || Object.keys(effectiveData).length === 0) {
+                const { data: kvRows } = await _sbClient
+                    .from(SUPABASE_KV_TABLE)
+                    .select('key,value,updated_at')
+                    .eq('user_id', userId);
+                if (Array.isArray(kvRows) && kvRows.length) {
+                    effectiveData = kvRows.reduce((acc, row) => {
+                        if (typeof row?.key === 'string') acc[row.key] = typeof row.value === 'string' ? row.value : null;
+                        return acc;
+                    }, {});
+                }
+            }
+            if (await _isGuestMode() && event === 'SIGNED_IN') {
                 effectiveData = await _migrateGuestData(effectiveData);
             }
 
-            const localRawTs = localStorage.getItem(SENTINEL_TS_KEY);
+            const localRawTs = await _storageGet(SENTINEL_TS_KEY);
             const _safeTs = (iso) => {
                 const t = iso ? new Date(iso).getTime() : 0;
                 return Number.isFinite(t) ? t : 0;
             };
             const localTime = _safeTs(localRawTs);
             const cloudTime = _safeTs(data?.updated_at);
-            const localSnapshot = _buildSnapshot();
+            const localSnapshot = await _buildSnapshot();
             const hasLocalSnapshot = Object.keys(localSnapshot).length > 0;
             const hasCloudSnapshot = effectiveData && Object.keys(effectiveData).length > 0;
             const snapshotsDiffer = hasLocalSnapshot && hasCloudSnapshot
                 && JSON.stringify(localSnapshot) !== JSON.stringify(effectiveData);
 
             if (hasCloudSnapshot && cloudTime > localTime) {
-                _applySnapshot(effectiveData);
-                _originalSetItem(SENTINEL_TS_KEY, data.updated_at);
+                await _applySnapshot(effectiveData);
+                await _storageSet(SENTINEL_TS_KEY, data.updated_at);
                 _setLastSyncLabel(data.updated_at);
                 _setSyncMsg('Progreso cloud restaurado (más reciente) ✓');
                 setTimeout(() => _setSyncMsg(''), 4_000);
@@ -2729,27 +2771,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // ── StorageInterceptor ────────────────────────────────────────────────────
-
-    // Referencia al setItem ORIGINAL antes de ser interceptado.
-    // Se usa en _applySnapshot() para evitar re-disparar el debounce.
-    const _originalSetItem = localStorage.setItem.bind(localStorage);
-
-    /**
-     * Intercepta localStorage.setItem.
-     * Si la clave pertenece a SENTINEL_WATCHED_KEYS y hay sesión activa,
-     * programa una sincronización con debounce.
-     * El valor se escribe normalmente en localStorage independientemente.
-     */
-    localStorage.setItem = function interceptedSetItem(key, value) {
-        const prevValue = localStorage.getItem(key);
-        _originalSetItem(key, value);
-        if (SENTINEL_WATCHED_KEYS.has(key) && _sbSession && !_isRestoringSession) {
-            _hasUnsyncedChanges = true;
-            _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
-            _sentinelScheduleSyncForKey(key, prevValue, value);
+    // ── Storage watcher (sin interceptar localStorage) ───────────────────────
+    const _lastWatchedValues = new Map();
+    let _watcherTimer = null;
+    async function _markDirtyKey(key, prevValue, nextValue) {
+        if (!SENTINEL_WATCHED_KEYS.has(key)) return;
+        const raw = (await _storageGet(SENTINEL_DIRTY_MAP_KEY)) || '{}';
+        const dirty = JSON.parse(raw);
+        dirty[key] = new Date().toISOString();
+        await _storageSet(SENTINEL_DIRTY_MAP_KEY, JSON.stringify(dirty));
+        await _storageSet(SENTINEL_TS_KEY, dirty[key]);
+        _hasUnsyncedChanges = true;
+        if (_sbSession && !_isRestoringSession) {
+            _sentinelScheduleSyncForKey(key, prevValue, nextValue);
         }
-    };
+    }
+    async function _startStorageWatcher() {
+        for (const key of SENTINEL_WATCHED_KEYS) {
+            _lastWatchedValues.set(key, await _storageGet(key));
+        }
+        _watcherTimer = setInterval(async () => {
+            for (const key of SENTINEL_WATCHED_KEYS) {
+                const prev = _lastWatchedValues.get(key) ?? null;
+                const next = await _storageGet(key);
+                if (prev === next) continue;
+                _lastWatchedValues.set(key, next);
+                await _markDirtyKey(key, prev, next);
+                if (key === CONFIG.stateKey) await _rehydrateHubStoreFromDisk();
+            }
+        }, 1200);
+    }
 
     // ── Cross-tab bridge: detectar writes desde otras pestañas ───────────────
     // El evento 'storage' NO se dispara en la pestaña que ejecuta setItem,
@@ -2771,8 +2822,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!SENTINEL_WATCHED_KEYS.has(event.key)) return;
         _rehydrateHubStoreFromDisk();
-        _originalSetItem(SENTINEL_TS_KEY, new Date().toISOString());
-        _hasUnsyncedChanges = true;
+        _markDirtyKey(event.key, event.oldValue, event.newValue);
         if (!_sbSession || _isRestoringSession) return; // Invitado o sesión no restaurada → ignorar sync cloud
         console.log(`[Sentinel] Cambio detectado en pestaña externa (${event.key}). Sincronizando...`);
         _sentinelScheduleSyncForKey(event.key, event.oldValue, event.newValue);
@@ -2850,11 +2900,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // 4. Recuperar sesión existente (para recargas de página)
         const { data: { session } } = await _sbClient.auth.getSession();
         if (session && !_sbSession) _handleAuthChange('INITIAL_SESSION', session);
+        if (!_watcherTimer) await _startStorageWatcher();
     }
 
     // ── Listeners de UI ──────────────────────────────────────────────────────
 
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
         const gateModal = document.getElementById('cloud-gatekeeper-modal');
         const gateBox = gateModal?.querySelector('.cloud-gatekeeper-modal-box');
         const gateMsgEl = document.getElementById('cloud-gatekeeper-msg');
@@ -3037,7 +3088,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     options: { data: { nickname } }
                 });
                 if (error) throw error;
-                _setGuestMode(false);
+                await _setGuestMode(false);
                 setGateMsg('Cuenta creada. Revisa tu correo para confirmarla.');
                 _setLoginMsg('Cuenta creada correctamente.');
             } catch (err) {
@@ -3103,8 +3154,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        document.getElementById('btn-cloud-guest')?.addEventListener('click', () => {
-            _setGuestMode(true);
+        document.getElementById('btn-cloud-guest')?.addEventListener('click', async () => {
+            await _setGuestMode(true);
             if (!window.GameCenter?.hasIdentity?.()) {
                 window.GameCenter?.setIdentity?.('Invitad@', '@');
             }
@@ -3177,7 +3228,7 @@ document.addEventListener('DOMContentLoaded', () => {
             closeGate();
         });
 
-        _setLastSyncLabel(localStorage.getItem(SENTINEL_TS_KEY));
+        _setLastSyncLabel(await _storageGet(SENTINEL_TS_KEY));
         _setAccountStateLabel(Boolean(_sbSession));
 
         const hasLocalIdentity = window.GameCenter?.hasIdentity?.();

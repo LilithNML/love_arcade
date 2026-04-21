@@ -53,7 +53,10 @@
         }));
     }
 
-    function _localStorageKeys() {
+    async function _storageKeys() {
+        if (window.StorageAdapter?.listKeys) {
+            return await window.StorageAdapter.listKeys();
+        }
         const keys = [];
         for (let i = 0; i < localStorage.length; i += 1) {
             const key = localStorage.key(i);
@@ -66,8 +69,8 @@
         return DYNAMIC_PATTERNS.some((pattern) => pattern.test(key));
     }
 
-    function _collectBackupData() {
-        const allKeys = _localStorageKeys();
+    async function _collectBackupData() {
+        const allKeys = await _storageKeys();
         const selectedKeys = new Set(KNOWN_KEYS);
 
         for (const key of allKeys) {
@@ -78,7 +81,7 @@
 
         const data = {};
         for (const key of selectedKeys) {
-            const value = localStorage.getItem(key);
+            const value = window.StorageAdapter?.get ? await window.StorageAdapter.get(key) : localStorage.getItem(key);
             if (value !== null) data[key] = value;
         }
 
@@ -141,7 +144,7 @@
         notify('processing', 'Procesando exportación…');
 
         try {
-            const envelope = _collectBackupData();
+            const envelope = await _collectBackupData();
             const canonical = JSON.stringify(envelope);
             let checksum = '';
             let gzBlob = null;
@@ -219,7 +222,8 @@
             for (const [key, value] of entries) {
                 if (typeof key !== 'string') continue;
                 if (typeof value !== 'string') continue;
-                localStorage.setItem(key, value);
+                if (window.StorageAdapter?.set) await window.StorageAdapter.set(key, value);
+                else localStorage.setItem(key, value);
             }
 
             notify('success', 'Progreso restaurado con éxito');
