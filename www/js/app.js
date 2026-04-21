@@ -1797,8 +1797,30 @@ function saveState(options = {}) {
     }
 
     updateUI();
+    _emitDomainStateChange(CONFIG.stateKey, {
+        source: 'gamecenter:saveState',
+        priority: immediateCloudSync ? 'high' : 'passive'
+    });
     _syncCloudIfNeeded(immediateCloudSync);
     checkStorageSize();
+}
+
+function _emitDomainStateChange(key, detail = {}) {
+    if (!key) return;
+    let nextValue = null;
+    try {
+        nextValue = localStorage.getItem(key);
+    } catch (_) {}
+    document.dispatchEvent(new CustomEvent('la:domain-state-changed', {
+        detail: {
+            key,
+            prevValue: Object.prototype.hasOwnProperty.call(detail, 'prevValue') ? detail.prevValue : null,
+            nextValue,
+            source: detail.source || 'unknown',
+            priority: detail.priority || null,
+            at: Date.now(),
+        }
+    }));
 }
 
 /**
@@ -2255,23 +2277,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // exclusivamente en shop-logic.js para evitar el doble-registro de eventos.
 });
 // =====================================================
-// ☁️  SENTINEL CLOUD SYNC — v14.0
+// ☁️  SENTINEL CLOUD SYNC — v15.0
 // ─────────────────────────────────────────────────────────────────────────────
-// Arquitectura: Patrón "Sentinel" (Observador)
+// Arquitectura: Patrón "Sentinel" + eventos de dominio
 //
 // El Sentinel actúa como una capa de persistencia en la nube que espeja el
 // localStorage sin modificar el código de los juegos. Todos los minijuegos
 // corren bajo el mismo origen (subcarpetas), por lo que comparten acceso al
-// mismo localStorage. El Sentinel observa cambios en las claves críticas,
-// los empaqueta en un objeto JSONB y los sube a Supabase con debounce.
+// mismo localStorage. El Sentinel observa cambios en las claves críticas y
+// escucha eventos de dominio emitidos por GameCenter para sincronizar con
+// prioridad (alta/pasiva), compatible con navegador y contenedor nativo.
 //
 // Flujo principal:
 //  1. init: obtiene credenciales de /api/client-config → crea cliente Supabase
 //  2. onAuthStateChange: detecta sesión activa (Email/Password)
 //     → al SIGNED_IN: descarga perfil de la nube y aplica Last Write Wins
-//  3. StorageInterceptor: intercepta localStorage.setItem para claves vigiladas
-//     → dispara _sentinelScheduleSync() con debounce de 3 s
-//  4. _sentinelSync(): sube snapshot de todas las claves vigiladas a Supabase
+//  3. DomainEventBus: escucha 'la:domain-state-changed' desde GameCenter
+//     → marca dirty + agenda sync con prioridad.
+//  4. StorageWatcher + storage event: fallback para escrituras externas
+//     (minijuegos independientes / pestañas externas / módulos legacy).
+//  5. _sentinelSync(): sube snapshot de todas las claves vigiladas a Supabase
 //
 // Resolución de conflictos — Last Write Wins (timestamp):
 //  · Al iniciar sesión se compara updated_at de la BD con la marca local.
@@ -2623,7 +2648,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function _resolveSyncPriority(key, prevValue, nextValue) {
+    function _resolveSyncPriority(key, prevValue, nextValue, forcedPriority = null) {
+        if (forcedPriority === 'high' || forcedPriority === 'passive') return forcedPriority;
         if ((key === CONFIG.stateKey || key === 'gamecenter_v6_promos') && _isMissionsOnlyDelta(prevValue, nextValue)) {
             return 'passive';
         }
@@ -2632,9 +2658,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return 'passive'; // resto de claves vigiladas
     }
 
-    function _sentinelScheduleSyncForKey(key, prevValue = null, nextValue = null) {
+    function _sentinelScheduleSyncForKey(key, prevValue = null, nextValue = null, forcedPriority = null) {
         if (!_sbSession) return;
-        const priority = _resolveSyncPriority(key, prevValue, nextValue);
+        const priority = _resolveSyncPriority(key, prevValue, nextValue, forcedPriority);
         if (priority === 'high') {
             _sentinelScheduleSync(HIGH_PRIORITY_DEBOUNCE_MS);
             return;
@@ -2802,6 +2828,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1200);
     }
 
+    async function _handleDomainStateChange(event) {
+        const detail = event?.detail || {};
+        const key = detail.key;
+        if (!SENTINEL_WATCHED_KEYS.has(key)) return;
+        const prevValue = Object.prototype.hasOwnProperty.call(detail, 'prevValue')
+            ? detail.prevValue
+            : (_lastWatchedValues.get(key) ?? null);
+        const nextValue = Object.prototype.hasOwnProperty.call(detail, 'nextValue')
+            ? detail.nextValue
+            : (await _storageGet(key));
+
+        _lastWatchedValues.set(key, nextValue);
+        await _markDirtyKey(key, prevValue, nextValue);
+        if (key === CONFIG.stateKey) await _rehydrateHubStoreFromDisk();
+
+        if (_sbSession && !_isRestoringSession) {
+            const forcedPriority = detail.priority === 'high' ? 'high' : (detail.priority === 'passive' ? 'passive' : null);
+            _sentinelScheduleSyncForKey(key, prevValue, nextValue, forcedPriority);
+        }
+    }
+
     // ── Cross-tab bridge: detectar writes desde otras pestañas ───────────────
     // El evento 'storage' NO se dispara en la pestaña que ejecuta setItem,
     // sólo en el resto de pestañas del mismo origen (ej: Hub abierto + juego).
@@ -2826,6 +2873,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!_sbSession || _isRestoringSession) return; // Invitado o sesión no restaurada → ignorar sync cloud
         console.log(`[Sentinel] Cambio detectado en pestaña externa (${event.key}). Sincronizando...`);
         _sentinelScheduleSyncForKey(event.key, event.oldValue, event.newValue);
+    });
+    document.addEventListener('la:domain-state-changed', (event) => {
+        _handleDomainStateChange(event).catch((err) => {
+            console.warn('[Sentinel] Falló procesamiento de evento de dominio:', err);
+        });
     });
 
     // ── Autenticación — onAuthStateChange ────────────────────────────────────
@@ -3269,6 +3321,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // con políticas RLS apropiadas configuradas manualmente en Supabase.
     window.Sentinel = {
         syncNow:    () => _sentinelSync(),
+        notifyChange: (key, options = {}) => {
+            document.dispatchEvent(new CustomEvent('la:domain-state-changed', {
+                detail: {
+                    key,
+                    source: options.source || 'sentinel:notifyChange',
+                    priority: options.priority || null,
+                    prevValue: Object.prototype.hasOwnProperty.call(options, 'prevValue') ? options.prevValue : null,
+                    nextValue: Object.prototype.hasOwnProperty.call(options, 'nextValue') ? options.nextValue : null,
+                    at: Date.now()
+                }
+            }));
+        },
         getSession: () => _sbSession,
         getClient:  () => _sbClient,
         getStatus:  () => ({ hasClient: !!_sbClient, hasSession: !!_sbSession }),
