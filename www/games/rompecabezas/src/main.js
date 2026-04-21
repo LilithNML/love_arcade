@@ -204,7 +204,7 @@ async function startGame(levelId, loadSaved = false) {
         onWin:         () => handleVictory(levelConfig),
         onStateChange: () => saveProgress(levelId),
         onSnap: () => {
-            if (navigator.vibrate) navigator.vibrate([30, 20, 10]);
+            window.LoveArcadeHaptics?.impactLight?.();
         }
     });
 
@@ -267,7 +267,7 @@ function handleVictory(levelConfig) {
 
     Economy.payout(levelConfig.id, levelConfig.rewardCoins);
 
-    if (navigator.vibrate) navigator.vibrate([100, 50, 80, 50, 200]);
+    window.LoveArcadeHaptics?.notifySuccess?.();
 
     UI.showVictoryModal(levelConfig.rewardCoins,
         () => { if (nextLvlId) startGame(nextLvlId); },

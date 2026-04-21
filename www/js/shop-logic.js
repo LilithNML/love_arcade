@@ -1646,6 +1646,7 @@ async function initiatePurchase(item, btn) {
         if (result.reason === 'coins') {
             if (btn) shakeElement(btn);
             showToast('No tienes suficientes monedas.', 'error');
+            window.LoveArcadeHaptics?.notifyWarning?.();
         }
     }
 }
@@ -1748,6 +1749,7 @@ async function handleRedeem() {
             });
         } else {
             showMsg(msg, result.message, 'var(--error)');
+            window.LoveArcadeHaptics?.notifyWarning?.();
             input.style.borderColor = 'var(--error)';
             shakeElement(btn);
 
@@ -1756,6 +1758,7 @@ async function handleRedeem() {
             // no cuando ya fue canjeado ('Ya canjeaste este código') para evitar
             // saturar el canal con intentos legítimos pero repetidos.
             if (result.message === 'Código inválido') {
+                window.LoveArcadeHaptics?.notifyWarning?.();
                 window.GhostAnalytics?.track('invalid_promo_code', {
                     intento: `${code.slice(0, 3)}***`,
                     longitud: code.length
@@ -1764,6 +1767,7 @@ async function handleRedeem() {
         }
     } catch (error) {
         showMsg(msg, 'Ocurrió un error al canjear el código. Inténtalo de nuevo.', 'var(--error)');
+        window.LoveArcadeHaptics?.notifyError?.();
         input.style.borderColor = 'var(--error)';
         shakeElement(btn);
         window.GhostAnalytics?.track('bug', {
@@ -2267,6 +2271,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (msg) { msg.textContent = `✓ Activa hasta ${result.expiresAt}`; msg.style.color = '#c084fc'; }
             } else {
                 if (msg) { msg.textContent = '✗ Monedas insuficientes (necesitas 100)'; msg.style.color = '#ff4757'; }
+                window.LoveArcadeHaptics?.notifyWarning?.();
             }
             if (msg) {
                 msg.style.opacity = '1';
