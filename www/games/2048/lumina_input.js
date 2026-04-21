@@ -201,7 +201,11 @@ function lumina_handleMove(direction) {
 // ─── Feedback Háptico ─────────────────────────────────────────────────────────
 
 function lumina_doHaptic(ms) {
-    try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {}
+    if (window.LoveArcadeHaptics?.impactLight) {
+        window.LoveArcadeHaptics.impactLight();
+        return;
+    }
+    window.LoveArcadeHaptics?.custom?.(ms);
 }
 
 console.log('[LUMINA] Input module v1.2 loaded.');

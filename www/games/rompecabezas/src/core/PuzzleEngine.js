@@ -1123,7 +1123,7 @@ export class PuzzleEngine {
                 p.originalY        = p.currentY;
                 this.wakeUp();
                 this.callbacks.onSound && this.callbacks.onSound('board_pick');
-                if (navigator.vibrate) navigator.vibrate(10);
+                window.LoveArcadeHaptics?.selection?.();
                 this.loosePieces.splice(i, 1);
                 this.loosePieces.push(p);
                 return;

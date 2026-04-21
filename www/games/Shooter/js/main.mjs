@@ -504,8 +504,8 @@ class LA_SHOOTER_Game {
                     this.pool.releaseBullet(bullet);
                     
                     // Vibrate if enabled
-                    if (this.config.settings.vibration && navigator.vibrate) {
-                        navigator.vibrate(100);
+                    if (this.config.settings.vibration) {
+                        window.LoveArcadeHaptics?.impactMedium?.();
                     }
                 }
             }
@@ -525,8 +525,8 @@ class LA_SHOOTER_Game {
                     this.createExplosion(enemy.x, enemy.y, 10, '#ff6600');
                     
                     // Vibrate if enabled
-                    if (this.config.settings.vibration && navigator.vibrate) {
-                        navigator.vibrate([50, 50, 100]);
+                    if (this.config.settings.vibration) {
+                        window.LoveArcadeHaptics?.impactHeavy?.();
                     }
                 }
             }
