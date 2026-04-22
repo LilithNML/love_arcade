@@ -333,13 +333,13 @@ async function setupAndroidBackButton() {
                 return;
             }
 
-            const currentView = window.SPARouter?.getCurrentView?.() || 'home';
+            const currentView = window.SpaRouter?.getCurrentView?.() || 'home';
             if (currentView === 'home') {
                 appPlugin.exitApp();
                 return;
             }
 
-            window.SPARouter?.navigateTo?.('home');
+            window.SpaRouter?.navigateTo?.('home');
         });
     } catch (_) {
         // Entorno sin bridge nativo o plugin no disponible → no-op.
@@ -648,6 +648,27 @@ try {
 } catch (e) {
     console.error('GameCenter: Error al cargar estado', e);
     store = migrateState({});
+}
+
+/**
+ * Rehidrata el store principal desde StorageAdapter cuando existe backend nativo
+ * (SQLite/Preferences). Mantiene localStorage como espejo para compatibilidad
+ * con módulos legacy sincronizados.
+ */
+async function rehydrateStoreFromAdapter() {
+    if (!window.StorageAdapter?.get) return;
+    try {
+        const adapterValue = await window.StorageAdapter.get(CONFIG.stateKey);
+        if (!adapterValue || typeof adapterValue !== 'string') return;
+        const parsed = migrateState(JSON.parse(adapterValue));
+        store = parsed;
+        try {
+            localStorage.setItem(CONFIG.stateKey, JSON.stringify(parsed));
+        } catch (_) {}
+        window.GameCenter?.syncUI?.();
+    } catch (err) {
+        console.warn('[StorageAdapter] No se pudo rehidratar estado principal desde backend nativo:', err?.message || err);
+    }
 }
 
 // =====================================================
@@ -1861,6 +1882,14 @@ function saveState(options = {}) {
     }
 
     updateUI();
+
+    if (window.StorageAdapter?.set) {
+        const serialized = JSON.stringify(store);
+        Promise.resolve(window.StorageAdapter.set(CONFIG.stateKey, serialized)).catch((err) => {
+            console.warn('[StorageAdapter] No se pudo persistir el store principal en backend nativo:', err?.message || err);
+        });
+    }
+
     _emitDomainStateChange(CONFIG.stateKey, {
         source: 'gamecenter:saveState',
         priority: immediateCloudSync ? 'high' : 'passive'
@@ -2165,6 +2194,7 @@ applyIdentity();
 // Los listeners no afectan al primer paint; se registran aquí por claridad.
 // =====================================================
 document.addEventListener('DOMContentLoaded', () => {
+    rehydrateStoreFromAdapter();
     // Re-sincronizar UI por si algún sub-módulo modificó el DOM
     updateUI();
 
@@ -2981,11 +3011,15 @@ document.addEventListener('DOMContentLoaded', () => {
             supabaseKey = cfg.supabaseKey;
         } catch (err) {
             console.warn('[Sentinel] No se pudieron obtener credenciales de nube:', err.message);
+            _setStatusBadge('inactive');
+            _setLoginMsg('Cloud deshabilitado: no se pudo contactar /api/client-config.', true);
             return; // Degradación elegante — funciona sin nube
         }
 
         if (!supabaseUrl || !supabaseKey) {
             console.warn('[Sentinel] Variables de entorno de Supabase no configuradas en Vercel.');
+            _setStatusBadge('inactive');
+            _setLoginMsg('Cloud deshabilitado: faltan variables de entorno en backend.', true);
             return;
         }
 
@@ -2995,6 +3029,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 '[Sentinel] SDK de Supabase no disponible (SDK no cargada / bloqueada). ' +
                 'Sentinel continuará en estado degradado (solo almacenamiento local).'
             );
+            _setStatusBadge('inactive');
+            _setLoginMsg('Cloud deshabilitado: SDK de Supabase no disponible.', true);
             return;
         }
         try {

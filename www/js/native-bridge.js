@@ -46,7 +46,8 @@
 
         const base = (nativeBaseUrl || window.__LOVE_ARCADE_API_BASE_URL__ || '').replace(/\/+$/, '');
         if (!base) {
-            throw new Error('NATIVE_BASE_URL_MISSING');
+            console.warn('[NativeBridge] NATIVE_BASE_URL_MISSING: usando ruta relativa; APIs /api pueden fallar en Android.');
+            return safePath;
         }
         return `${base}${safePath.startsWith('/') ? '' : '/'}${safePath}`;
     }
