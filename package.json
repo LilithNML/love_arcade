@@ -8,8 +8,10 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "build:web": "echo \"Usando contenido actual de www (sin transpile/bundle)\"",
     "sync:android": "npx cap sync android",
     "build:apk:debug": "cd android && ./gradlew assembleDebug",
+    "build:apk:release": "npm run build:web && npm run sync:android && cd android && ./gradlew clean assembleRelease",
     "doctor": "npx cap doctor"
   },
   "keywords": [],

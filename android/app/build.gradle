@@ -1,6 +1,21 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+import java.util.Properties
+import java.io.FileInputStream
+
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+def releaseStoreFile = keystoreProperties['storeFile'] ?: System.getenv("ANDROID_KEYSTORE_PATH")
+def releaseStorePassword = keystoreProperties['storePassword'] ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+def releaseKeyAlias = keystoreProperties['keyAlias'] ?: System.getenv("ANDROID_KEY_ALIAS")
+def releaseKeyPassword = keystoreProperties['keyPassword'] ?: System.getenv("ANDROID_KEY_PASSWORD")
+def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 android {
     namespace "com.lovearcade.app"
         compileSdk 35
@@ -20,6 +35,25 @@ android {
 
                                                                                         kotlinOptions {
                                                                                                 jvmTarget = '17'
+                                                                                                    }
+                                                                                                    signingConfigs {
+                                                                                                        release {
+                                                                                                            if (hasReleaseSigning) {
+                                                                                                                storeFile file(releaseStoreFile)
+                                                                                                                storePassword releaseStorePassword
+                                                                                                                keyAlias releaseKeyAlias
+                                                                                                                keyPassword releaseKeyPassword
+                                                                                                            }
+                                                                                                        }
+                                                                                                    }
+                                                                                                    buildTypes {
+                                                                                                        release {
+                                                                                                            minifyEnabled false
+                                                                                                            shrinkResources false
+                                                                                                            if (hasReleaseSigning) {
+                                                                                                                signingConfig signingConfigs.release
+                                                                                                            }
+                                                                                                        }
                                                                                                     }
                                                                                                     }
 
@@ -51,6 +85,17 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+gradle.taskGraph.whenReady { graph ->
+    def requestedReleaseBuild = graph.allTasks.any { task ->
+        task.name == 'assembleRelease' || task.name == 'bundleRelease'
+    }
+    if (requestedReleaseBuild && !hasReleaseSigning) {
+        throw new GradleException(
+            "Falta configuración de firma release. Define android/keystore.properties o variables ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS y ANDROID_KEY_PASSWORD."
+        )
+    }
+}
 
 try {
     def servicesJSON = file('google-services.json')
