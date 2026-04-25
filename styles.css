@@ -245,6 +245,92 @@ ul { list-style: none; }
 button { font-family: var(--font-body); }
 
 /* ================================================================
+   MICRO-INTERACTIONS SYSTEM — Android-first polish (v10.6)
+   ---------------------------------------------------------------
+   Reglas de rendimiento:
+   - Solo transform + opacity para 60fps
+   - Feedback táctil inmediato para elementos interactivos
+   - Estados loading sin CLS (ancho congelado por JS)
+   ================================================================ */
+:root {
+    --motion-micro: 120ms cubic-bezier(.2,.8,.2,1);
+    --motion-small: 170ms cubic-bezier(.2,.9,.2,1);
+    --motion-medium: 220ms cubic-bezier(.22,1,.36,1);
+    --motion-overlay: 280ms cubic-bezier(.16,1,.3,1);
+    --focus-ring: color-mix(in srgb, var(--accent) 72%, #fff);
+}
+
+:where(
+    button,
+    [role="button"],
+    a[href],
+    input:not([type="hidden"]),
+    select,
+    textarea,
+    summary,
+    .game-card,
+    .shop-card,
+    .gift-card,
+    .lte-card--interactive,
+    .avatar-container
+) {
+    -webkit-tap-highlight-color: transparent;
+    transition: transform var(--motion-micro), opacity 150ms ease, background-color var(--motion-small), color var(--motion-small), border-color var(--motion-small);
+}
+
+:where(button, [role="button"], a[href], summary, .game-card, .shop-card, .gift-card, .lte-card--interactive, .avatar-container):active,
+:where(button, [role="button"], a[href], summary, .game-card, .shop-card, .gift-card, .lte-card--interactive, .avatar-container).is-pressing {
+    transform: scale(0.97) translateY(1px);
+}
+
+:where(.game-card, .shop-card, .gift-card, .lte-card--interactive):active,
+:where(.game-card, .shop-card, .gift-card, .lte-card--interactive).is-pressing {
+    transform: scale(0.985);
+}
+
+:where(
+    button,
+    [role="button"],
+    a[href],
+    input:not([type="hidden"]),
+    select,
+    textarea,
+    summary,
+    .game-card,
+    .shop-card,
+    .gift-card,
+    .lte-card--interactive,
+    .avatar-container
+):focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+
+:where(button, [role="button"])[data-loading="true"] {
+    pointer-events: none;
+    opacity: 0.86;
+    color: transparent !important;
+    position: relative;
+}
+
+:where(button, [role="button"])[data-loading="true"]::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 1em;
+    height: 1em;
+    margin-left: -0.5em;
+    margin-top: -0.5em;
+    border-radius: 999px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: btnSpin 600ms linear infinite;
+}
+
+@keyframes btnSpin { to { transform: rotate(360deg); } }
+
+/* ================================================================
    VIEW TRANSITIONS — Anti-Golpe (v10.1)
    GPU-only: opacity + translateY. No height/width/margin animations.
    Regla de los 300ms: duración máx 0.25s para que la app se sienta
@@ -440,10 +526,28 @@ body::before {
     color: var(--text-low);
     font-weight: 500;
     font-size: 0.9rem;
-    transition: 0.2s;
+    transition: color var(--motion-small), opacity var(--motion-small), transform var(--motion-micro);
     position: relative;
 }
+.nav-link::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -3px;
+    width: 100%;
+    height: 2px;
+    background: currentColor;
+    opacity: 0.9;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform var(--motion-small), opacity var(--motion-small);
+}
 .nav-link:hover, .nav-link.active { color: var(--text-high); }
+.nav-link:hover::before,
+.nav-link:focus-visible::before,
+.nav-link.active::before {
+    transform: scaleX(1);
+}
 .nav-link.active::after {
     content: '';
     position: absolute;
@@ -545,11 +649,15 @@ body::before {
     font-weight: 600;
     gap: 4px;
     flex: 1; height: 100%;
-    transition: 0.2s;
+    transition: color var(--motion-small), transform var(--motion-micro), opacity var(--motion-small);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 .b-nav-item.active { color: var(--accent); }
+.b-nav-item:active,
+.b-nav-item.is-pressing {
+    transform: scale(0.96) translateY(1px);
+}
 .b-nav-item i { transition: 0.2s; }
 .b-nav-item.active i {
     transform: translateY(-2px);
@@ -1863,7 +1971,7 @@ body::before {
     font-size: 0.82rem; font-weight: 600;
     display: flex; align-items: flex-start; gap: 10px;
     z-index: 9999; opacity: 0;
-    transition: opacity 0.3s, transform 0.3s;
+    transition: opacity var(--motion-small), transform var(--motion-small);
     max-width: 92vw; text-align: left;
     /* 10% glass: minimal blur for text legibility */
     backdrop-filter: blur(12px);
@@ -1894,7 +2002,21 @@ body::before {
    ================================================================ */
 .feedback-msg {
     margin-top: 8px; font-size: 0.8rem; min-height: 1rem;
-    font-weight: 500; transition: opacity 0.4s;
+    font-weight: 500; transition: opacity var(--motion-small), transform var(--motion-small);
+    transform: translateY(12px);
+}
+.feedback-msg.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+.is-shaking {
+    animation: shakeX 240ms cubic-bezier(.36,.07,.19,.97);
+}
+@keyframes shakeX {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    50% { transform: translateX(6px); }
+    75% { transform: translateX(-3px); }
 }
 
 /* ================================================================
@@ -1910,7 +2032,7 @@ body::before {
     -webkit-backdrop-filter: blur(4px);
     display: flex; align-items: center; justify-content: center;
     padding: 20px;
-    animation: modalFadeIn 0.18s ease;
+    animation: modalFadeIn var(--motion-overlay) cubic-bezier(.16,1,.3,1);
     /* backface-visibility en el overlay previene que el repaint del backdrop-filter
        se filtre fuera de la capa durante la animación del .modal-box hijo. */
     backface-visibility: hidden;
@@ -1930,7 +2052,7 @@ body::before {
     position: relative;
     background: #0e1019;
     border: 1px solid var(--glass-float-border);
-    animation: modalPopIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: modalPopIn var(--motion-overlay) cubic-bezier(.16,1,.3,1) both;
     box-shadow: 0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px var(--accent-border);
     /* GPU compositing: will-change declarado en CSS para promover la capa
        ANTES de que la animación arranque, evitando el promotion jank.
@@ -1952,11 +2074,11 @@ body::before {
 @keyframes modalPopIn {
     from {
         opacity: 0;
-        transform: scale(0.95);
+        transform: translateY(16px) scale(0.98);
     }
     to {
         opacity: 1;
-        transform: scale(1);
+        transform: translateY(0) scale(1);
     }
 }
 .modal-title {
@@ -4573,6 +4695,11 @@ svg { stroke-width: 2; }
 /* ── Reduce motion — desactivar animaciones del slot ─────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
     .gacha-slot-strip      { transition: none !important; }
     .gacha-roulette-result { transition: none !important; }
     .gacha-roulette-modal  { transition: none !important; }
