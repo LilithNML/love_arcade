@@ -278,6 +278,69 @@ button { font-family: var(--font-body); }
     transition: transform var(--motion-micro), opacity 150ms ease, background-color var(--motion-small), color var(--motion-small), border-color var(--motion-small);
 }
 
+:where(
+    button,
+    [role="button"],
+    a[href],
+    summary,
+    .game-card,
+    .shop-card,
+    .gift-card,
+    .lte-card--interactive,
+    .b-nav-item,
+    .nav-link
+).interactive-ripple {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+}
+
+:where(
+    button,
+    [role="button"],
+    a[href],
+    summary,
+    .game-card,
+    .shop-card,
+    .gift-card,
+    .lte-card--interactive,
+    .b-nav-item,
+    .nav-link
+).interactive-ripple::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    left: var(--tap-x, 50%);
+    top: var(--tap-y, 50%);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 26%, transparent);
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+:where(
+    button,
+    [role="button"],
+    a[href],
+    summary,
+    .game-card,
+    .shop-card,
+    .gift-card,
+    .lte-card--interactive,
+    .b-nav-item,
+    .nav-link
+).interactive-ripple.is-rippling::after {
+    animation: tapRipple 420ms cubic-bezier(.2,.8,.2,1);
+}
+
+@keyframes tapRipple {
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 0.42; }
+    100% { transform: translate(-50%, -50%) scale(20); opacity: 0; }
+}
+
 :where(button, [role="button"], a[href], summary, .game-card, .shop-card, .gift-card, .lte-card--interactive, .avatar-container):active,
 :where(button, [role="button"], a[href], summary, .game-card, .shop-card, .gift-card, .lte-card--interactive, .avatar-container).is-pressing {
     transform: scale(0.97) translateY(1px);
@@ -1981,6 +2044,12 @@ body::before {
     line-height: 1.5;
 }
 .toast--visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast--success.toast--visible {
+    animation: toastSuccessPop 380ms cubic-bezier(.2,.9,.2,1);
+}
+.toast--error.toast--visible {
+    animation: shakeX 220ms cubic-bezier(.36,.07,.19,.97);
+}
 .toast--success {
     background: rgba(10,20,14,0.97);
     border: 1px solid rgba(34,208,122,0.35);
@@ -2017,6 +2086,12 @@ body::before {
     25% { transform: translateX(-6px); }
     50% { transform: translateX(6px); }
     75% { transform: translateX(-3px); }
+}
+
+@keyframes toastSuccessPop {
+    0% { transform: translateX(-50%) translateY(8px) scale(0.96); }
+    60% { transform: translateX(-50%) translateY(-1px) scale(1.02); }
+    100% { transform: translateX(-50%) translateY(0) scale(1); }
 }
 
 /* ================================================================

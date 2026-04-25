@@ -726,6 +726,10 @@ function initInteractiveMicroFX() {
     const isAndroid = /Android/i.test(navigator.userAgent || '');
     let activePressEl = null;
 
+    document.querySelectorAll(interactiveSelector).forEach((el) => {
+        el.classList.add('interactive-ripple');
+    });
+
     const releasePress = () => {
         if (!activePressEl) return;
         activePressEl.classList.remove('is-pressing');
@@ -737,7 +741,16 @@ function initInteractiveMicroFX() {
         if (!el) return;
         releasePress();
         activePressEl = el;
+        const rect = el.getBoundingClientRect();
+        if (!el.classList.contains('interactive-ripple')) {
+            el.classList.add('interactive-ripple');
+        }
+        el.style.setProperty('--tap-x', `${event.clientX - rect.left}px`);
+        el.style.setProperty('--tap-y', `${event.clientY - rect.top}px`);
         el.classList.add('is-pressing');
+        el.classList.remove('is-rippling');
+        requestAnimationFrame(() => el.classList.add('is-rippling'));
+        setTimeout(() => el.classList.remove('is-rippling'), 430);
         if (isAndroid && navigator.vibrate) {
             navigator.vibrate(8);
         }
