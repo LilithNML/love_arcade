@@ -721,6 +721,82 @@ function _showStorageToast(message, type = 'warning') {
     }, 5200);
 }
 
+function initInteractiveMicroFX() {
+    const interactiveSelector = 'button, [role="button"], a[href], summary, .game-card, .shop-card, .gift-card, .lte-card--interactive, .avatar-container';
+    const isAndroid = /Android/i.test(navigator.userAgent || '');
+    let activePressEl = null;
+
+    document.querySelectorAll(interactiveSelector).forEach((el) => {
+        el.classList.add('interactive-ripple');
+    });
+
+    const releasePress = () => {
+        if (!activePressEl) return;
+        activePressEl.classList.remove('is-pressing');
+        activePressEl = null;
+    };
+
+    document.addEventListener('pointerdown', (event) => {
+        const el = event.target.closest(interactiveSelector);
+        if (!el) return;
+        releasePress();
+        activePressEl = el;
+        const rect = el.getBoundingClientRect();
+        if (!el.classList.contains('interactive-ripple')) {
+            el.classList.add('interactive-ripple');
+        }
+        el.style.setProperty('--tap-x', `${event.clientX - rect.left}px`);
+        el.style.setProperty('--tap-y', `${event.clientY - rect.top}px`);
+        el.classList.add('is-pressing');
+        el.classList.remove('is-rippling');
+        requestAnimationFrame(() => el.classList.add('is-rippling'));
+        setTimeout(() => el.classList.remove('is-rippling'), 430);
+        if (isAndroid && navigator.vibrate) {
+            navigator.vibrate(8);
+        }
+    }, { passive: true });
+
+    document.addEventListener('pointerup', releasePress, { passive: true });
+    document.addEventListener('pointercancel', releasePress, { passive: true });
+    document.addEventListener('scroll', releasePress, { passive: true });
+}
+
+function initLoadingStateObserver() {
+    const loadingSelector = 'button[data-loading], [role="button"][data-loading]';
+    const syncButtonState = (button) => {
+        const isLoading = button.getAttribute('data-loading') === 'true';
+        if (isLoading) {
+            if (!button.dataset.lockedInlineSize) {
+                button.dataset.lockedInlineSize = `${Math.ceil(button.getBoundingClientRect().width)}px`;
+            }
+            button.style.width = button.dataset.lockedInlineSize;
+            button.setAttribute('aria-busy', 'true');
+            button.disabled = true;
+            return;
+        }
+        button.style.removeProperty('width');
+        button.removeAttribute('aria-busy');
+        button.disabled = false;
+        delete button.dataset.lockedInlineSize;
+    };
+
+    document.querySelectorAll(loadingSelector).forEach(syncButtonState);
+
+    const observer = new MutationObserver((records) => {
+        records.forEach((record) => {
+            if (!(record.target instanceof HTMLElement)) return;
+            if (!record.target.matches(loadingSelector)) return;
+            syncButtonState(record.target);
+        });
+    });
+
+    observer.observe(document.body, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ['data-loading']
+    });
+}
+
 function emergencyCleanup() {
     let changed = false;
 
@@ -1999,6 +2075,9 @@ applyIdentity();
 // Los listeners no afectan al primer paint; se registran aquí por claridad.
 // =====================================================
 document.addEventListener('DOMContentLoaded', () => {
+    initInteractiveMicroFX();
+    initLoadingStateObserver();
+
     // Re-sincronizar UI por si algún sub-módulo modificó el DOM
     updateUI();
 
