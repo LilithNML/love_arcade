@@ -33,12 +33,12 @@
       "config": {
         "target": 10,
         "multiplier": 2,
-        "multiplierDurationMs": 1800000
+        "multiplierDurationMs": 600000
       },
       "ui": {
         "title": "Hito Veloz",
         "subtitle": "¡10 PARTIDAS!",
-        "description": "Completa 10 partidas para activar ×2 de monedas durante 30 minutos.",
+        "description": "Completa 10 partidas para activar ×2 de monedas durante 10 minutos.",
         "accentColor": "#f59e0b",
         "icon": "zap"
       }
