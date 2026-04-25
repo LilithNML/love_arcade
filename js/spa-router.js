@@ -102,18 +102,23 @@
         const container = document.getElementById('home-events-summary');
         if (!container) return;
 
+        const icon = (name) => `
+            <svg class="icon" width="14" height="14" aria-hidden="true">
+                <use href="#icon-${name}"></use>
+            </svg>
+        `;
+
+        container.classList.add('hidden');
         container.innerHTML = `
-            <p class="home-events-summary-card__label">Eventos</p>
+            <p class="home-events-summary-card__label">${icon('sparkles')} Eventos</p>
             <p class="home-events-summary-card__empty">Cargando resumen...</p>
         `;
 
         try {
             const summary = await window.EventView?.getHomeEventsSummary?.(2);
             if (!summary || !summary.activeCount) {
-                container.innerHTML = `
-                    <p class="home-events-summary-card__label">Eventos</p>
-                    <p class="home-events-summary-card__empty">Sin eventos activos</p>
-                `;
+                container.classList.add('hidden');
+                container.innerHTML = '';
                 return;
             }
 
@@ -121,30 +126,34 @@
             const secondary = summary.topEvents[1];
 
             container.innerHTML = `
-                <div class="home-events-summary-card__head">
-                    <span class="home-events-summary-card__count">${summary.activeCount}</span>
-                    <span class="home-events-summary-card__count-label">eventos activos</span>
+                <div class="home-events-summary-card__header">
+                    <p class="home-events-summary-card__label">${icon('sparkles')} Eventos activos</p>
+                    <span class="home-events-summary-card__count-badge">
+                        <strong>${summary.activeCount}</strong>
+                        <span>en vivo</span>
+                    </span>
                 </div>
-                <div class="home-events-summary-card__body">
-                    <p class="home-events-summary-card__kicker">Más urgente</p>
-                    <h3 class="home-events-summary-card__title">${urgent.title}</h3>
-                    <p class="home-events-summary-card__meta">Termina en ${urgent.timeLeft}</p>
-                    <p class="home-events-summary-card__reward">Recompensa: ${urgent.reward}</p>
-                    ${secondary
-                        ? `<p class="home-events-summary-card__secondary">También activo: ${secondary.title} · ${secondary.timeLeft}</p>`
-                        : ''}
+                <div class="home-events-summary-card__layout">
+                    <div class="home-events-summary-card__body">
+                        <p class="home-events-summary-card__kicker">Más urgente</p>
+                        <h3 class="home-events-summary-card__title">${urgent.title}</h3>
+                        <p class="home-events-summary-card__meta">${icon('clock')} Termina en ${urgent.timeLeft}</p>
+                        <p class="home-events-summary-card__reward">${icon('gift')} ${urgent.reward}</p>
+                        ${secondary
+                            ? `<p class="home-events-summary-card__secondary">${icon('calendar')} También: ${secondary.title} · ${secondary.timeLeft}</p>`
+                            : ''}
+                    </div>
+                    <button type="button" class="btn-ghost home-events-summary-card__cta" data-home-open-events>
+                        Ver eventos
+                    </button>
                 </div>
-                <button type="button" class="btn-ghost home-events-summary-card__cta" data-home-open-events>
-                    Ver eventos
-                </button>
             `;
 
+            container.classList.remove('hidden');
             container.querySelector('[data-home-open-events]')?.addEventListener('click', () => navigateTo('events'));
         } catch (_) {
-            container.innerHTML = `
-                <p class="home-events-summary-card__label">Eventos</p>
-                <p class="home-events-summary-card__empty">Sin eventos activos</p>
-            `;
+            container.classList.add('hidden');
+            container.innerHTML = '';
         }
     }
     
