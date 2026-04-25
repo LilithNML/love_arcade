@@ -154,7 +154,7 @@ const SYNC_SALT = 'love_arcade_v75_integrity_2026';
 // ECONOMÍA — Editar aquí para eventos especiales
 // =====================================================
 const ECONOMY = {
-    isSaleActive:   false,
+    isSaleActive:   true,
     saleMultiplier: 0.9,
     saleLabel:      '10% OFF',
     cashbackRate:   0.1
@@ -487,6 +487,7 @@ function migrateState(loadedStore) {
         theme:          'violet',
         daily:          { lastClaim: 0, streak: 0 },
         buffs:          { moonBlessingExpiry: 0 },
+        claimed_milestones: [],
         // v9.4 — Identity
         nickname:       '',    // Máx. 15 chars. Vacío = primer acceso → flujo de bienvenida.
         gender:         '@',   // 'o' | 'a' | '@' — controla el sufijo del saludo.
@@ -516,6 +517,7 @@ function migrateState(loadedStore) {
     // Asegurar sub-objetos faltantes
     if (!merged.daily   || typeof merged.daily !== 'object')  merged.daily = defaults.daily;
     if (!merged.buffs   || typeof merged.buffs !== 'object')  merged.buffs = defaults.buffs;
+    if (!Array.isArray(merged.claimed_milestones))            merged.claimed_milestones = [];
     if (!Array.isArray(merged.redeemedHashes))  merged.redeemedHashes = [];
     if (!Array.isArray(merged.history))         merged.history = [];
 
@@ -721,6 +723,82 @@ function _showStorageToast(message, type = 'warning') {
     }, 5200);
 }
 
+function initInteractiveMicroFX() {
+    const interactiveSelector = 'button, [role="button"], a[href], summary, .game-card, .shop-card, .gift-card, .lte-card--interactive, .avatar-container';
+    const isAndroid = /Android/i.test(navigator.userAgent || '');
+    let activePressEl = null;
+
+    document.querySelectorAll(interactiveSelector).forEach((el) => {
+        el.classList.add('interactive-ripple');
+    });
+
+    const releasePress = () => {
+        if (!activePressEl) return;
+        activePressEl.classList.remove('is-pressing');
+        activePressEl = null;
+    };
+
+    document.addEventListener('pointerdown', (event) => {
+        const el = event.target.closest(interactiveSelector);
+        if (!el) return;
+        releasePress();
+        activePressEl = el;
+        const rect = el.getBoundingClientRect();
+        if (!el.classList.contains('interactive-ripple')) {
+            el.classList.add('interactive-ripple');
+        }
+        el.style.setProperty('--tap-x', `${event.clientX - rect.left}px`);
+        el.style.setProperty('--tap-y', `${event.clientY - rect.top}px`);
+        el.classList.add('is-pressing');
+        el.classList.remove('is-rippling');
+        requestAnimationFrame(() => el.classList.add('is-rippling'));
+        setTimeout(() => el.classList.remove('is-rippling'), 430);
+        if (isAndroid && navigator.vibrate) {
+            navigator.vibrate(8);
+        }
+    }, { passive: true });
+
+    document.addEventListener('pointerup', releasePress, { passive: true });
+    document.addEventListener('pointercancel', releasePress, { passive: true });
+    document.addEventListener('scroll', releasePress, { passive: true });
+}
+
+function initLoadingStateObserver() {
+    const loadingSelector = 'button[data-loading], [role="button"][data-loading]';
+    const syncButtonState = (button) => {
+        const isLoading = button.getAttribute('data-loading') === 'true';
+        if (isLoading) {
+            if (!button.dataset.lockedInlineSize) {
+                button.dataset.lockedInlineSize = `${Math.ceil(button.getBoundingClientRect().width)}px`;
+            }
+            button.style.width = button.dataset.lockedInlineSize;
+            button.setAttribute('aria-busy', 'true');
+            button.disabled = true;
+            return;
+        }
+        button.style.removeProperty('width');
+        button.removeAttribute('aria-busy');
+        button.disabled = false;
+        delete button.dataset.lockedInlineSize;
+    };
+
+    document.querySelectorAll(loadingSelector).forEach(syncButtonState);
+
+    const observer = new MutationObserver((records) => {
+        records.forEach((record) => {
+            if (!(record.target instanceof HTMLElement)) return;
+            if (!record.target.matches(loadingSelector)) return;
+            syncButtonState(record.target);
+        });
+    });
+
+    observer.observe(document.body, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ['data-loading']
+    });
+}
+
 function emergencyCleanup() {
     let changed = false;
 
@@ -825,6 +903,9 @@ window.GameCenter = {
 
         // [v11.0] Incrementar estadísticas diarias de misiones.
         window.GameCenter.incrementMissionStat('games_played', 1);
+        // Flag de sesión volátil para desbloqueos "Regalos" en tienda.
+        window.__laSessionGameCompleted = true;
+        try { sessionStorage.setItem('la_session_game_completed', '1'); } catch (_) { /* noop */ }
 
         // [v11.0] Despachar evento personalizado para que event-logic.js pueda
         // actualizar el progreso de Hitos Personales sin acoplamiento directo.
@@ -1284,6 +1365,88 @@ window.GameCenter = {
         });
 
         return { success: true, expiresAt };
+    },
+
+    /**
+     * Extiende la Bendición Lunar una cantidad de días, sin costo.
+     * Si no está activa, inicia desde "ahora".
+     * @param {number} days
+     * @param {string} motivo
+     * @returns {{ success: boolean, expiresAt?: string }}
+     */
+    extendMoonBlessingDays: (days, motivo = 'Extensión de Bendición Lunar') => {
+        const wholeDays = Math.floor(days);
+        if (!Number.isFinite(wholeDays) || wholeDays <= 0) {
+            return { success: false };
+        }
+        const now = Date.now();
+        const baseTs = store.buffs.moonBlessingExpiry > now
+            ? store.buffs.moonBlessingExpiry
+            : now;
+        store.buffs.moonBlessingExpiry = baseTs + (wholeDays * 86_400_000);
+        logTransaction('ingreso', 0, `${motivo}: +${wholeDays} día(s)`);
+        saveState({ immediateCloudSync: true });
+        return {
+            success: true,
+            expiresAt: new Date(store.buffs.moonBlessingExpiry).toLocaleDateString('es-MX', {
+                day: '2-digit', month: 'long', year: 'numeric'
+            })
+        };
+    },
+
+    /**
+     * Devuelve los IDs de hitos de racha ya reclamados.
+     * @returns {string[]}
+     */
+    getClaimedMilestones: () => [...(store.claimed_milestones || [])],
+
+    /**
+     * Reclama un hito de racha una sola vez por ID.
+     * Aplica las recompensas de forma síncrona en memoria antes de cerrar modal.
+     * @param {{ id: string, rewards: Array<{type:string, amount:number}> }} milestone
+     * @returns {{ success: boolean, reason?: string }}
+     */
+    claimStreakMilestone: (milestone) => {
+        if (!milestone?.id || !Array.isArray(milestone.rewards)) {
+            return { success: false, reason: 'invalid_milestone' };
+        }
+
+        if (!Array.isArray(store.claimed_milestones)) {
+            store.claimed_milestones = [];
+        }
+        if (store.claimed_milestones.includes(milestone.id)) {
+            return { success: false, reason: 'already_claimed' };
+        }
+
+        let coinReward = 0;
+        let moonDays = 0;
+        milestone.rewards.forEach((reward) => {
+            const amount = Math.floor(reward?.amount || 0);
+            if (amount <= 0) return;
+            if (reward.type === 'coins') {
+                coinReward += amount;
+            } else if (reward.type === 'moon_blessing_days') {
+                moonDays += amount;
+            }
+        });
+
+        if (coinReward > 0) {
+            window.GameCenter.addCoins(coinReward, `Hito de racha: ${milestone.id}`);
+        }
+        if (moonDays > 0) {
+            window.GameCenter.extendMoonBlessingDays(moonDays, `Hito de racha: ${milestone.id}`);
+        }
+
+        store.claimed_milestones.push(milestone.id);
+        saveState({ immediateCloudSync: true });
+
+        window.GhostAnalytics?.track('streak_milestone_claimed', {
+            milestone_id: milestone.id,
+            threshold: milestone.threshold || 0,
+            coins: coinReward,
+            moon_days: moonDays
+        });
+        return { success: true };
     },
 
     getMoonBlessingStatus: () => {
@@ -1891,6 +2054,96 @@ function updateMoonBlessingUI() {
     }
 }
 
+let _streakMilestoneModalLocked = false;
+
+function _vibrateLight() {
+    if (navigator?.vibrate) navigator.vibrate(12);
+}
+
+function _getPendingStreakMilestone() {
+    const milestones = Array.isArray(window.STREAK_MILESTONES)
+        ? window.STREAK_MILESTONES
+        : [];
+    if (!milestones.length) return null;
+
+    const streak = Number(store?.daily?.streak || 0);
+    const claimedSet = new Set(store.claimed_milestones || []);
+
+    return milestones
+        .slice()
+        .sort((a, b) => Number(a.threshold || 0) - Number(b.threshold || 0))
+        .find((milestone) =>
+            streak >= Number(milestone.threshold || 0) && !claimedSet.has(milestone.id)
+        ) || null;
+}
+
+function _renderStreakMilestoneRewards(rewards = []) {
+    return rewards.map((reward) => {
+        const amount = Math.floor(reward.amount || 0);
+        if (reward.type === 'moon_blessing_days') {
+            return `
+                <li class="streak-milestone-reward streak-milestone-reward--moon">
+                    <span class="streak-milestone-reward-icon" aria-hidden="true">
+                        <svg class="icon" width="18" height="18"><use href="#icon-moon"></use></svg>
+                    </span>
+                    <span class="streak-milestone-reward-label">+${amount} días · Bendición Lunar</span>
+                    <span class="streak-milestone-reward-fx" aria-hidden="true"></span>
+                </li>
+            `;
+        }
+        return `
+            <li class="streak-milestone-reward">
+                <span class="streak-milestone-reward-icon" aria-hidden="true">
+                    <svg class="icon" width="18" height="18"><use href="#icon-star"></use></svg>
+                </span>
+                <span class="streak-milestone-reward-label">+${amount} monedas</span>
+                <span class="streak-milestone-reward-fx" aria-hidden="true"></span>
+            </li>
+        `;
+    }).join('');
+}
+
+function showStreakMilestoneModal() {
+    if (_streakMilestoneModalLocked) return;
+
+    const modal = document.getElementById('streak-milestone-modal');
+    const titleEl = document.getElementById('streak-milestone-title');
+    const messageEl = document.getElementById('streak-milestone-message');
+    const rewardsEl = document.getElementById('streak-milestone-rewards');
+    const claimBtn = document.getElementById('btn-streak-milestone-claim');
+    if (!modal || !titleEl || !messageEl || !rewardsEl || !claimBtn) return;
+
+    const pending = _getPendingStreakMilestone();
+    if (!pending) return;
+
+    _streakMilestoneModalLocked = true;
+    titleEl.textContent = pending.title || 'Hito desbloqueado';
+    messageEl.textContent = pending.message || 'Gracias por tu constancia.';
+    rewardsEl.innerHTML = _renderStreakMilestoneRewards(pending.rewards || []);
+    modal.classList.remove('hidden');
+    modal.classList.add('streak-milestone-overlay--visible');
+    _vibrateLight();
+
+    claimBtn.onclick = () => {
+        _vibrateLight();
+        claimBtn.disabled = true;
+        const result = window.GameCenter.claimStreakMilestone(pending);
+        if (!result.success) {
+            claimBtn.disabled = false;
+            return;
+        }
+
+        updateDailyButton();
+        updateMoonBlessingUI();
+        modal.classList.add('hidden');
+        modal.classList.remove('streak-milestone-overlay--visible');
+        _streakMilestoneModalLocked = false;
+
+        // Si hay hitos encadenados (60/90/120), mostrar el siguiente.
+        requestAnimationFrame(showStreakMilestoneModal);
+    };
+}
+
 // =====================================================
 // REVEAL UI — v9.3 Zero-Flicker
 // =====================================================
@@ -1996,8 +2249,12 @@ applyIdentity();
 // Los listeners no afectan al primer paint; se registran aquí por claridad.
 // =====================================================
 document.addEventListener('DOMContentLoaded', () => {
+    initInteractiveMicroFX();
+    initLoadingStateObserver();
+
     // Re-sincronizar UI por si algún sub-módulo modificó el DOM
     updateUI();
+    showStreakMilestoneModal();
 
     // ── Analítica — open_game ─────────────────────────────────────────────────
     // Delegación global para detectar la apertura de cualquier minijuego.

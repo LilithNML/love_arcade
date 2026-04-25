@@ -7,7 +7,13 @@
       "endDate": "2026-03-26T23:59:59",
       "config": {
         "itemEmoji": "⭐",
-        "anchors": [".hero", ".shop-grid", ".faq-item", ".game-card", ".player-hud"],
+        "anchors": [
+          ".hero",
+          ".shop-grid",
+          ".faq-item",
+          ".game-card",
+          ".player-hud"
+        ],
         "total": 5,
         "reward": 500
       },
@@ -22,17 +28,17 @@
     {
       "id": "milestone_2026_01",
       "type": "personal_milestone",
-      "startDate": "2026-03-24T00:00:00",
-      "endDate": "2026-03-27T23:59:59",
+      "startDate": "2026-04-25T00:00:00",
+      "endDate": "2026-04-26T23:59:59",
       "config": {
         "target": 10,
         "multiplier": 2,
-        "multiplierDurationMs": 1800000
+        "multiplierDurationMs": 600000
       },
       "ui": {
         "title": "Hito Veloz",
         "subtitle": "¡10 PARTIDAS!",
-        "description": "Completa 10 partidas para activar ×2 de monedas durante 30 minutos.",
+        "description": "Completa 10 partidas para activar ×2 de monedas durante 10 minutos.",
         "accentColor": "#f59e0b",
         "icon": "zap"
       }
@@ -40,17 +46,17 @@
     {
       "id": "gacha_flash_2026_01",
       "type": "gacha_flash",
-      "startDate": "2026-03-24T00:00:00",
-      "endDate": "2026-03-25T23:59:59",
+      "startDate": "2026-04-25T00:00:00",
+      "endDate": "2026-04-26T23:59:59",
       "config": {
-        "cost": 50,
-        "minReward": 10,
+        "cost": 10,
+        "minReward": 70,
         "maxReward": 1000
       },
       "ui": {
         "title": "Portal Estelar",
         "subtitle": "¡TIEMPO LIMITADO!",
-        "description": "Gasta 50 monedas para girar la ruleta. ¡Puedes ganar hasta 1000 monedas!",
+        "description": "Gasta 10 monedas para girar la ruleta. Ganancia neta garantizada de 300+ monedas al completar las 5 tiradas diarias.",
         "accentColor": "#ec4899",
         "icon": "star"
       }
@@ -58,8 +64,8 @@
     {
       "id": "daily_missions_2026_01",
       "type": "daily_missions",
-      "startDate": "2026-03-24T00:00:00",
-      "endDate": "2026-03-31T23:59:59",
+      "startDate": "2026-04-25T00:00:00",
+      "endDate": "2026-04-26T23:59:59",
       "config": {
         "missions": [
           {
