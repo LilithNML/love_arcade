@@ -7,7 +7,13 @@
       "endDate": "2026-03-26T23:59:59",
       "config": {
         "itemEmoji": "⭐",
-        "anchors": [".hero", ".shop-grid", ".faq-item", ".game-card", ".player-hud"],
+        "anchors": [
+          ".hero",
+          ".shop-grid",
+          ".faq-item",
+          ".game-card",
+          ".player-hud"
+        ],
         "total": 5,
         "reward": 500
       },
@@ -22,8 +28,8 @@
     {
       "id": "milestone_2026_01",
       "type": "personal_milestone",
-      "startDate": "2026-04-20T00:00:00",
-      "endDate": "2026-04-22T23:59:59",
+      "startDate": "2026-04-25T00:00:00",
+      "endDate": "2026-04-26T23:59:59",
       "config": {
         "target": 10,
         "multiplier": 2,
@@ -40,8 +46,8 @@
     {
       "id": "gacha_flash_2026_01",
       "type": "gacha_flash",
-      "startDate": "2026-04-20T00:00:00",
-      "endDate": "2026-04-22T23:59:59",
+      "startDate": "2026-04-25T00:00:00",
+      "endDate": "2026-04-26T23:59:59",
       "config": {
         "cost": 50,
         "minReward": 10,
@@ -58,8 +64,8 @@
     {
       "id": "daily_missions_2026_01",
       "type": "daily_missions",
-      "startDate": "2026-04-20T00:00:00",
-      "endDate": "2026-04-22T23:59:59",
+      "startDate": "2026-04-25T00:00:00",
+      "endDate": "2026-04-26T23:59:59",
       "config": {
         "missions": [
           {
