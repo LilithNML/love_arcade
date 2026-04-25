@@ -185,5 +185,22 @@
       "value": 1,
       "description": "Completa 1 partida para desbloquear"
     }
+  },
+  {
+    "id": 108,
+    "name": "Columbina",
+    "price": 0,
+    "image": "https://res.cloudinary.com/dyspgn0sw/image/upload/f_auto,q_auto,ar_16:9,c_fill,g_auto,w_640/columbina_e0740cc9",
+    "file": "columbina_e0740cc9",
+    "tags": [
+      "Mobile",
+      "regalo"
+    ],
+    "category": "gift",
+    "requirements": {
+      "type": "game_played",
+      "value": 1,
+      "description": "Completa 1 partida para desbloquear"
+    }
   }
 ]
