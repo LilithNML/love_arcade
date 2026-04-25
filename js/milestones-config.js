@@ -9,10 +9,10 @@ window.STREAK_MILESTONES = Object.freeze([
     {
         id: 'streak_30d_lunar_01',
         threshold: 30,
-        title: '🌙 30 DÍAS DE LEALTAD',
-        message: '¡Gracias por jugar cada día! Tu constancia enciende el arcade. Reclama tu recompensa épica.',
+        title: '🌕 30 NOCHES BAJO NUESTRA LUNA',
+        message: 'Gracias por estar aquí cada día. Has convertido este código en nuestro refugio personal. Para el jugador que ilumina mis noches, un regalo de tu Lunita.',
         rewards: [
-            { type: 'coins', amount: 2250, label: 'Monedas' },
+            { type: 'coins', amount: 3250, label: 'Monedas' },
             { type: 'moon_blessing_days', amount: 21, label: 'Bendición Lunar' }
         ]
     }
