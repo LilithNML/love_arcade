@@ -1153,6 +1153,77 @@ body::before {
 }
 
 /* ================================================================
+   HOME EVENTS SUMMARY CARD
+   ================================================================ */
+.home-events-summary-card {
+    background: linear-gradient(160deg, var(--solid-surface-float), #151826 75%);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    margin-bottom: 20px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.home-events-summary-card__label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-low);
+    margin-bottom: 6px;
+}
+.home-events-summary-card__empty {
+    color: var(--text-med);
+    font-size: 0.84rem;
+}
+.home-events-summary-card__head {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin-bottom: 10px;
+}
+.home-events-summary-card__count {
+    font-family: var(--font-display);
+    font-size: 1.55rem;
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: 0 0 14px var(--accent-glow);
+}
+.home-events-summary-card__count-label {
+    font-size: 0.78rem;
+    color: var(--text-low);
+}
+.home-events-summary-card__kicker {
+    font-size: 0.66rem;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+}
+.home-events-summary-card__title {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--text-high);
+    margin-bottom: 3px;
+}
+.home-events-summary-card__meta,
+.home-events-summary-card__reward,
+.home-events-summary-card__secondary {
+    font-size: 0.8rem;
+    color: var(--text-med);
+    margin-bottom: 2px;
+}
+.home-events-summary-card__secondary {
+    color: var(--text-low);
+    margin-top: 4px;
+}
+.home-events-summary-card__cta {
+    margin-top: 10px;
+    width: 100%;
+    justify-content: center;
+}
+
+/* ================================================================
    GAME CARDS — Mobile: 1 col, Desktop: auto-fill
    ================================================================ */
 .games-grid {
