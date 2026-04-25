@@ -1253,6 +1253,184 @@ window.LA_WS_LEVELS = [
         gridSize: 12,
         words: ["INVINCIBLE", "VILTRUMITE", "SEQUID", "FLAXAN", "IMMORTAL", "OMNI", "CONQUEST", "THRAGG", "ANISSA", "KREGG"],
         rewardCoins: 230 // Maestra: 12x12, 10 palabras + INVINCIBLE (10) y VILTRUMITE (10) → 230
+    },
+
+    // ─── BLOQUE 176-200: Genshin Natlan, DBGT, Breaking Bad, Historia Prehispánica y Conquista ───
+
+    {
+        id: "lvl_176",
+        title: "Genshin: Natlan",
+        gridSize: 10,
+        words: ["MUALANI", "KACHINA", "CITLALI", "IANSAN", "KINICH"],
+        rewardCoins: 100 // Básica: 10x10, 5 palabras
+    },
+    {
+        id: "lvl_177",
+        title: "Dragon Ball GT",
+        gridSize: 11,
+        words: ["PAN", "GIRU", "BABY", "RILDO", "MYUU", "NUOVA", "GOGETA"],
+        rewardCoins: 150 // Media: 11x11, 7 palabras
+    },
+    {
+        id: "lvl_178",
+        title: "Breaking Bad: Personajes",
+        gridSize: 10,
+        words: ["WALTER", "JESSE", "SKYLER", "HANK", "SAUL", "MARIE"],
+        rewardCoins: 125 // Básica: 10x10, 6 palabras (tope de rango)
+    },
+    {
+        id: "lvl_179",
+        title: "Gastronomía Prehispánica",
+        gridSize: 12,
+        words: ["CHOCOLATE", "AGUACATE", "TOMATE", "MAIZ", "CHILE", "CACAO", "AMARANTO", "NOPAL"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + CHOCOLATE (9 chars) → 180+20
+    },
+    {
+        id: "lvl_180",
+        title: "Grandes Civilizaciones",
+        gridSize: 12,
+        words: ["AZTECA", "MAYA", "OLMECA", "TOLTECA", "ZAPOTECA", "MIXTECA", "TOTONACA", "MEXICA", "PUREPECHA", "CHICHIMECA"],
+        rewardCoins: 250 // HITO nivel 180 + Maestra: 12x12, 10 palabras + PUREPECHA (9) y CHICHIMECA (10) → máxima recompensa
+    },
+    {
+        id: "lvl_181",
+        title: "Dioses Aztecas",
+        gridSize: 12,
+        words: ["QUETZALCOATL", "TEZCATLIPOCA", "COATLICUE", "TONATIUH", "TLALOC", "XIPE", "OMETECUHTLI", "CENTEOTL"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + QUETZALCOATL (12), TEZCATLIPOCA (12), OMETECUHTLI (11) y COATLICUE (9) → 180+20
+    },
+    {
+        id: "lvl_182",
+        title: "Civilizaciones Mesoamericanas",
+        gridSize: 11,
+        words: ["AZTECA", "MAYA", "OLMECA", "TOLTECA", "ZAPOTECA", "MIXTECA", "TOTONACA"],
+        rewardCoins: 150 // Media: 11x11, 7 palabras
+    },
+    {
+        id: "lvl_183",
+        title: "Tenochtitlan: La Gran Ciudad",
+        gridSize: 12,
+        words: ["TENOCHTITLAN", "TLATELOLCO", "TLACOPAN", "CALPULLI", "TEMPLO", "CHINAMPAS", "ACUEDUCTO", "ISLOTE"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + TENOCHTITLAN (12), TLATELOLCO (10), CHINAMPAS (9) y ACUEDUCTO (9) → 180+20
+    },
+    {
+        id: "lvl_184",
+        title: "La Conquista: Protagonistas",
+        gridSize: 12,
+        words: ["CORTES", "MALINCHE", "MOCTEZUMA", "ALVARADO", "SANDOVAL", "NARVAEZ", "CUAUHTEMOC", "BERNAL"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + CUAUHTEMOC (10) y MOCTEZUMA (9) → 180+20
+    },
+    {
+        id: "lvl_185",
+        title: "Dioses Mayas",
+        gridSize: 11,
+        words: ["CHAAC", "ITZAMNA", "KUKULKAN", "IXCHEL", "KINICH", "HUNAHPU", "XBALANQUE"],
+        rewardCoins: 170 // Media: 11x11, 7 palabras + XBALANQUE (9 chars) → 150+20
+    },
+    {
+        id: "lvl_186",
+        title: "Ciudades Mayas",
+        gridSize: 12,
+        words: ["PALENQUE", "UXMAL", "COPAN", "TIKAL", "CHICHEN", "TULUM", "CALAKMUL", "DZIBANCHE"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + DZIBANCHE (9 chars) → 180+20
+    },
+    {
+        id: "lvl_187",
+        title: "Aliados de Cortés",
+        gridSize: 10,
+        words: ["MALINCHE", "TLAXCALA", "CEMPOALA", "ALIANZA", "NAHUATL", "TOTONACA"],
+        rewardCoins: 125 // Básica: 10x10, 6 palabras (tope de rango)
+    },
+    {
+        id: "lvl_188",
+        title: "Imperio Mexica: Jerarquía",
+        gridSize: 11,
+        words: ["TLATOANI", "PIPILTIN", "MACEHUAL", "CALPULLI", "POCHTECA", "CIHUACOATL", "TLACAELEL"],
+        rewardCoins: 170 // Media: 11x11, 7 palabras + CIHUACOATL (10) y TLACAELEL (9) → 150+20
+    },
+    {
+        id: "lvl_189",
+        title: "Olmecas: Civilización Madre",
+        gridSize: 10,
+        words: ["OLMECA", "JAGUAR", "CABEZA", "COLOSAL", "VERACRUZ", "TABASCO"],
+        rewardCoins: 125 // Básica: 10x10, 6 palabras (tope de rango)
+    },
+    {
+        id: "lvl_190",
+        title: "La Conquista de México",
+        gridSize: 12,
+        words: ["TENOCHTITLAN", "CORTES", "MOCTEZUMA", "CUAUHTEMOC", "MALINCHE", "TLAXCALA", "CHOLULA", "ENCOMIENDA", "VIRREINATO", "CUITLAHUAC"],
+        rewardCoins: 250 // HITO nivel 190 + Maestra: 12x12, 10 palabras + TENOCHTITLAN (12), CUAUHTEMOC (10), ENCOMIENDA (10), VIRREINATO (10) → máxima recompensa
+    },
+    {
+        id: "lvl_191",
+        title: "Calendario Azteca",
+        gridSize: 11,
+        words: ["XIUHITL", "TONALLI", "TRECENA", "NEMONTEMI", "VEINTENA", "COATL", "ACATL"],
+        rewardCoins: 170 // Media: 11x11, 7 palabras + NEMONTEMI (9 chars) → 150+20
+    },
+    {
+        id: "lvl_192",
+        title: "Conquistadores Españoles",
+        gridSize: 12,
+        words: ["CORTES", "ALVARADO", "SANDOVAL", "NARVAEZ", "OLID", "MONTEJO", "PIZARRO", "BALBOA"],
+        rewardCoins: 180 // Avanzada: 12x12, 8 palabras
+    },
+    {
+        id: "lvl_193",
+        title: "Virreinato: Nueva España",
+        gridSize: 12,
+        words: ["VIRREINATO", "ENCOMIENDA", "MISIONERO", "MESTIZAJE", "DOCTRINA", "COLONIAL", "TRIBUTO", "ENCOMENDERO"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + VIRREINATO (10), ENCOMIENDA (10), ENCOMENDERO (11), MISIONERO (9) y MESTIZAJE (9) → 180+20
+    },
+    {
+        id: "lvl_194",
+        title: "Resistencia Indígena",
+        gridSize: 11,
+        words: ["CUAUHTEMOC", "XICOTENCATL", "TLAXCALA", "GUERRERO", "MIXTECA", "ZAPOTECA", "TEPANECA"],
+        rewardCoins: 170 // Media: 11x11, 7 palabras + CUAUHTEMOC (10) y XICOTENCATL (11) → 150+20
+    },
+    {
+        id: "lvl_195",
+        title: "Teotihuacan: Ciudad de los Dioses",
+        gridSize: 12,
+        words: ["TEOTIHUACAN", "PIRAMIDE", "CALZADA", "CIUDADELA", "JAGUAR", "OBSIDIANA", "QUETZAL", "TLALOC"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + TEOTIHUACAN (11), CIUDADELA (9) y OBSIDIANA (9) → 180+20
+    },
+    {
+        id: "lvl_196",
+        title: "Genshin: Fatui",
+        gridSize: 12,
+        words: ["ARLECCHINO", "CAPITANO", "DOTTORE", "COLUMBINA", "PANTALONE", "SCARAMOUCHE", "PIERRO", "PULCINELLA"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + SCARAMOUCHE (11), ARLECCHINO (10), PULCINELLA (10) y COLUMBINA (9) → 180+20
+    },
+    {
+        id: "lvl_197",
+        title: "Mitología Mexica: Creación",
+        gridSize: 11,
+        words: ["OMETECUHTLI", "CIPACTLI", "MICTLAN", "TAMOANCHAN", "OMEYOCAN", "COATLICUE", "XIUHTEOTL"],
+        rewardCoins: 170 // Media: 11x11, 7 palabras + OMETECUHTLI (11), TAMOANCHAN (10) y COATLICUE (9) → 150+20
+    },
+    {
+        id: "lvl_198",
+        title: "La Noche Triste",
+        gridSize: 12,
+        words: ["TENOCHTITLAN", "TLATELOLCO", "TLACOPAN", "TACUBA", "RETIRADA", "CALZADA", "TLAXCALA", "XOLOCO"],
+        rewardCoins: 200 // Avanzada: 12x12, 8 palabras + TENOCHTITLAN (12) y TLATELOLCO (10) → 180+20
+    },
+    {
+        id: "lvl_199",
+        title: "Periodo Posclásico",
+        gridSize: 11,
+        words: ["AZTECA", "MEXICA", "TOLTECA", "CHICHIMECA", "ACOLHUA", "TEPANECA", "TARASCO"],
+        rewardCoins: 170 // Media: 11x11, 7 palabras + CHICHIMECA (10 chars) → 150+20
+    },
+    {
+        id: "lvl_200",
+        title: "Historia Prehispánica: Épica",
+        gridSize: 12,
+        words: ["QUETZALCOATL", "TENOCHTITLAN", "TEZCATLIPOCA", "CUAUHTEMOC", "TLATELOLCO", "MOCTEZUMA", "COATLICUE", "XOCHIMILCO", "VIRREINATO", "CUITLAHUAC"],
+        rewardCoins: 250 // HITO nivel 200 + Maestra: 12x12, 10 palabras + QUETZALCOATL (12), TENOCHTITLAN (12), TEZCATLIPOCA (12), múltiples palabras ≥9 chars → máxima recompensa
     }
 ];
 
