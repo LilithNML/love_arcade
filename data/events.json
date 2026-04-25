@@ -49,14 +49,14 @@
       "startDate": "2026-04-25T00:00:00",
       "endDate": "2026-04-26T23:59:59",
       "config": {
-        "cost": 50,
-        "minReward": 10,
+        "cost": 10,
+        "minReward": 70,
         "maxReward": 1000
       },
       "ui": {
         "title": "Portal Estelar",
         "subtitle": "¡TIEMPO LIMITADO!",
-        "description": "Gasta 50 monedas para girar la ruleta. ¡Puedes ganar hasta 1000 monedas!",
+        "description": "Gasta 10 monedas para girar la ruleta. Ganancia neta garantizada de 300+ monedas al completar las 5 tiradas diarias.",
         "accentColor": "#ec4899",
         "icon": "star"
       }
