@@ -136,6 +136,44 @@
         return mins > 0 ? `${mins} min` : 'Menos de 1 min';
     }
 
+    function _getRemainingMs(event) {
+        if (!event?.endDate) return Infinity;
+        const endTs = new Date(event.endDate).getTime();
+        if (Number.isNaN(endTs)) return Infinity;
+        return Math.max(0, endTs - Date.now());
+    }
+
+    function _getMainRewardLabel(event) {
+        const cfg = event?.config || {};
+        switch (event?.type) {
+            case 'interactive_hunt':
+                return `${cfg.reward || 500} monedas`;
+            case 'personal_milestone': {
+                const mult = cfg.multiplier || 2;
+                const durMin = Math.round((cfg.multiplierDurationMs || 1_800_000) / 60_000);
+                return `×${mult} por ${durMin} min`;
+            }
+            case 'gacha_flash':
+                return `${cfg.minReward || 10}–${cfg.maxReward || 1000} monedas`;
+            case 'daily_missions': {
+                const total = (cfg.missions || []).reduce((sum, m) => sum + (m.reward || 0), 0);
+                return `Hasta ${total} monedas`;
+            }
+            default:
+                return event?.ui?.subtitle || 'Bonificación activa';
+        }
+    }
+
+    function _toSummaryEvent(event) {
+        return {
+            id: event.id,
+            title: event.ui?.title || event.title || 'Evento especial',
+            timeLeft: _formatTimeLeft(event.endDate),
+            reward: _getMainRewardLabel(event),
+            remainingMs: _getRemainingMs(event),
+        };
+    }
+
     // ════════════════════════════════════════════════════════════════════════════
     // CARGA DE DATOS
     // ════════════════════════════════════════════════════════════════════════════
@@ -1295,6 +1333,20 @@
         }, COUNTDOWN_INTERVAL_MS);
     }
 
+    async function getHomeEventsSummary(limit = 2) {
+        const eventsData = await _loadEvents();
+        const liveEvents = (eventsData.activeEvents || [])
+            .filter(e => _isEventLive(e))
+            .map(_toSummaryEvent)
+            .sort((a, b) => a.remainingMs - b.remainingMs);
+
+        return {
+            activeCount: liveEvents.length,
+            urgentEvent: liveEvents[0] || null,
+            topEvents: liveEvents.slice(0, Math.max(1, Math.min(limit, 2))),
+        };
+    }
+
     function onLeave() {
         _clearCountdown();
     }
@@ -1306,7 +1358,7 @@
         }
     }
 
-    window.EventView     = { onEnter, onLeave };
+    window.EventView     = { onEnter, onLeave, getHomeEventsSummary };
     window.isEventActive = isEventActive;
 
 })();
