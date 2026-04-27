@@ -341,6 +341,61 @@ Si falta soporte, la UI muestra estado no soportado y no intenta registrar push.
 - Botón “Probar aviso”.
 - Verifica permiso y service worker.
 
+### Crear campañas manuales desde Supabase Dashboard (paso a paso)
+
+Ruta: **Supabase Dashboard → Table editor → `push_campaigns` → Insert row**.
+
+> Este flujo reemplaza por completo cualquier creación de campañas desde la web de Love Arcade.
+
+#### Campos obligatorios en el formulario de Dashboard
+
+| Campo | Tipo | ¿Qué poner? | Ejemplo |
+|---|---|---|---|
+| `id` | `int8` | Déjalo vacío si tu tabla usa identidad/autoincrement. Si tu tabla no autogenera `id`, coloca el siguiente consecutivo disponible. | `123` |
+| `title` | `text` | Título corto visible en la notificación. | `Evento relámpago activo` |
+| `body` | `text` | Mensaje principal (ideal: 60–140 caracteres). | `Completa tus misiones hoy para ganar recompensas extra.` |
+| `payload_json` | `jsonb` | JSON con metadatos de navegación/visualización. | `{\"url\":\"/#view=events\",\"view\":\"events\",\"tag\":\"manual-campaign\"}` |
+| `target_filter_json` | `jsonb` | Segmentación de audiencia para el dispatcher. Si no segmentas, usa `{\"target\":\"all\"}`. | `{\"target\":\"all\"}` |
+| `scheduled_for` | `timestamptz` | Fecha/hora de envío en UTC o con zona explícita. | `2026-04-28T18:30:00Z` |
+| `status` | `text` | Estado inicial recomendado: `pending`. | `pending` |
+| `created_at` | `timestamptz` | Timestamp de creación. Si no hay default DB, pon hora actual. | `2026-04-27T19:00:00Z` |
+| `updated_at` | `timestamptz` | Timestamp de última actualización (igual a `created_at` al crear). | `2026-04-27T19:00:00Z` |
+
+#### Campos opcionales
+
+| Campo | Tipo | Uso recomendado |
+|---|---|---|
+| `sent_at` | `timestamptz` | Déjalo `NULL` al crear. El dispatcher lo completará al finalizar el envío. |
+| `created_by` | `uuid` | Opcional para auditoría manual (UUID del operador). Puede ir `NULL`. |
+
+#### Plantilla JSON recomendada para `payload_json`
+
+```json
+{
+  "title": "Evento relámpago activo",
+  "body": "Completa tus misiones hoy para ganar recompensas extra.",
+  "url": "/#view=events",
+  "view": "events",
+  "tag": "manual-campaign"
+}
+```
+
+#### Plantilla JSON recomendada para `target_filter_json`
+
+```json
+{
+  "target": "all"
+}
+```
+
+#### Checklist rápido antes de guardar la fila
+
+1. `status = "pending"`.
+2. `scheduled_for` con fecha futura correcta.
+3. JSON válido (sin comas finales) en `payload_json` y `target_filter_json`.
+4. `sent_at` en `NULL`.
+5. Guardar y confirmar que la fila aparece en `push_campaigns`.
+
 ### Prueba push real
 1. Tener suscripción activa en `push_subscriptions`.
 2. Crear campaña desde Supabase Dashboard (Table editor) o por SQL:
