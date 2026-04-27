@@ -15,8 +15,7 @@ Este documento explica **todo** lo necesario para operar notificaciones web en L
   - Config PWA mínima para Android.
 - `index.html`:
   - Registra `manifest` y `theme-color`.
-  - Añade card de configuración de notificaciones en la pestaña Sincronizar.
-  - Añade formulario para campañas manuales (se guardan en Supabase).
+  - Añade card de configuración de notificaciones en la pestaña Sincronizar con UX orientada a usuario final.
 - `js/push-notifications.js`:
   - Registra Service Worker.
   - Solicita permisos de notificación.
@@ -27,7 +26,7 @@ Este documento explica **todo** lo necesario para operar notificaciones web en L
     - bendición lunar por vencer
     - novedades en tienda
     - evento urgente
-  - Crea campañas manuales en tabla `push_campaigns`.
+  - Evalúa reglas predefinidas y gestiona preferencias locales del usuario.
 - `api/push-public-config.js`:
   - Expone `vapidPublicKey` pública al frontend.
 
@@ -178,36 +177,16 @@ for update
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
--- Campañas: sólo admins.
--- Requiere que en auth.users.user_metadata.role = 'admin'
-create policy if not exists push_campaigns_select_admin
-on public.push_campaigns
-for select
-using ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
-
-create policy if not exists push_campaigns_insert_admin
-on public.push_campaigns
-for insert
-with check ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
-
-create policy if not exists push_campaigns_update_admin
-on public.push_campaigns
-for update
-using ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
-with check ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
-
--- Logs: sólo admins
-create policy if not exists push_delivery_log_select_admin
-on public.push_delivery_log
-for select
-using ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+-- Campañas y logs: se gestionan desde dashboard/servicio.
+-- En cliente no se requieren permisos RLS para estas tablas.
+-- (Service Role en funciones backend ignora RLS.)
 ```
 
 ---
 
 ## 4) Edge Function de Supabase para envío push real
 
-> El frontend ya crea campañas manuales y guarda suscripciones. Para enviar push en background necesitas una función en Supabase que use `VAPID_PRIVATE_KEY`.
+> El frontend solo gestiona suscripciones/permisos. Las campañas manuales deben crearse en Supabase Dashboard → Table editor → `push_campaigns`.
 
 ### 4.1 Crear función `push-dispatch`
 
@@ -338,19 +317,7 @@ Configura un job que invoque la función cada minuto.
 
 ---
 
-## 6) Cómo habilitar usuario administrador para campañas manuales
-
-Debes guardar en `user_metadata` del usuario:
-
-```json
-{ "role": "admin" }
-```
-
-Puedes hacerlo desde panel de Supabase Auth (usuario por usuario), o con Admin API en backend seguro.
-
----
-
-## 7) Compatibilidad Android (Opera)
+## 6) Compatibilidad Android (Opera)
 
 El código incluye detección por feature:
 - `serviceWorker in navigator`
@@ -362,21 +329,21 @@ Si falta soporte, la UI muestra estado no soportado y no intenta registrar push.
 ### Flujo recomendado en Opera Android
 1. Abrir Love Arcade vía HTTPS.
 2. Ir a **Tienda → Sincronizar → Notificaciones del navegador**.
-3. Presionar **Activar notificaciones**.
+3. Presionar **Activar recordatorios**.
 4. Aceptar permiso del navegador.
 5. Iniciar sesión para persistir suscripción en Supabase.
 
 ---
 
-## 8) Probar extremo a extremo
+## 7) Probar extremo a extremo
 
 ### Prueba local (ya implementada)
-- Botón “Enviar prueba local”.
+- Botón “Probar aviso”.
 - Verifica permiso y service worker.
 
 ### Prueba push real
 1. Tener suscripción activa en `push_subscriptions`.
-2. Crear campaña desde UI (admin) o SQL:
+2. Crear campaña desde Supabase Dashboard (Table editor) o por SQL:
 
 ```sql
 insert into public.push_campaigns (
@@ -397,7 +364,7 @@ values (
 
 ---
 
-## 9) Notificaciones predefinidas activas hoy (cliente)
+## 8) Notificaciones predefinidas activas hoy (cliente)
 
 Implementadas en `js/push-notifications.js`:
 - **Bono diario disponible**.
@@ -409,7 +376,7 @@ Implementadas en `js/push-notifications.js`:
 
 ---
 
-## 10) Seguridad y buenas prácticas
+## 9) Seguridad y buenas prácticas
 
 - Nunca exponer `VAPID_PRIVATE_KEY` en cliente.
 - El envío push real debe vivir en Edge Function/backend.
@@ -419,15 +386,15 @@ Implementadas en `js/push-notifications.js`:
 
 ---
 
-## 11) Checklist final de producción
+## 10) Checklist final de producción
 
 - [ ] Tabla `push_subscriptions` creada + RLS.
-- [ ] Tabla `push_campaigns` creada + RLS admin.
-- [ ] Tabla `push_delivery_log` creada + RLS admin.
+- [ ] Tabla `push_campaigns` creada.
+- [ ] Tabla `push_delivery_log` creada.
 - [ ] `NEXT_PUBLIC_VAPID_PUBLIC_KEY` en Vercel.
 - [ ] `VAPID_PRIVATE_KEY` en Supabase Secrets.
 - [ ] Function `push-dispatch` desplegada.
 - [ ] Scheduler cada minuto configurado.
-- [ ] Usuario(s) admin con `user_metadata.role = 'admin'`.
+- [ ] Flujo operativo definido: campañas manuales solo desde Supabase Dashboard.
 - [ ] Prueba de notificación local OK.
 - [ ] Prueba de envío push real OK.

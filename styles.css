@@ -5067,6 +5067,39 @@ svg { stroke-width: 2; }
     margin: 12px 0;
 }
 
+.push-benefits {
+    background: linear-gradient(135deg, rgba(155, 89, 255, 0.10), rgba(79, 53, 160, 0.14));
+    border: 1px solid rgba(155, 89, 255, 0.28);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.push-benefits-title {
+    margin: 0 0 6px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: var(--accent);
+}
+
+.push-benefits-list {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 3px;
+    color: var(--text-med);
+    font-size: 0.77rem;
+}
+
+.push-support-state {
+    font-size: 0.75rem;
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .push-rule-item {
     display: flex;
     align-items: center;
@@ -5083,38 +5116,12 @@ svg { stroke-width: 2; }
     accent-color: var(--accent);
 }
 
-.push-admin-box {
-    margin-top: 10px;
-    border: 1px dashed rgba(155, 89, 255, 0.35);
-    border-radius: 12px;
-    padding: 10px;
-    background: rgba(155, 89, 255, 0.06);
-}
-
-.push-admin-title {
-    margin: 0 0 8px;
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--accent);
-}
-
-.push-admin-form {
-    display: grid;
-    gap: 8px;
-}
-
-.push-admin-form .input {
-    width: 100%;
-}
-
-.push-admin-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
+.push-help-note {
+    margin: 6px 0 0;
+    font-size: 0.72rem;
+    color: var(--text-low);
 }
 
 @media (max-width: 640px) {
-    .push-admin-row {
-        grid-template-columns: 1fr;
-    }
+    .push-rules-grid { grid-template-columns: 1fr; }
 }

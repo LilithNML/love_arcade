@@ -90,12 +90,12 @@
 
     const supported = ('serviceWorker' in navigator) && ('Notification' in window) && ('PushManager' in window);
     supportEl.textContent = supported
-      ? 'Soportado (Push API disponible en este navegador)'
-      : 'No soportado (falta Service Worker, Notification o Push API)';
+      ? 'Este dispositivo puede recibir recordatorios.'
+      : 'Este navegador no permite recordatorios automáticos.';
     supportEl.style.color = supported ? 'var(--success, #68d391)' : 'var(--error, #fc8181)';
 
     if (!supported) {
-      setStatus('Este navegador no soporta Web Push completo.');
+      setStatus('Puedes seguir usando Love Arcade sin notificaciones.');
     }
   }
 
@@ -308,73 +308,17 @@
     });
   }
 
-  function bindManualCampaignForm() {
-    const form = _$('push-manual-form');
-    const msgEl = _$('push-manual-msg');
-    if (!form || !msgEl) return;
-
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const title = _$( 'push-manual-title')?.value?.trim();
-      const body = _$( 'push-manual-body')?.value?.trim();
-      const target = _$( 'push-manual-target')?.value || 'all';
-      const scheduledFor = _$( 'push-manual-scheduled')?.value || null;
-
-      if (!title || !body) {
-        msgEl.textContent = 'Escribe título y mensaje.';
-        msgEl.style.color = 'var(--error, #fc8181)';
-        return;
-      }
-
-      const sb = window.Sentinel?.getClient?.();
-      const session = window.Sentinel?.getSession?.();
-      if (!sb || !session?.user?.id) {
-        msgEl.textContent = 'Necesitas iniciar sesión para crear campañas manuales.';
-        msgEl.style.color = 'var(--error, #fc8181)';
-        return;
-      }
-
-      msgEl.textContent = 'Guardando campaña…';
-      msgEl.style.color = 'var(--text-low)';
-
-      const payload = {
-        title,
-        body,
-        payload_json: {
-          title,
-          body,
-          url: '/#view=home'
-        },
-        target_filter_json: { target },
-        scheduled_for: scheduledFor ? new Date(scheduledFor).toISOString() : new Date().toISOString(),
-        status: 'pending',
-        created_by: session.user.id
-      };
-
-      const { error } = await sb.from('push_campaigns').insert(payload);
-      if (error) {
-        msgEl.textContent = `No se pudo crear la campaña: ${error.message}`;
-        msgEl.style.color = 'var(--error, #fc8181)';
-        return;
-      }
-
-      form.reset();
-      msgEl.textContent = 'Campaña manual guardada. Será enviada por el dispatcher de Supabase.';
-      msgEl.style.color = 'var(--success, #68d391)';
-    });
-  }
-
   function bindButtons() {
     _$( 'btn-push-enable')?.addEventListener('click', async () => {
       try {
-        setStatus('Solicitando permiso…');
+        setStatus('Preparando recordatorios…');
         await subscribePush();
         const prefs = loadPrefs();
         prefs.enabled = true;
         savePrefs(prefs);
-        setStatus('Notificaciones push activadas correctamente.');
+        setStatus('¡Listo! Ya recibirás avisos importantes de Love Arcade.');
       } catch (err) {
-        setStatus(err?.message || 'No se pudo activar push.', true);
+        setStatus(err?.message || 'No pudimos activar los recordatorios.', true);
       }
     });
 
@@ -384,24 +328,24 @@
         const prefs = loadPrefs();
         prefs.enabled = false;
         savePrefs(prefs);
-        setStatus('Notificaciones desactivadas.');
+        setStatus('Recordatorios pausados. Puedes activarlos cuando quieras.');
       } catch (err) {
-        setStatus(err?.message || 'No se pudo desactivar push.', true);
+        setStatus(err?.message || 'No pudimos pausar los recordatorios.', true);
       }
     });
 
     _$( 'btn-push-test')?.addEventListener('click', async () => {
       try {
         await showLocalNotification({
-          title: 'Prueba de notificación',
-          body: 'Si ves este mensaje, la configuración local funciona.',
+          title: 'Recordatorio de prueba',
+          body: '¡Todo bien! Tus avisos están funcionando correctamente.',
           tag: 'push-test',
           view: 'home',
           url: '/#view=home'
         });
-        setStatus('Notificación de prueba enviada.');
+        setStatus('Prueba enviada correctamente.');
       } catch (err) {
-        setStatus(err?.message || 'No se pudo enviar notificación de prueba.', true);
+        setStatus(err?.message || 'No pudimos enviar la prueba.', true);
       }
     });
   }
@@ -421,7 +365,6 @@
     updateUiSupportState();
     bindButtons();
     bindToggles();
-    bindManualCampaignForm();
 
     if (!('serviceWorker' in navigator) || !('Notification' in window) || !('PushManager' in window)) {
       return;

@@ -789,49 +789,38 @@
                             <svg class="icon" width="18" height="18" aria-hidden="true" style="color:var(--accent);"><use href="#icon-bell"></use></svg>
                         </div>
                         <div>
-                            <h3 class="memory-card__title">Notificaciones del navegador</h3>
-                            <p class="memory-card__sub">Push automático + campañas manuales con Supabase</p>
+                            <h3 class="memory-card__title">Activa tus recordatorios</h3>
+                            <p class="memory-card__sub">Recibe avisos útiles para no perder recompensas ni eventos</p>
                         </div>
                     </div>
 
-                    <p id="push-support-state" style="font-size:0.75rem; color:var(--text-low); margin:0 0 12px;"></p>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <div class="push-benefits">
+                        <p class="push-benefits-title">¿Qué te avisaremos?</p>
+                        <ul class="push-benefits-list">
+                            <li>Tu bono diario está listo para reclamar.</li>
+                            <li>Tu Bendición Lunar está por vencer.</li>
+                            <li>Hay novedades en tienda y eventos por terminar.</li>
+                        </ul>
+                    </div>
+
+                    <p id="push-support-state" class="push-support-state"></p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
                         <button id="btn-push-enable" class="btn-primary" style="justify-content:center;">
                             <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-bell"></use></svg>
-                            Activar notificaciones
+                            Activar recordatorios
                         </button>
-                        <button id="btn-push-disable" class="btn-ghost" style="font-size:0.8rem;">Desactivar</button>
-                        <button id="btn-push-test" class="btn-ghost" style="font-size:0.8rem;">Enviar prueba local</button>
+                        <button id="btn-push-disable" class="btn-ghost" style="font-size:0.8rem;">Pausar</button>
+                        <button id="btn-push-test" class="btn-ghost" style="font-size:0.8rem;">Probar aviso</button>
                     </div>
                     <p id="push-status-msg" class="feedback-msg" style="min-height:18px;"></p>
 
                     <div class="push-rules-grid">
-                        <label class="push-rule-item"><input type="checkbox" id="push-rule-daily"> Bono diario disponible</label>
-                        <label class="push-rule-item"><input type="checkbox" id="push-rule-moon"> Bendición Lunar por vencer</label>
-                        <label class="push-rule-item"><input type="checkbox" id="push-rule-shop"> Novedades en tienda</label>
-                        <label class="push-rule-item"><input type="checkbox" id="push-rule-events"> Eventos por terminar</label>
+                        <label class="push-rule-item"><input type="checkbox" id="push-rule-daily"> Recordarme el bono diario</label>
+                        <label class="push-rule-item"><input type="checkbox" id="push-rule-moon"> Avisarme si la Bendición Lunar expira pronto</label>
+                        <label class="push-rule-item"><input type="checkbox" id="push-rule-shop"> Avisarme cuando haya novedades en tienda</label>
+                        <label class="push-rule-item"><input type="checkbox" id="push-rule-events"> Avisarme si un evento está por terminar</label>
                     </div>
-
-                    <div class="push-admin-box">
-                        <p class="push-admin-title">Campañas manuales (admin)</p>
-                        <form id="push-manual-form" class="push-admin-form">
-                            <input id="push-manual-title" type="text" class="input" maxlength="80" placeholder="Título de la notificación" required>
-                            <textarea id="push-manual-body" class="input" maxlength="180" placeholder="Mensaje" required></textarea>
-                            <div class="push-admin-row">
-                                <select id="push-manual-target" class="input">
-                                    <option value="all">Todos</option>
-                                    <option value="active_7d">Activos últimos 7 días</option>
-                                    <option value="streak_3_plus">Racha >= 3</option>
-                                </select>
-                                <input id="push-manual-scheduled" type="datetime-local" class="input">
-                            </div>
-                            <button type="submit" class="btn-primary" style="justify-content:center;">
-                                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-send"></use></svg>
-                                Guardar campaña manual
-                            </button>
-                        </form>
-                        <p id="push-manual-msg" class="feedback-msg" style="min-height:18px;"></p>
-                    </div>
+                    <p class="push-help-note">Las campañas manuales se gestionan exclusivamente desde Supabase → Table editor → <strong>push_campaigns</strong>.</p>
                 </div>
             </section>
 
