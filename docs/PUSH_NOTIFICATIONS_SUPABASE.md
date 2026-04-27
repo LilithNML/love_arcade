@@ -48,8 +48,8 @@ NEXT_PUBLIC_VAPID_PUBLIC_KEY=BMxdhgSVCuO4Vad8c_Wj8a-nAC3AgUBqjDhGKJb6Fm1ZvJ1ZFvN
 ### En Supabase Edge Functions
 Configura estos secrets:
 ```bash
-SUPABASE_URL=https://TU_PROYECTO.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=TU_SERVICE_ROLE_KEY
+LA_CLOUD_URL=https://TU_PROYECTO.supabase.co
+LA_CLOUD_SERVICE_ROLE_KEY=TU_SERVICE_ROLE_KEY
 VAPID_PUBLIC_KEY=BMxdhgSVCuO4Vad8c_Wj8a-nAC3AgUBqjDhGKJb6Fm1ZvJ1ZFvNd1VzeF1KZsl2kvJYMbC6hBjaK93dH9jeGFqg
 VAPID_PRIVATE_KEY=TU_LLAVE_PRIVADA_VAPID
 VAPID_SUBJECT=mailto:tu_correo@dominio.com
@@ -224,8 +224,8 @@ supabase functions new push-dispatch
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
 
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const LA_CLOUD_URL = Deno.env.get('LA_CLOUD_URL')!;
+const LA_CLOUD_SERVICE_ROLE_KEY = Deno.env.get('LA_CLOUD_SERVICE_ROLE_KEY')!;
 const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY')!;
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY')!;
 const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:admin@example.com';
@@ -233,7 +233,7 @@ const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:admin@example.com
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
 Deno.serve(async (_req) => {
-  const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const sb = createClient(LA_CLOUD_URL, LA_CLOUD_SERVICE_ROLE_KEY);
 
   const nowIso = new Date().toISOString();
 
@@ -431,4 +431,3 @@ Implementadas en `js/push-notifications.js`:
 - [ ] Usuario(s) admin con `user_metadata.role = 'admin'`.
 - [ ] Prueba de notificación local OK.
 - [ ] Prueba de envío push real OK.
-
