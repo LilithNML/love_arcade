@@ -2,9 +2,7 @@
   'use strict';
 
   const STORAGE = {
-    prefs: 'la_push_prefs_v1',
-    lastNotice: 'la_push_last_notice_v1',
-    lastShopHash: 'la_push_shop_hash_v1'
+    prefs: 'la_push_prefs_v1'
   };
 
   const DEFAULT_PREFS = {
@@ -17,8 +15,6 @@
 
   let swReg = null;
   let vapidPublicKey = '';
-  let lastRuleCheck = 0;
-
   function _$(id) { return document.getElementById(id); }
 
   function loadPrefs() {
@@ -33,26 +29,6 @@
 
   function savePrefs(prefs) {
     localStorage.setItem(STORAGE.prefs, JSON.stringify({ ...DEFAULT_PREFS, ...prefs }));
-  }
-
-  function loadLastNoticeMap() {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE.lastNotice) || '{}');
-    } catch (_) {
-      return {};
-    }
-  }
-
-  function markNotified(key) {
-    const map = loadLastNoticeMap();
-    map[key] = Date.now();
-    localStorage.setItem(STORAGE.lastNotice, JSON.stringify(map));
-  }
-
-  function alreadyNotifiedRecently(key, windowMs) {
-    const map = loadLastNoticeMap();
-    const ts = Number(map[key] || 0);
-    return Date.now() - ts < windowMs;
   }
 
   function urlBase64ToUint8Array(base64String) {
@@ -120,7 +96,9 @@
       p256dh: json?.keys?.p256dh || null,
       auth: json?.keys?.auth || null,
       user_agent: navigator.userAgent,
-      platform: /android/i.test(navigator.userAgent) ? 'android' : 'other',
+      platform: /android/i.test(navigator.userAgent)
+        ? 'android'
+        : (/iphone|ipad|ipod/i.test(navigator.userAgent) ? 'ios' : 'other'),
       is_active: Boolean(enabled)
     };
 
@@ -181,110 +159,6 @@
       tag: payload.tag || 'love-arcade-local',
       data: payload
     });
-  }
-
-  async function maybeNotifyDailyClaim(prefs) {
-    if (!prefs.dailyClaim) return;
-    const canClaim = window.GameCenter?.canClaimDaily?.();
-    if (!canClaim) return;
-
-    const dayKey = `daily_${new Date().toISOString().slice(0, 10)}`;
-    if (alreadyNotifiedRecently(dayKey, 24 * 60 * 60 * 1000)) return;
-
-    await showLocalNotification({
-      title: 'Racha diaria disponible',
-      body: 'Tu bono diario ya está listo para reclamar en Love Arcade.',
-      tag: 'daily-claim-ready',
-      view: 'home',
-      url: '/#view=home'
-    });
-    markNotified(dayKey);
-  }
-
-  async function maybeNotifyMoonExpiry(prefs) {
-    if (!prefs.moonExpiry) return;
-    const status = window.GameCenter?.getMoonBlessingStatus?.();
-    const expiry = Number(status?.expiry || 0);
-    if (!expiry) return;
-    const remaining = expiry - Date.now();
-    if (remaining <= 0 || remaining > 12 * 60 * 60 * 1000) return;
-
-    if (alreadyNotifiedRecently('moon_expiry_12h', 8 * 60 * 60 * 1000)) return;
-
-    await showLocalNotification({
-      title: 'Tu Bendición Lunar está por vencer',
-      body: 'Quedan menos de 12 horas. Renueva para mantener el bono diario extra.',
-      tag: 'moon-expiry',
-      view: 'shop',
-      url: '/#view=shop'
-    });
-    markNotified('moon_expiry_12h');
-  }
-
-  async function maybeNotifyUrgentEvent(prefs) {
-    if (!prefs.eventUrgent) return;
-    const summary = await window.EventView?.getHomeEventsSummary?.(2);
-    const urgent = summary?.urgentEvent;
-    const remaining = Number(urgent?.remainingMs || 0);
-    if (!urgent || !remaining || remaining > 6 * 60 * 60 * 1000) return;
-
-    const key = `event_urgent_${urgent.id}`;
-    if (alreadyNotifiedRecently(key, 6 * 60 * 60 * 1000)) return;
-
-    await showLocalNotification({
-      title: 'Evento por terminar',
-      body: `${urgent.title} finaliza pronto. Revisa la sección de eventos.`,
-      tag: 'event-urgent',
-      view: 'events',
-      url: '/#view=events'
-    });
-    markNotified(key);
-  }
-
-  async function maybeNotifyShopNews(prefs) {
-    if (!prefs.newShop) return;
-    const res = await fetch('data/shop.json', { cache: 'no-store' });
-    if (!res.ok) return;
-    const data = await res.json();
-    const ids = Array.isArray(data) ? data.map((item) => Number(item.id || 0)).sort((a, b) => a - b) : [];
-    const hash = ids.join('-');
-
-    const prev = localStorage.getItem(STORAGE.lastShopHash);
-    if (!prev) {
-      localStorage.setItem(STORAGE.lastShopHash, hash);
-      return;
-    }
-
-    if (prev !== hash && !alreadyNotifiedRecently('shop_news', 12 * 60 * 60 * 1000)) {
-      await showLocalNotification({
-        title: 'Hay novedades en la tienda',
-        body: 'Se detectaron cambios en el catálogo de Love Arcade.',
-        tag: 'shop-news',
-        view: 'shop',
-        url: '/#view=shop'
-      });
-      markNotified('shop_news');
-      localStorage.setItem(STORAGE.lastShopHash, hash);
-    }
-  }
-
-  async function evaluatePredefinedRules() {
-    const prefs = loadPrefs();
-    if (!prefs.enabled) return;
-    if (Notification.permission !== 'granted') return;
-
-    const now = Date.now();
-    if (now - lastRuleCheck < 60_000) return;
-    lastRuleCheck = now;
-
-    try {
-      await maybeNotifyDailyClaim(prefs);
-      await maybeNotifyMoonExpiry(prefs);
-      await maybeNotifyUrgentEvent(prefs);
-      await maybeNotifyShopNews(prefs);
-    } catch (_) {
-      // silent fail, checks are best-effort
-    }
   }
 
   function bindToggles() {
@@ -374,11 +248,7 @@
     await registerServiceWorker();
     bindServiceWorkerDeepLinkBridge();
 
-    setInterval(() => {
-      evaluatePredefinedRules();
-    }, 60_000);
-
-    evaluatePredefinedRules();
+    setStatus('Push habilitado. Los envíos automáticos son gestionados por Supabase.');
   }
 
   document.addEventListener('DOMContentLoaded', () => {
