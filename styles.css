@@ -5056,3 +5056,65 @@ svg { stroke-width: 2; }
     .gacha-roulette-modal  { transition: none !important; }
     .gacha-roulette-overlay { transition: none !important; }
 }
+
+/* ──────────────────────────────────────────────────────────
+   Push notifications UI
+   ────────────────────────────────────────────────────────── */
+.push-rules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.push-rule-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--text-med);
+    background: rgba(155, 89, 255, 0.08);
+    border: 1px solid rgba(155, 89, 255, 0.22);
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+
+.push-rule-item input {
+    accent-color: var(--accent);
+}
+
+.push-admin-box {
+    margin-top: 10px;
+    border: 1px dashed rgba(155, 89, 255, 0.35);
+    border-radius: 12px;
+    padding: 10px;
+    background: rgba(155, 89, 255, 0.06);
+}
+
+.push-admin-title {
+    margin: 0 0 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.push-admin-form {
+    display: grid;
+    gap: 8px;
+}
+
+.push-admin-form .input {
+    width: 100%;
+}
+
+.push-admin-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+@media (max-width: 640px) {
+    .push-admin-row {
+        grid-template-columns: 1fr;
+    }
+}
