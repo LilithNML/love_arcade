@@ -18,15 +18,22 @@ function resolveUrlFromPayload(data = {}) {
 }
 
 function normalizePayload(payload = {}) {
+  const payloadJson = payload.payload_json && typeof payload.payload_json === 'object'
+    ? payload.payload_json
+    : {};
+
+  const url = resolveUrlFromPayload({ ...payloadJson, ...payload });
+
   return {
     title: payload.title || 'Love Arcade',
     body: payload.body || 'Tienes una nueva notificación.',
-    icon: payload.icon || '/games/rompecabezas/assets/icons/icon-192.png',
-    badge: payload.badge || '/games/rompecabezas/assets/icons/icon-192.png',
+    icon: payload.icon || '/assets/icon/icon.png',
+    badge: payload.badge || '/assets/icon/icon-notification.png',
     tag: payload.tag || 'love-arcade',
     data: {
+      ...payloadJson,
       ...payload,
-      url: resolveUrlFromPayload(payload),
+      url,
       ts: Date.now()
     }
   };
