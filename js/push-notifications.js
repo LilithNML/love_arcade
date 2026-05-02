@@ -143,7 +143,9 @@
       next_event_end_at: nextEventEndTs || null,
       can_claim_daily: daily === 1,
       daily_last_claim_at: lastDailyClaimAt || null,
-      daily_timezone_offset_minutes: -new Date().getTimezoneOffset()
+      // JS getTimezoneOffset(): minutos para sumar a hora local y obtener UTC.
+      // Para reconstruir hora local desde UTC en backend: local = utc - getTimezoneOffset().
+      daily_timezone_offset_minutes: Number(new Date().getTimezoneOffset() || 0)
     };
   }
 

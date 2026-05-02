@@ -38,7 +38,7 @@ function isAuthValid(req: Request): boolean {
 }
 
 function getDailySlot(nowUtc: Date, offsetMinutes: number): { localDate: string, slot: 'morning' | 'day' | 'night' | null } {
-  const localMs = nowUtc.getTime() + offsetMinutes * 60_000;
+  const localMs = nowUtc.getTime() - offsetMinutes * 60_000;
   const local = new Date(localMs);
   const hour = local.getUTCHours();
   const localDate = local.toISOString().slice(0, 10);
