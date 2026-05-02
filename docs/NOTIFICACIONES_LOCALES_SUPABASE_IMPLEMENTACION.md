@@ -27,9 +27,10 @@ También:
 - sincroniza cada 5 minutos con sesión activa.
 
 ### 2) Tienda (`js/shop-logic.js`)
-Al cargar `shop.json`, se guarda un hash en `localStorage` (`love_arcade_shop_catalog_hash_v1`) para trazabilidad del cliente.
+Al cargar `shop.json`, ahora se guarda un hash en `localStorage`:
+- `love_arcade_shop_catalog_hash_v1`
 
-La detección de “novedad en tienda” para notificaciones ya no depende del hash local; ahora usa una versión global de contenido.
+Este hash sirve para detectar novedades de catálogo y disparar aviso backend.
 
 ### 3) Backend Push (`supabase/functions/push-dispatch/index.ts`)
 Antes de despachar campañas pendientes:
@@ -39,20 +40,12 @@ Antes de despachar campañas pendientes:
 - marca timestamps/hashes enviados para deduplicar.
 
 Además, se agregó soporte de segmentación `target_filter_json.target = 'user_id'`.
-Para tienda, usa `rpc('enqueue_local_shop_campaign')` con lock transaccional para evitar duplicados incluso con cron cada minuto.
 
-### 4) SQL nuevas migraciones
+### 4) SQL nueva migración
 Archivo agregado:
 - `supabase/migrations/20260502_local_notification_state.sql`
-- `supabase/migrations/20260502_shop_content_version.sql`
-- `supabase/migrations/20260502_shop_notification_dedupe.sql`
 
-Crea:
-- `public.user_notification_state` + RLS + trigger de `updated_at`.
-- `public.app_content_versions` con `shop_version`.
-- función `public.bump_shop_version()` para incrementar versión de tienda.
-- función `public.enqueue_local_shop_campaign(...)` para dedupe robusta por usuario+versión.
-- columnas de control para bono diario por franja horaria (mañana/día/noche) con máximo 3 avisos.
+Crea `public.user_notification_state` + RLS + trigger de `updated_at`.
 
 ---
 
@@ -143,22 +136,6 @@ curl -X POST "https://<project-ref>.functions.supabase.co/push-dispatch" \
 - `VAPID_PRIVATE_KEY`
 - `VAPID_SUBJECT`
 - `EDGE_SHARED_SECRET` (opcional pero recomendado)
-- `SHOP_CONTENT_VERSION` (opcional, fallback por env si no existe tabla)
-
-## E. Cómo publicar novedades de tienda (2 opciones)
-
-### Opción 1 (recomendada): desde Supabase
-Cuando publiques cambios en `shop.json`, ejecuta:
-
-```sql
-select public.bump_shop_version();
-```
-
-Con eso, en el siguiente ciclo de cron, `push-dispatch` notificará a usuarios con `shop_enabled = true`.
-
-### Opción 2: desde GitHub / CI (sin tocar SQL manualmente)
-Define o incrementa `SHOP_CONTENT_VERSION` en los secrets/env de la Edge Function al publicar `shop.json`.
-`push-dispatch` usará ese valor si es mayor y/o si no existe `app_content_versions`.
 
 ---
 

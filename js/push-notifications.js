@@ -114,8 +114,6 @@
     const gc = window.GameCenter;
     const now = Date.now();
     const daily = gc?.canClaimDaily?.() ? 1 : 0;
-    const gcState = gc?.getState?.() || {};
-    const lastDailyClaimAt = Number(gcState?.daily?.lastClaim || 0) || 0;
     const moon = gc?.getMoonBlessingStatus?.() || { active: false, remainingMs: 0 };
     const moonExpiryTs = moon.active ? now + Number(moon.remainingMs || 0) : 0;
     const nextDailyTs = now + 24 * 60 * 60 * 1000;
@@ -141,11 +139,7 @@
       shop_catalog_hash: shopHash || null,
       active_event_ids: activeEvents.map((x) => String(x?.id || '')).filter(Boolean),
       next_event_end_at: nextEventEndTs || null,
-      can_claim_daily: daily === 1,
-      daily_last_claim_at: lastDailyClaimAt || null,
-      // JS getTimezoneOffset(): minutos para sumar a hora local y obtener UTC.
-      // Para reconstruir hora local desde UTC en backend: local = utc - getTimezoneOffset().
-      daily_timezone_offset_minutes: Number(new Date().getTimezoneOffset() || 0)
+      can_claim_daily: daily === 1
     };
   }
 
@@ -164,9 +158,6 @@
       shop_enabled: Boolean(prefs.newShop),
       events_enabled: Boolean(prefs.eventUrgent),
       next_daily_claim_at: new Date(st.next_daily_claim_at).toISOString(),
-      daily_can_claim: Boolean(st.can_claim_daily),
-      daily_last_claim_at: st.daily_last_claim_at ? new Date(st.daily_last_claim_at).toISOString() : null,
-      daily_timezone_offset_minutes: Number(st.daily_timezone_offset_minutes || 0),
       moon_blessing_expires_at: st.moon_blessing_expires_at ? new Date(st.moon_blessing_expires_at).toISOString() : null,
       shop_catalog_hash: st.shop_catalog_hash,
       active_event_ids: st.active_event_ids,

@@ -55,16 +55,6 @@ Deno.serve(async (req) => {
 
   const sb = createClient(LA_CLOUD_URL, LA_CLOUD_SERVICE_ROLE_KEY);
   const nowIso = new Date().toISOString();
-  let globalShopVersion = SHOP_CONTENT_VERSION;
-
-  const { data: versionRow } = await sb
-    .from('app_content_versions')
-    .select('shop_version')
-    .eq('id', 1)
-    .maybeSingle();
-  if (versionRow?.shop_version) {
-    globalShopVersion = Number(versionRow.shop_version || 0);
-  }
 
   const { data: reminderStates } = await sb
     .from('user_notification_state')
@@ -72,20 +62,15 @@ Deno.serve(async (req) => {
     .limit(500);
 
   for (const st of reminderStates || []) {
-    const { localDate, slot } = getDailySlot(new Date(), Number(st.daily_timezone_offset_minutes || 0));
-    const alreadyNotifiedToday = String(st.daily_last_notified_on || '') === localDate
-      ? (st.daily_notified_slots || [])
-      : [];
-    const dueDaily = Boolean(st.daily_enabled)
-      && Boolean(st.daily_can_claim)
-      && Boolean(slot)
-      && !alreadyNotifiedToday.includes(slot);
+    const dueDaily = st.daily_enabled && st.next_daily_claim_at && st.next_daily_claim_at <= nowIso
+      && (!st.last_daily_sent_at || st.last_daily_sent_at < st.next_daily_claim_at);
     const moonThresholdIso = st.moon_blessing_expires_at
       ? new Date(new Date(st.moon_blessing_expires_at).getTime() - 12 * 60 * 60 * 1000).toISOString()
       : null;
     const dueMoon = st.moon_enabled && moonThresholdIso && moonThresholdIso <= nowIso
       && (!st.last_moon_sent_at || st.last_moon_sent_at < moonThresholdIso);
-    const dueShop = st.shop_enabled && globalShopVersion > Number(st.last_shop_version_sent || 0);
+    const dueShop = st.shop_enabled && st.shop_catalog_hash
+      && st.shop_catalog_hash !== st.last_shop_catalog_hash_sent;
     const dueEvent = st.events_enabled && st.next_event_end_at
       && new Date(new Date(st.next_event_end_at).getTime() - 6 * 60 * 60 * 1000).toISOString() <= nowIso
       && JSON.stringify(st.active_event_ids || []) !== JSON.stringify(st.last_event_ids_sent || []);
@@ -103,8 +88,6 @@ Deno.serve(async (req) => {
         status: 'pending'
       });
       updates.last_daily_sent_at = nowIso;
-      updates.daily_last_notified_on = localDate;
-      updates.daily_notified_slots = [...alreadyNotifiedToday, slot];
     }
     if (dueMoon) {
       inserts.push({
@@ -118,19 +101,16 @@ Deno.serve(async (req) => {
       updates.last_moon_sent_at = nowIso;
     }
     if (dueShop) {
-      const { data: enqueued, error: enqueueErr } = await sb.rpc('enqueue_local_shop_campaign', {
-        p_user_id: st.user_id,
-        p_shop_version: globalShopVersion,
-        p_scheduled_for: nowIso
+      inserts.push({
+        title: '🛍️ Novedades en la tienda',
+        body: 'Hay contenido nuevo en la tienda. Entra y descubre las novedades.',
+        payload_json: { url: '/#view=shop', tag: `local-shop-${st.user_id}`, view: 'shop', type: 'local_shop' },
+        target_filter_json: { target: 'user_id', user_id: st.user_id },
+        scheduled_for: nowIso,
+        status: 'pending'
       });
-
-      if (enqueueErr) {
-        console.error('[push-dispatch] enqueue_local_shop_campaign error', enqueueErr.message);
-      }
-
       updates.last_shop_sent_at = nowIso;
-      updates.last_shop_catalog_hash_sent = st.shop_catalog_hash || null;
-      updates.last_shop_version_sent = globalShopVersion;
+      updates.last_shop_catalog_hash_sent = st.shop_catalog_hash;
     }
     if (dueEvent) {
       inserts.push({
