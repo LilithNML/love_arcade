@@ -8,6 +8,7 @@ const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY');
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY');
 const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:admin@example.com';
 const EDGE_SHARED_SECRET = Deno.env.get('EDGE_SHARED_SECRET') || '';
+const SHOP_CONTENT_VERSION = Number(Deno.env.get('SHOP_CONTENT_VERSION') || '0');
 
 if (!LA_CLOUD_URL || !LA_CLOUD_SERVICE_ROLE_KEY) {
   throw new Error('Missing LA_CLOUD_URL or LA_CLOUD_SERVICE_ROLE_KEY env vars');
@@ -34,6 +35,17 @@ function isAuthValid(req: Request): boolean {
   const authHeader = req.headers.get('authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   return token.length > 0 && token === EDGE_SHARED_SECRET;
+}
+
+function getDailySlot(nowUtc: Date, offsetMinutes: number): { localDate: string, slot: 'morning' | 'day' | 'night' | null } {
+  const localMs = nowUtc.getTime() - offsetMinutes * 60_000;
+  const local = new Date(localMs);
+  const hour = local.getUTCHours();
+  const localDate = local.toISOString().slice(0, 10);
+  if (hour >= 8 && hour < 12) return { localDate, slot: 'morning' };
+  if (hour >= 13 && hour < 17) return { localDate, slot: 'day' };
+  if (hour >= 19 && hour < 23) return { localDate, slot: 'night' };
+  return { localDate, slot: null };
 }
 
 Deno.serve(async (req) => {
