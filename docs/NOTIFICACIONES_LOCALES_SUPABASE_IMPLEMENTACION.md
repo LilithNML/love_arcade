@@ -39,16 +39,19 @@ Antes de despachar campañas pendientes:
 - marca timestamps/hashes enviados para deduplicar.
 
 Además, se agregó soporte de segmentación `target_filter_json.target = 'user_id'`.
+Para tienda, usa `rpc('enqueue_local_shop_campaign')` con lock transaccional para evitar duplicados incluso con cron cada minuto.
 
 ### 4) SQL nuevas migraciones
 Archivo agregado:
 - `supabase/migrations/20260502_local_notification_state.sql`
 - `supabase/migrations/20260502_shop_content_version.sql`
+- `supabase/migrations/20260502_shop_notification_dedupe.sql`
 
 Crea:
 - `public.user_notification_state` + RLS + trigger de `updated_at`.
 - `public.app_content_versions` con `shop_version`.
 - función `public.bump_shop_version()` para incrementar versión de tienda.
+- función `public.enqueue_local_shop_campaign(...)` para dedupe robusta por usuario+versión.
 
 ---
 

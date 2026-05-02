@@ -99,14 +99,16 @@ Deno.serve(async (req) => {
       updates.last_moon_sent_at = nowIso;
     }
     if (dueShop) {
-      inserts.push({
-        title: '🛍️ Novedades en la tienda',
-        body: 'Hay contenido nuevo en la tienda. Entra y descubre las novedades.',
-        payload_json: { url: '/#view=shop', tag: `local-shop-${st.user_id}`, view: 'shop', type: 'local_shop' },
-        target_filter_json: { target: 'user_id', user_id: st.user_id },
-        scheduled_for: nowIso,
-        status: 'pending'
+      const { data: enqueued, error: enqueueErr } = await sb.rpc('enqueue_local_shop_campaign', {
+        p_user_id: st.user_id,
+        p_shop_version: globalShopVersion,
+        p_scheduled_for: nowIso
       });
+
+      if (enqueueErr) {
+        console.error('[push-dispatch] enqueue_local_shop_campaign error', enqueueErr.message);
+      }
+
       updates.last_shop_sent_at = nowIso;
       updates.last_shop_catalog_hash_sent = st.shop_catalog_hash || null;
       updates.last_shop_version_sent = globalShopVersion;
