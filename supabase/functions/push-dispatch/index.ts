@@ -37,6 +37,17 @@ function isAuthValid(req: Request): boolean {
   return token.length > 0 && token === EDGE_SHARED_SECRET;
 }
 
+function getDailySlot(nowUtc: Date, offsetMinutes: number): { localDate: string, slot: 'morning' | 'day' | 'night' | null } {
+  const localMs = nowUtc.getTime() + offsetMinutes * 60_000;
+  const local = new Date(localMs);
+  const hour = local.getUTCHours();
+  const localDate = local.toISOString().slice(0, 10);
+  if (hour >= 8 && hour < 12) return { localDate, slot: 'morning' };
+  if (hour >= 13 && hour < 17) return { localDate, slot: 'day' };
+  if (hour >= 19 && hour < 23) return { localDate, slot: 'night' };
+  return { localDate, slot: null };
+}
+
 Deno.serve(async (req) => {
   if (!isAuthValid(req)) {
     return unauthorized();
@@ -61,8 +72,14 @@ Deno.serve(async (req) => {
     .limit(500);
 
   for (const st of reminderStates || []) {
-    const dueDaily = st.daily_enabled && st.next_daily_claim_at && st.next_daily_claim_at <= nowIso
-      && (!st.last_daily_sent_at || st.last_daily_sent_at < st.next_daily_claim_at);
+    const { localDate, slot } = getDailySlot(new Date(), Number(st.daily_timezone_offset_minutes || 0));
+    const alreadyNotifiedToday = String(st.daily_last_notified_on || '') === localDate
+      ? (st.daily_notified_slots || [])
+      : [];
+    const dueDaily = Boolean(st.daily_enabled)
+      && Boolean(st.daily_can_claim)
+      && Boolean(slot)
+      && !alreadyNotifiedToday.includes(slot);
     const moonThresholdIso = st.moon_blessing_expires_at
       ? new Date(new Date(st.moon_blessing_expires_at).getTime() - 12 * 60 * 60 * 1000).toISOString()
       : null;
@@ -86,6 +103,8 @@ Deno.serve(async (req) => {
         status: 'pending'
       });
       updates.last_daily_sent_at = nowIso;
+      updates.daily_last_notified_on = localDate;
+      updates.daily_notified_slots = [...alreadyNotifiedToday, slot];
     }
     if (dueMoon) {
       inserts.push({

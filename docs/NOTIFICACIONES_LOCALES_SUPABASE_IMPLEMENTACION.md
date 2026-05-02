@@ -52,6 +52,7 @@ Crea:
 - `public.app_content_versions` con `shop_version`.
 - función `public.bump_shop_version()` para incrementar versión de tienda.
 - función `public.enqueue_local_shop_campaign(...)` para dedupe robusta por usuario+versión.
+- columnas de control para bono diario por franja horaria (mañana/día/noche) con máximo 3 avisos.
 
 ---
 
