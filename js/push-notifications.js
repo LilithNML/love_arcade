@@ -60,13 +60,37 @@
     el.style.color = isError ? 'var(--error, #fc8181)' : 'var(--text-low)';
   }
 
+  function isOperaAndroid() {
+    const ua = navigator.userAgent || '';
+    return /android/i.test(ua) && (/OPR\//i.test(ua) || /Opera/i.test(ua));
+  }
+
+  function toggleRecoveryCard(show) {
+    const el = _$('push-recovery-card');
+    if (!el) return;
+    el.classList.toggle('hidden', !show);
+  }
+
+  function renderEnableButtonState() {
+    const btn = _$('btn-push-enable');
+    if (!btn) return;
+    const iconUse = btn.querySelector('use');
+    const label = btn.querySelector('.push-enable-btn__label');
+    const isActive = Notification.permission === 'granted';
+
+    btn.classList.toggle('is-active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    if (label) label.textContent = isActive ? 'Notificaciones activadas' : 'Recibir novedades';
+    if (iconUse) iconUse.setAttribute('href', isActive ? '#icon-check' : '#icon-bell');
+  }
+
   function updateUiSupportState() {
     const supportEl = _$('push-support-state');
     if (!supportEl) return;
 
     const supported = ('serviceWorker' in navigator) && ('Notification' in window) && ('PushManager' in window);
     supportEl.textContent = supported
-      ? 'Este dispositivo puede recibir recordatorios.'
+      ? 'Activa los recordatorios para no perder bonos, tienda y eventos.'
       : 'Este navegador no permite recordatorios automáticos.';
     supportEl.style.color = supported ? 'var(--success, #68d391)' : 'var(--error, #fc8181)';
 
@@ -184,7 +208,10 @@
 
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      throw new Error('Permiso de notificaciones no concedido.');
+      if (permission === 'denied' && isOperaAndroid()) {
+        throw new Error('Permiso bloqueado por el navegador.');
+      }
+      throw new Error('No pudimos activar los recordatorios en este momento.');
     }
 
     const existing = await swReg.pushManager.getSubscription();
@@ -254,26 +281,32 @@
   function bindButtons() {
     _$( 'btn-push-enable')?.addEventListener('click', async () => {
       try {
+        toggleRecoveryCard(false);
         setStatus('Preparando recordatorios…');
         await subscribePush();
+        renderEnableButtonState();
         const prefs = loadPrefs();
         prefs.enabled = true;
         savePrefs(prefs);
         await syncReminderStateToSupabase();
         setStatus('¡Listo! Ya recibirás avisos importantes de Love Arcade.');
       } catch (err) {
+        const blocked = Notification.permission === 'denied';
+        toggleRecoveryCard(Boolean(blocked && isOperaAndroid()));
         setStatus(err?.message || 'No pudimos activar los recordatorios.', true);
       }
     });
 
     _$( 'btn-push-disable')?.addEventListener('click', async () => {
       try {
+        toggleRecoveryCard(false);
         await unsubscribePush();
         const prefs = loadPrefs();
         prefs.enabled = false;
         savePrefs(prefs);
         await syncReminderStateToSupabase();
         setStatus('Recordatorios pausados. Puedes activarlos cuando quieras.');
+        renderEnableButtonState();
       } catch (err) {
         setStatus(err?.message || 'No pudimos pausar los recordatorios.', true);
       }
@@ -308,6 +341,7 @@
 
   async function init() {
     updateUiSupportState();
+    renderEnableButtonState();
     bindButtons();
     bindToggles();
 
@@ -321,7 +355,9 @@
     await syncReminderStateToSupabase();
     window.setInterval(() => { syncReminderStateToSupabase().catch(() => {}); }, 5 * 60 * 1000);
 
-    setStatus('Push habilitado. Los envíos automáticos son gestionados por Supabase.');
+    if (Notification.permission === 'granted') {
+      setStatus('Recordatorios activos. Te avisaremos cuando haya algo importante.');
+    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {
