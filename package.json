@@ -1,0 +1,26 @@
+{
+  "name": "love-arcade",
+  "version": "1.0.0",
+  "description": "Plataforma de minijuegos con economía de recompensas, tienda de wallpapers y sistema de rachas diarias",
+  "main": "index.html",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LilithNML/love_arcade.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/LilithNML/love_arcade/issues"
+  },
+  "homepage": "https://github.com/LilithNML/love_arcade#readme",
+  "dependencies": {
+    "@vercel/speed-insights": "^2.0.0"
+  }
+}
