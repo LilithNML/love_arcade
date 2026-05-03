@@ -110,6 +110,74 @@
     return { ok: true };
   }
 
+  function readLocalReminderState() {
+    const gc = window.GameCenter;
+    const now = Date.now();
+    const daily = gc?.canClaimDaily?.() ? 1 : 0;
+    const gcState = gc?.getState?.() || {};
+    const lastDailyClaimAt = Number(gcState?.daily?.lastClaim || 0) || 0;
+    const moon = gc?.getMoonBlessingStatus?.() || { active: false, remainingMs: 0 };
+    const moonExpiryTs = moon.active ? now + Number(moon.remainingMs || 0) : 0;
+    const nextDailyTs = now + 24 * 60 * 60 * 1000;
+
+    let eventsPayload = null;
+    try {
+      const raw = localStorage.getItem('love_arcade_events_v1');
+      if (raw) eventsPayload = JSON.parse(raw);
+    } catch (_) {}
+
+    const activeEvents = eventsPayload?.data?.activeEvents || eventsPayload?.activeEvents || [];
+    let nextEventEndTs = 0;
+    for (const ev of activeEvents) {
+      const endTs = Number(new Date(ev?.endDate || ev?.endsAt || 0).getTime() || 0);
+      if (endTs > now && (nextEventEndTs === 0 || endTs < nextEventEndTs)) nextEventEndTs = endTs;
+    }
+
+    const shopHash = String(localStorage.getItem('love_arcade_shop_catalog_hash_v1') || '');
+
+    return {
+      next_daily_claim_at: nextDailyTs,
+      moon_blessing_expires_at: moonExpiryTs || null,
+      shop_catalog_hash: shopHash || null,
+      active_event_ids: activeEvents.map((x) => String(x?.id || '')).filter(Boolean),
+      next_event_end_at: nextEventEndTs || null,
+      can_claim_daily: daily === 1,
+      daily_last_claim_at: lastDailyClaimAt || null,
+      // JS getTimezoneOffset(): minutos para sumar a hora local y obtener UTC.
+      // Para reconstruir hora local desde UTC en backend: local = utc - getTimezoneOffset().
+      daily_timezone_offset_minutes: Number(new Date().getTimezoneOffset() || 0)
+    };
+  }
+
+  async function syncReminderStateToSupabase() {
+    const sentinel = window.Sentinel;
+    const sb = sentinel?.getClient?.();
+    const session = sentinel?.getSession?.();
+    if (!sb || !session?.user?.id) return { ok: false, reason: 'no-session' };
+
+    const prefs = loadPrefs();
+    const st = readLocalReminderState();
+    const payload = {
+      user_id: session.user.id,
+      daily_enabled: Boolean(prefs.dailyClaim),
+      moon_enabled: Boolean(prefs.moonExpiry),
+      shop_enabled: Boolean(prefs.newShop),
+      events_enabled: Boolean(prefs.eventUrgent),
+      next_daily_claim_at: new Date(st.next_daily_claim_at).toISOString(),
+      daily_can_claim: Boolean(st.can_claim_daily),
+      daily_last_claim_at: st.daily_last_claim_at ? new Date(st.daily_last_claim_at).toISOString() : null,
+      daily_timezone_offset_minutes: Number(st.daily_timezone_offset_minutes || 0),
+      moon_blessing_expires_at: st.moon_blessing_expires_at ? new Date(st.moon_blessing_expires_at).toISOString() : null,
+      shop_catalog_hash: st.shop_catalog_hash,
+      active_event_ids: st.active_event_ids,
+      next_event_end_at: st.next_event_end_at ? new Date(st.next_event_end_at).toISOString() : null
+    };
+
+    const { error } = await sb.from('user_notification_state').upsert(payload, { onConflict: 'user_id' });
+    if (error) return { ok: false, reason: error.message };
+    return { ok: true };
+  }
+
   async function subscribePush() {
     if (!swReg) await registerServiceWorker();
     if (!swReg) throw new Error('No se pudo registrar service worker.');
@@ -178,6 +246,7 @@
         const next = loadPrefs();
         next[key] = Boolean(el.checked);
         savePrefs(next);
+        syncReminderStateToSupabase().catch(() => {});
       });
     });
   }
@@ -190,6 +259,7 @@
         const prefs = loadPrefs();
         prefs.enabled = true;
         savePrefs(prefs);
+        await syncReminderStateToSupabase();
         setStatus('¡Listo! Ya recibirás avisos importantes de Love Arcade.');
       } catch (err) {
         setStatus(err?.message || 'No pudimos activar los recordatorios.', true);
@@ -202,6 +272,7 @@
         const prefs = loadPrefs();
         prefs.enabled = false;
         savePrefs(prefs);
+        await syncReminderStateToSupabase();
         setStatus('Recordatorios pausados. Puedes activarlos cuando quieras.');
       } catch (err) {
         setStatus(err?.message || 'No pudimos pausar los recordatorios.', true);
@@ -247,6 +318,8 @@
     await fetchPushConfig();
     await registerServiceWorker();
     bindServiceWorkerDeepLinkBridge();
+    await syncReminderStateToSupabase();
+    window.setInterval(() => { syncReminderStateToSupabase().catch(() => {}); }, 5 * 60 * 1000);
 
     setStatus('Push habilitado. Los envíos automáticos son gestionados por Supabase.');
   }

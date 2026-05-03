@@ -8,6 +8,7 @@ const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY');
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY');
 const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:admin@example.com';
 const EDGE_SHARED_SECRET = Deno.env.get('EDGE_SHARED_SECRET') || '';
+const SHOP_CONTENT_VERSION = Number(Deno.env.get('SHOP_CONTENT_VERSION') || '0');
 
 if (!LA_CLOUD_URL || !LA_CLOUD_SERVICE_ROLE_KEY) {
   throw new Error('Missing LA_CLOUD_URL or LA_CLOUD_SERVICE_ROLE_KEY env vars');
@@ -36,12 +37,119 @@ function isAuthValid(req: Request): boolean {
   return token.length > 0 && token === EDGE_SHARED_SECRET;
 }
 
+function getDailySlot(nowUtc: Date, offsetMinutes: number): { localDate: string, slot: 'morning' | 'day' | 'night' | null } {
+  const localMs = nowUtc.getTime() - offsetMinutes * 60_000;
+  const local = new Date(localMs);
+  const hour = local.getUTCHours();
+  const localDate = local.toISOString().slice(0, 10);
+  if (hour >= 8 && hour < 12) return { localDate, slot: 'morning' };
+  if (hour >= 13 && hour < 17) return { localDate, slot: 'day' };
+  if (hour >= 19 && hour < 23) return { localDate, slot: 'night' };
+  return { localDate, slot: null };
+}
+
 Deno.serve(async (req) => {
   if (!isAuthValid(req)) {
     return unauthorized();
   }
 
   const sb = createClient(LA_CLOUD_URL, LA_CLOUD_SERVICE_ROLE_KEY);
+  const nowIso = new Date().toISOString();
+  let globalShopVersion = SHOP_CONTENT_VERSION;
+
+  const { data: versionRow } = await sb
+    .from('app_content_versions')
+    .select('shop_version')
+    .eq('id', 1)
+    .maybeSingle();
+  if (versionRow?.shop_version) {
+    globalShopVersion = Number(versionRow.shop_version || 0);
+  }
+
+  const { data: reminderStates } = await sb
+    .from('user_notification_state')
+    .select('*')
+    .limit(500);
+
+  for (const st of reminderStates || []) {
+    const { localDate, slot } = getDailySlot(new Date(), Number(st.daily_timezone_offset_minutes || 0));
+    const alreadyNotifiedToday = String(st.daily_last_notified_on || '') === localDate
+      ? (st.daily_notified_slots || [])
+      : [];
+    const dueDaily = Boolean(st.daily_enabled)
+      && Boolean(st.daily_can_claim)
+      && Boolean(slot)
+      && !alreadyNotifiedToday.includes(slot);
+    const moonThresholdIso = st.moon_blessing_expires_at
+      ? new Date(new Date(st.moon_blessing_expires_at).getTime() - 12 * 60 * 60 * 1000).toISOString()
+      : null;
+    const dueMoon = st.moon_enabled && moonThresholdIso && moonThresholdIso <= nowIso
+      && (!st.last_moon_sent_at || st.last_moon_sent_at < moonThresholdIso);
+    const dueShop = st.shop_enabled && globalShopVersion > Number(st.last_shop_version_sent || 0);
+    const dueEvent = st.events_enabled && st.next_event_end_at
+      && new Date(new Date(st.next_event_end_at).getTime() - 6 * 60 * 60 * 1000).toISOString() <= nowIso
+      && JSON.stringify(st.active_event_ids || []) !== JSON.stringify(st.last_event_ids_sent || []);
+
+    const inserts: Array<Record<string, unknown>> = [];
+    const updates: Record<string, unknown> = {};
+
+    if (dueDaily) {
+      inserts.push({
+        title: '🎁 Bono diario disponible',
+        body: 'Tu bono diario ya está listo. Reclámalo ahora en Love Arcade.',
+        payload_json: { url: '/#view=home', tag: `local-daily-${st.user_id}`, view: 'home', type: 'local_daily' },
+        target_filter_json: { target: 'user_id', user_id: st.user_id },
+        scheduled_for: nowIso,
+        status: 'pending'
+      });
+      updates.last_daily_sent_at = nowIso;
+      updates.daily_last_notified_on = localDate;
+      updates.daily_notified_slots = [...alreadyNotifiedToday, slot];
+    }
+    if (dueMoon) {
+      inserts.push({
+        title: '🌙 Bendición Lunar por expirar',
+        body: 'Tu Bendición Lunar está por terminar. Extiéndela para conservar el bonus.',
+        payload_json: { url: '/#view=shop', tag: `local-moon-${st.user_id}`, view: 'shop', type: 'local_moon' },
+        target_filter_json: { target: 'user_id', user_id: st.user_id },
+        scheduled_for: nowIso,
+        status: 'pending'
+      });
+      updates.last_moon_sent_at = nowIso;
+    }
+    if (dueShop) {
+      const { data: enqueued, error: enqueueErr } = await sb.rpc('enqueue_local_shop_campaign', {
+        p_user_id: st.user_id,
+        p_shop_version: globalShopVersion,
+        p_scheduled_for: nowIso
+      });
+
+      if (enqueueErr) {
+        console.error('[push-dispatch] enqueue_local_shop_campaign error', enqueueErr.message);
+      }
+
+      updates.last_shop_sent_at = nowIso;
+      updates.last_shop_catalog_hash_sent = st.shop_catalog_hash || null;
+      updates.last_shop_version_sent = globalShopVersion;
+    }
+    if (dueEvent) {
+      inserts.push({
+        title: '⏳ Evento por terminar',
+        body: 'Un evento está por finalizar. Aprovecha las recompensas antes de que termine.',
+        payload_json: { url: '/#view=events', tag: `local-event-${st.user_id}`, view: 'events', type: 'local_event' },
+        target_filter_json: { target: 'user_id', user_id: st.user_id },
+        scheduled_for: nowIso,
+        status: 'pending'
+      });
+      updates.last_event_sent_at = nowIso;
+      updates.last_event_ids_sent = st.active_event_ids || [];
+    }
+
+    if (inserts.length) {
+      await sb.from('push_campaigns').insert(inserts);
+      await sb.from('user_notification_state').update(updates).eq('user_id', st.user_id);
+    }
+  }
 
   const { data: requeued, error: requeueErr } = await sb.rpc('requeue_stuck_push_campaigns', {
     max_age: '10 minutes'
@@ -69,10 +177,11 @@ Deno.serve(async (req) => {
       .select('id, user_id, endpoint, p256dh, auth, is_active')
       .eq('is_active', true);
 
-    // Future: apply segmentation based on target_filter_json.
-    if (target !== 'all') {
-      // Placeholder to keep behavior explicit.
-      subsQuery = subsQuery;
+    if (target === 'user_id') {
+      const uid = String(campaign?.target_filter_json?.user_id || '');
+      if (uid) subsQuery = subsQuery.eq('user_id', uid);
+    } else if (target !== 'all') {
+      subsQuery = subsQuery.eq('user_id', '__none__');
     }
 
     const { data: subscriptions, error: subsErr } = await subsQuery;
