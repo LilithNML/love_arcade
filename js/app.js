@@ -732,7 +732,7 @@ function initInteractiveMicroFX() {
         el.classList.remove('is-rippling');
         requestAnimationFrame(() => el.classList.add('is-rippling'));
         setTimeout(() => el.classList.remove('is-rippling'), 430);
-        if (isAndroid && navigator.vibrate) {
+        if (isAndroid && _canUseVibration()) {
             navigator.vibrate(8);
         }
     }, { passive: true });
@@ -2035,8 +2035,15 @@ function updateMoonBlessingUI() {
 
 let _streakMilestoneModalLocked = false;
 
+function _canUseVibration() {
+    if (!navigator?.vibrate) return false;
+    const userActivation = navigator.userActivation;
+    if (!userActivation) return true;
+    return Boolean(userActivation.isActive || userActivation.hasBeenActive);
+}
+
 function _vibrateLight() {
-    if (navigator?.vibrate) navigator.vibrate(12);
+    if (_canUseVibration()) navigator.vibrate(12);
 }
 
 function _getPendingStreakMilestone() {
