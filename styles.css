@@ -5092,12 +5092,12 @@ svg { stroke-width: 2; }
 }
 
 .push-support-state {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     margin: 0;
-    padding: 8px 10px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(155, 89, 255, 0.08);
+    border: 1px solid rgba(155, 89, 255, 0.25);
 }
 
 .push-rule-item {
@@ -5120,6 +5120,36 @@ svg { stroke-width: 2; }
     margin: 6px 0 0;
     font-size: 0.72rem;
     color: var(--text-low);
+}
+
+.push-recovery-card {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 179, 71, 0.35);
+    background: linear-gradient(135deg, rgba(255, 179, 71, 0.10), rgba(255, 120, 40, 0.08));
+}
+
+.push-recovery-title {
+    margin: 0 0 6px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #ffd08a;
+}
+
+.push-recovery-copy {
+    margin: 0 0 8px;
+    font-size: 0.76rem;
+    color: var(--text-med);
+}
+
+.push-recovery-steps {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 4px;
+    font-size: 0.76rem;
+    color: var(--text-med);
 }
 
 @media (max-width: 640px) {

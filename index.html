@@ -794,15 +794,6 @@
                         </div>
                     </div>
 
-                    <div class="push-benefits">
-                        <p class="push-benefits-title">¿Qué te avisaremos?</p>
-                        <ul class="push-benefits-list">
-                            <li>Tu bono diario está listo para reclamar.</li>
-                            <li>Tu Bendición Lunar está por vencer.</li>
-                            <li>Hay novedades en tienda y eventos por terminar.</li>
-                        </ul>
-                    </div>
-
                     <p id="push-support-state" class="push-support-state"></p>
                     <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
                         <button id="btn-push-enable" class="btn-primary" style="justify-content:center;">
@@ -813,6 +804,15 @@
                         <button id="btn-push-test" class="btn-ghost" style="font-size:0.8rem;">Probar aviso</button>
                     </div>
                     <p id="push-status-msg" class="feedback-msg" style="min-height:18px;"></p>
+                    <div id="push-recovery-card" class="push-recovery-card hidden" role="status" aria-live="polite">
+                        <p class="push-recovery-title">¡Casi listo! Solo falta un paso:</p>
+                        <p class="push-recovery-copy">Para recibir actualizaciones, tu navegador necesita un permiso manual:</p>
+                        <ol class="push-recovery-steps">
+                            <li>Toca el <strong>candado o escudo</strong> junto a la URL.</li>
+                            <li>Entra en <strong>Configuración del sitio</strong>.</li>
+                            <li>Ve a <strong>Permisos</strong> y activa <strong>Notificaciones</strong>.</li>
+                        </ol>
+                    </div>
 
                     <div class="push-rules-grid">
                         <label class="push-rule-item"><input type="checkbox" id="push-rule-daily"> Recordarme el bono diario</label>
@@ -820,7 +820,6 @@
                         <label class="push-rule-item"><input type="checkbox" id="push-rule-shop"> Avisarme cuando haya novedades en tienda</label>
                         <label class="push-rule-item"><input type="checkbox" id="push-rule-events"> Avisarme si un evento está por terminar</label>
                     </div>
-                    <p class="push-help-note">Las campañas manuales se gestionan exclusivamente desde Supabase → Table editor → <strong>push_campaigns</strong>.</p>
                 </div>
             </section>
 
