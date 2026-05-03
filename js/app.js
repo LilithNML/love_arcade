@@ -339,23 +339,6 @@ function _readTimeCache() {
 // ── Sincronización en segundo plano ──────────────────────────────────────
 
 /**
- * Lanza una petición a una URL de tiempo con timeout propio.
- * @param {string}   url
- * @param {function} extract  Extrae el timestamp del objeto JSON.
- * @returns {Promise<number>} Timestamp en ms.
- */
-function _fetchTimeSource(url, extract) {
-    return new Promise((resolve, reject) => {
-        const ctrl = new AbortController();
-        const tid  = setTimeout(() => { ctrl.abort(); reject(new Error('timeout')); }, TIME_API_TIMEOUT);
-        fetch(url, { cache: 'no-store', signal: ctrl.signal })
-            .then(r  => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-            .then(d  => { clearTimeout(tid); resolve(extract(d)); })
-            .catch(e => { clearTimeout(tid); reject(e); });
-    });
-}
-
-/**
  * Lee el encabezado HTTP Date del propio origen (Vercel) para tener una
  * referencia de tiempo sin depender de CORS de terceros.
  *
@@ -398,8 +381,8 @@ function _scheduleTimeSync(delay = 0) {
 }
 
 /**
- * Sincroniza el caché de tiempo en segundo plano: consulta las APIs en
- * paralelo (Promise.any) y persiste el resultado SIN bloquear la UI.
+ * Sincroniza el caché de tiempo en segundo plano usando el encabezado HTTP
+ * Date del propio origen y persiste el resultado SIN bloquear la UI.
  *
  * No retorna ningún valor útil — su único efecto es actualizar el caché.
  * Se llama automáticamente al cargar la página, al volver a la pestaña
@@ -407,13 +390,7 @@ function _scheduleTimeSync(delay = 0) {
  */
 async function _syncTimeBackground() {
     try {
-        const networkTime = await Promise.any([
-            _fetchTimeSource(
-                'https://timeapi.io/api/time/current/ip',
-                d => new Date(d.dateTime ?? d.datetime).getTime()
-            ),
-            _fetchServerDateHeader()
-        ]);
+        const networkTime = await _fetchServerDateHeader();
 
         const drift    = networkTime - Date.now();
         const desynced = Math.abs(drift) > CLOCK_SKEW_LIMIT;
