@@ -1,145 +1,137 @@
-# Implementación: notificaciones “locales” en segundo plano con Supabase
+# Notificaciones de Love Arcade (Producción)
 
-Fecha: 2026-05-02
+Última actualización: 2026-05-03
 
 ## Objetivo
-Resolver que los avisos de:
-- bono diario,
-- bendición lunar por expirar,
-- novedades de tienda,
-- eventos por terminar,
-
-sigan llegando incluso con pestaña/navegador cerrados.
-
-## Qué se cambió en el código
-
-### 1) Cliente (`js/push-notifications.js`)
-Se agregó sincronización periódica de estado local hacia Supabase (`user_notification_state`):
-- preferencias de usuario (daily/moon/shop/events),
-- siguiente horario de bono diario,
-- expiración de bendición lunar,
-- hash de catálogo de tienda,
-- ids de eventos activos y fin del evento más próximo.
-
-También:
-- sincroniza al activar/desactivar push,
-- sincroniza al cambiar toggles,
-- sincroniza cada 5 minutos con sesión activa.
-
-### 2) Tienda (`js/shop-logic.js`)
-Al cargar `shop.json`, ahora se guarda un hash en `localStorage`:
-- `love_arcade_shop_catalog_hash_v1`
-
-Este hash sirve para detectar novedades de catálogo y disparar aviso backend.
-
-### 3) Backend Push (`supabase/functions/push-dispatch/index.ts`)
-Antes de despachar campañas pendientes:
-- consulta `user_notification_state`,
-- evalúa reglas “locales” del usuario,
-- encola campañas en `push_campaigns` dirigidas por `user_id`,
-- marca timestamps/hashes enviados para deduplicar.
-
-Además, se agregó soporte de segmentación `target_filter_json.target = 'user_id'`.
-
-### 4) SQL nueva migración
-Archivo agregado:
-- `supabase/migrations/20260502_local_notification_state.sql`
-
-Crea `public.user_notification_state` + RLS + trigger de `updated_at`.
+Este documento centraliza la arquitectura y operación de notificaciones de Love Arcade en producción:
+- campañas remotas,
+- recordatorios locales procesados en backend (bono diario, tienda, eventos, bendición lunar),
+- deduplicación robusta,
+- versionado de contenido de tienda.
 
 ---
 
-## Pasos para el desarrollador (copy/paste)
+## Arquitectura
 
-## A. Ejecutar migración SQL en Supabase
-Si no usas CLI, copia y pega completo en SQL Editor:
+### Cliente (Web App)
+Archivos clave:
+- `js/push-notifications.js`
+- `js/shop-logic.js`
+
+Responsabilidades:
+1. Registrar Service Worker y suscripción Push Web.
+2. Guardar suscripción en `push_subscriptions`.
+3. Sincronizar estado de recordatorios en `user_notification_state`:
+   - preferencias por tipo,
+   - estado daily (`daily_can_claim`, `daily_last_claim_at`),
+   - offset de zona horaria,
+   - estado lunar/eventos,
+   - hash local de catálogo para trazabilidad.
+
+### Service Worker
+Archivo:
+- `sw.js`
+
+Responsabilidades:
+- Mostrar notificaciones entrantes (`push`).
+- Resolver deep-link de apertura (`notificationclick`).
+
+### Backend (Supabase Edge Function)
+Archivo:
+- `supabase/functions/push-dispatch/index.ts`
+
+Responsabilidades:
+1. Evaluar reglas de recordatorios por usuario.
+2. Encolar campañas en `push_campaigns`.
+3. Despachar campañas pendientes a `push_subscriptions` activas.
+4. Registrar entrega en `push_delivery_log`.
+5. Marcar suscripciones inválidas (`404/410`) como inactivas.
+
+---
+
+## Esquema SQL requerido (migraciones)
+
+Aplicar estas migraciones (en orden):
+1. `supabase/migrations/20260502_local_notification_state.sql`
+2. `supabase/migrations/20260502_shop_content_version.sql`
+3. `supabase/migrations/20260502_shop_notification_dedupe.sql`
+4. `supabase/migrations/20260502_daily_reminder_slots.sql`
+
+Tablas/funciones clave:
+- `user_notification_state`
+- `app_content_versions`
+- `bump_shop_version()`
+- `enqueue_local_shop_campaign(...)`
+
+---
+
+## Reglas de negocio en producción
+
+### 1) Novedades de tienda
+- Se detectan por versión global `app_content_versions.shop_version`.
+- Al publicar cambios de `shop.json`, incrementar versión:
 
 ```sql
--- Estado de recordatorios locales sincronizado por cliente y consumido por push-dispatch
-create table if not exists public.user_notification_state (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  daily_enabled boolean not null default true,
-  moon_enabled boolean not null default true,
-  shop_enabled boolean not null default true,
-  events_enabled boolean not null default true,
-  next_daily_claim_at timestamptz,
-  moon_blessing_expires_at timestamptz,
-  shop_catalog_hash text,
-  active_event_ids text[] not null default '{}',
-  next_event_end_at timestamptz,
-  last_shop_catalog_hash_sent text,
-  last_event_ids_sent text[] not null default '{}',
-  last_daily_sent_at timestamptz,
-  last_moon_sent_at timestamptz,
-  last_shop_sent_at timestamptz,
-  last_event_sent_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create or replace function public.tg_user_notification_state_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_user_notification_state_updated_at on public.user_notification_state;
-create trigger trg_user_notification_state_updated_at
-before update on public.user_notification_state
-for each row
-execute function public.tg_user_notification_state_updated_at();
-
-alter table public.user_notification_state enable row level security;
-
-create policy if not exists user_notification_state_select_own
-on public.user_notification_state
-for select
-using (auth.uid() = user_id);
-
-create policy if not exists user_notification_state_insert_own
-on public.user_notification_state
-for insert
-with check (auth.uid() = user_id);
-
-create policy if not exists user_notification_state_update_own
-on public.user_notification_state
-for update
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+select public.bump_shop_version();
 ```
 
-## B. Deploy de Edge Function
-Asegúrate de desplegar `push-dispatch` actualizado.
+- Dedupe robusta por `user_id + shop_version` mediante `enqueue_local_shop_campaign(...)`.
 
-```bash
-supabase functions deploy push-dispatch
-```
+### 2) Bono diario
+- Se evalúa por hora local del usuario (offset sincronizado desde cliente).
+- Ventanas:
+  - mañana: 08:00–11:59
+  - día: 13:00–16:59
+  - noche: 19:00–22:59
+- Máximo 3 notificaciones por día (1 por ventana).
+- Si el usuario reclama, `daily_can_claim=false` y se detienen envíos pendientes de ese día.
 
-## C. Cron/Programación de ejecución
-Debes ejecutar la función de forma periódica (cada 5 minutos recomendado).
+### 3) Bendición lunar y eventos
+- Se evalúan por proximidad de expiración/fin según estado sincronizado.
 
-Ejemplo `curl` (si usas secreto compartido):
+---
 
-```bash
-curl -X POST "https://<project-ref>.functions.supabase.co/push-dispatch" \
-  -H "Authorization: Bearer <EDGE_SHARED_SECRET>"
-```
+## Variables de entorno (Edge Function)
 
-## D. Variables requeridas en la función
+Obligatorias:
 - `LA_CLOUD_URL`
 - `LA_CLOUD_SERVICE_ROLE_KEY`
 - `VAPID_PUBLIC_KEY`
 - `VAPID_PRIVATE_KEY`
 - `VAPID_SUBJECT`
-- `EDGE_SHARED_SECRET` (opcional pero recomendado)
+
+Recomendadas:
+- `EDGE_SHARED_SECRET`
+
+Opcional (fallback):
+- `SHOP_CONTENT_VERSION`
 
 ---
 
-## Notas operativas
-- Estas notificaciones ya no dependen de que la app esté abierta en primer plano para dispararse.
-- Dependen de que exista sesión y sincronización previa del estado del usuario.
-- Primera notificación de cada regla puede tardar hasta el siguiente ciclo de cron.
+## Operación
+
+### Deploy
+```bash
+supabase functions deploy push-dispatch
+```
+
+### Cron
+- Ejecutar `push-dispatch` de forma periódica.
+- Frecuencia vigente: **cada 1 minuto** (válida con dedupe actual).
+
+### Health check sugerido
+Verificar periódicamente:
+- `push_campaigns` (`status`, `last_error`)
+- `push_delivery_log` (`status`)
+- `push_subscriptions` (`is_active`)
+- `user_notification_state` (coherencia de flags y timestamps)
+
+---
+
+## Criterios de aceptación
+
+1. Campañas remotas llegan con navegador cerrado.
+2. Novedades de tienda envían solo 1 aviso por versión/usuario.
+3. Bono diario envía hasta 3 recordatorios por día en sus ventanas.
+4. Si se reclama daily tras la primera alerta, no se envían las restantes de ese día.
+5. Sin duplicados por ejecución frecuente del cron.
