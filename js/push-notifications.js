@@ -71,6 +71,19 @@
     el.classList.toggle('hidden', !show);
   }
 
+  function renderEnableButtonState() {
+    const btn = _$('btn-push-enable');
+    if (!btn) return;
+    const iconUse = btn.querySelector('use');
+    const label = btn.querySelector('.push-enable-btn__label');
+    const isActive = Notification.permission === 'granted';
+
+    btn.classList.toggle('is-active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    if (label) label.textContent = isActive ? 'Notificaciones activadas' : 'Recibir novedades';
+    if (iconUse) iconUse.setAttribute('href', isActive ? '#icon-check' : '#icon-bell');
+  }
+
   function updateUiSupportState() {
     const supportEl = _$('push-support-state');
     if (!supportEl) return;
@@ -271,6 +284,7 @@
         toggleRecoveryCard(false);
         setStatus('Preparando recordatorios…');
         await subscribePush();
+        renderEnableButtonState();
         const prefs = loadPrefs();
         prefs.enabled = true;
         savePrefs(prefs);
@@ -292,6 +306,7 @@
         savePrefs(prefs);
         await syncReminderStateToSupabase();
         setStatus('Recordatorios pausados. Puedes activarlos cuando quieras.');
+        renderEnableButtonState();
       } catch (err) {
         setStatus(err?.message || 'No pudimos pausar los recordatorios.', true);
       }
@@ -326,6 +341,7 @@
 
   async function init() {
     updateUiSupportState();
+    renderEnableButtonState();
     bindButtons();
     bindToggles();
 

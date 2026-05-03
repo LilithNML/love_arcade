@@ -5116,6 +5116,21 @@ svg { stroke-width: 2; }
     accent-color: var(--accent);
 }
 
+.push-enable-btn {
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.push-enable-btn.is-active {
+    background: rgba(104, 211, 145, 0.18);
+    border-color: rgba(104, 211, 145, 0.45);
+    color: #b9f6d0;
+}
+
+.push-enable-btn.is-active:hover {
+    transform: none;
+    filter: none;
+}
+
 .push-help-note {
     margin: 6px 0 0;
     font-size: 0.72rem;
